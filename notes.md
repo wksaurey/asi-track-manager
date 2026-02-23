@@ -69,6 +69,9 @@
 - vehicles
 - tracks
 - users
+- django-scheduler
+    - https://github.com/llazzaro/django-scheduler
+    - https://django-scheduler.readthedocs.io/en/latest/views.html
 
 # Good Enough (Growth ideas)
 - No approvals required yet

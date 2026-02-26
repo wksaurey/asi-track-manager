@@ -66,12 +66,12 @@
 
 # Initial App Structure
 - reservations
-- vehicles
-- tracks
+- asi-assets
+    - vehicles
+    - tracks
 - users
-- django-scheduler
-    - https://github.com/llazzaro/django-scheduler
-    - https://django-scheduler.readthedocs.io/en/latest/views.html
+- calendar
+    - https://github.com/huiwenhw/django-calendar/tree/master
 
 # Good Enough (Growth ideas)
 - No approvals required yet
@@ -95,12 +95,15 @@
 - Signup
 - Home
 - Make a Reservation
-- Reservations
-- Vehicles
+- Reservation
+- Assets
 - Vehicle
-- Tracks
 - Track
 - Calender*
+    - Schedule View
+    - Month View
+    - Week View
+    - Day View
 
 # Notes
 - Should I include the workbays as tracks?

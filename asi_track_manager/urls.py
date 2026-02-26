@@ -16,11 +16,8 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
-from django.views.generic import RedirectView
 
 urlpatterns = [
-    path('', RedirectView.as_view(url='/cal/calendar/', permanent=False), name='home'),
-    path('users/', include('users.urls')),
-    path('cal/', include('cal.urls')),
+    path('', include('asi_assets.urls')),
     path('admin/', admin.site.urls),
 ]

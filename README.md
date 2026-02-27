@@ -14,3 +14,9 @@
 - Update requirements.txt each time you install another module
     `python3 -m pip freeze > requirements.txt`
 
+## Testing Instructions
+- Run all unit tests
+    `py manage.py test`
+- Run unit tests for specific app
+    `py manage.py test [app]`
+

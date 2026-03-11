@@ -43,6 +43,8 @@ ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(','
 
 INSTALLED_APPS = [
     'asi_assets',
+    'users',
+    'reservations',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -138,10 +140,6 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 AUTH_USER_MODEL = 'users.User'
 
-AUTHENTICATION_BACKENDS = [
-    'users.backends.CaseInsensitiveModelBackend',
-]
-
 LOGIN_URL = '/users/login/'
-LOGIN_REDIRECT_URL = '/cal/calendar/'
+LOGIN_REDIRECT_URL = '/assets/'
 LOGOUT_REDIRECT_URL = '/users/login/'

@@ -1,0 +1,54 @@
+{% extends 'cal/base.html' %}
+{% load static %}
+
+{% block title %}{{ page_title }}{% endblock %}
+
+{% block content %}
+<div class="page-container form-page">
+
+  <div class="page-header">
+    <h2 class="page-heading">{{ page_title }}</h2>
+    <a class="btn btn-muted" href="{% url 'cal:asset_list' %}">
+      <i class="fas fa-arrow-left"></i> Back to Assets
+    </a>
+  </div>
+
+  {% if form.errors %}
+  <div class="form-errors">
+    {% for field, errors in form.errors.items %}
+      {% for error in errors %}
+        <p class="error-msg"><i class="fas fa-exclamation-circle"></i> {{ error }}</p>
+      {% endfor %}
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <form method="post" class="asset-form">
+    {% csrf_token %}
+    <table class="form-table">
+      {% for field in form %}
+      <tr>
+        <td><label for="{{ field.id_for_label }}">{{ field.label }}</label></td>
+        <td>
+          {{ field }}
+          {% if field.help_text %}
+            <small class="field-help">{{ field.help_text }}</small>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+    <div class="form-actions">
+      <button type="submit" class="btn">
+        <i class="fas fa-save"></i> Save Asset
+      </button>
+      {% if asset %}
+      <a class="btn" href="{% url 'cal:asset_detail' asset.id %}">
+        <i class="fas fa-calendar-check"></i> View Schedule
+      </a>
+      {% endif %}
+    </div>
+  </form>
+
+</div>
+{% endblock %}

@@ -1,0 +1,76 @@
+{% extends 'cal/base.html' %}
+{% load static %}
+
+{% block title %}Assets{% endblock %}
+
+{% block content %}
+<div class="page-container">
+
+  <div class="page-header">
+    <h2 class="page-heading">Asset Registry</h2>
+    <a class="btn" href="{% url 'cal:asset_create' %}">
+      <i class="fas fa-plus"></i> New Asset
+    </a>
+  </div>
+
+  {% if assets %}
+  <div class="asset-table-wrap">
+    <table class="asset-table">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Identifier</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for asset in assets %}
+        <tr class="{% if not asset.is_active %}row-inactive{% endif %}">
+          <td><strong>{{ asset.name }}</strong></td>
+          <td>
+            <span class="type-badge badge-{{ asset.asset_type }}">
+              {{ asset.get_asset_type_display }}
+            </span>
+          </td>
+          <td class="text-muted">{{ asset.identifier|default:"—" }}</td>
+          <td>
+            {% if asset.is_active %}
+              <span class="status-pill status-active">Active</span>
+            {% else %}
+              <span class="status-pill status-inactive">Inactive</span>
+            {% endif %}
+          </td>
+          <td class="action-cell">
+            <a class="btn btn-sm" href="{% url 'cal:asset_detail' asset.id %}">
+              <i class="fas fa-calendar-check"></i> Schedule
+            </a>
+            <a class="btn btn-sm" href="{% url 'cal:asset_edit' asset.id %}">
+              <i class="fas fa-edit"></i> Edit
+            </a>
+            <form method="post" action="{% url 'cal:asset_toggle' asset.id %}" style="display:inline;"
+                  onsubmit="return confirm('{% if asset.is_active %}Deactivate{% else %}Reactivate{% endif %} {{ asset.name }}?')">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-sm btn-muted">
+                {% if asset.is_active %}
+                  <i class="fas fa-ban"></i> Deactivate
+                {% else %}
+                  <i class="fas fa-check-circle"></i> Reactivate
+                {% endif %}
+              </button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <p>No assets yet. <a href="{% url 'cal:asset_create' %}">Add your first asset.</a></p>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

@@ -1,0 +1,111 @@
+{% extends 'cal/base.html' %}
+{% load static %}
+
+{% block title %}{{ asset.name }} — Schedule{% endblock %}
+
+{% block content %}
+<div class="page-container">
+
+  <!-- Asset header card -->
+  <div class="asset-header-card badge-{{ asset.asset_type }}-card">
+    <div>
+      <span class="type-badge badge-{{ asset.asset_type }}">
+        {{ asset.get_asset_type_display }}
+      </span>
+      <h2 class="page-heading" style="margin:8px 0 4px;">{{ asset.name }}</h2>
+      {% if asset.identifier %}
+        <p class="text-muted" style="margin:0;">ID / Unit: <strong>{{ asset.identifier }}</strong></p>
+      {% endif %}
+      {% if asset.description %}
+        <p style="margin:8px 0 0; font-size:14px;">{{ asset.description }}</p>
+      {% endif %}
+    </div>
+    <div class="asset-header-actions">
+      {% if asset.is_active %}
+        <span class="status-pill status-active">Active</span>
+      {% else %}
+        <span class="status-pill status-inactive">Inactive</span>
+      {% endif %}
+      <a class="btn" href="{% url 'cal:calendar' %}?asset={{ asset.id }}">
+        <i class="fas fa-calendar-alt"></i> View on Calendar
+      </a>
+      <a class="btn btn-muted" href="{% url 'cal:asset_edit' asset.id %}">
+        <i class="fas fa-edit"></i> Edit
+      </a>
+    </div>
+  </div>
+
+  <!-- Upcoming schedule -->
+  <div class="schedule-section">
+    <h3 class="section-heading">
+      <i class="fas fa-calendar-check"></i>
+      Upcoming — Next 30 Days
+    </h3>
+
+    {% if upcoming %}
+    <div class="schedule-list">
+      {% for ev in upcoming %}
+      <div class="schedule-row event-{{ asset.asset_type }}">
+        <div class="schedule-date">
+          <span class="sched-day">{{ ev.start_time|date:"D" }}</span>
+          <span class="sched-num">{{ ev.start_time|date:"d" }}</span>
+          <span class="sched-mon">{{ ev.start_time|date:"M" }}</span>
+        </div>
+        <div class="schedule-info">
+          <a class="schedule-title" href="{% url 'cal:event_edit' ev.id %}">{{ ev.title }}</a>
+          <span class="schedule-time">
+            <i class="fas fa-clock"></i>
+            {{ ev.start_time|date:"g:i A" }} – {{ ev.end_time|date:"g:i A" }}
+          </span>
+          {% if ev.description %}
+            <span class="schedule-desc">{{ ev.description }}</span>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <p>No upcoming bookings in the next 30 days.</p>
+      <a class="btn" href="{% url 'cal:event_new' %}">
+        <i class="fas fa-plus"></i> Schedule Now
+      </a>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Recent history -->
+  {% if past %}
+  <div class="schedule-section">
+    <h3 class="section-heading text-muted">
+      <i class="fas fa-history"></i>
+      Recent History (last 10)
+    </h3>
+    <div class="schedule-list history">
+      {% for ev in past %}
+      <div class="schedule-row row-inactive">
+        <div class="schedule-date">
+          <span class="sched-day">{{ ev.start_time|date:"D" }}</span>
+          <span class="sched-num">{{ ev.start_time|date:"d" }}</span>
+          <span class="sched-mon">{{ ev.start_time|date:"M Y" }}</span>
+        </div>
+        <div class="schedule-info">
+          <a class="schedule-title" href="{% url 'cal:event_edit' ev.id %}">{{ ev.title }}</a>
+          <span class="schedule-time">
+            {{ ev.start_time|date:"g:i A" }} – {{ ev.end_time|date:"g:i A" }}
+          </span>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <div style="margin:16px 12px;">
+    <a class="btn btn-muted" href="{% url 'cal:asset_list' %}">
+      <i class="fas fa-arrow-left"></i> Back to Assets
+    </a>
+  </div>
+
+</div>
+{% endblock %}

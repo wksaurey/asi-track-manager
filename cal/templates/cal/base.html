@@ -12,12 +12,57 @@
   <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.0.10/css/all.css" integrity="sha384-+d0P83n9kaQMCwj8F4RJB66tzIwOKmrdb46+porD/OvrJ+37WqIM7UoBtwHO6Nlg"
     crossorigin="anonymous">
   <link rel="stylesheet" type="text/css" href="{% static 'cal/css/styles.css' %}">
-  <title>Django Calendar App</title>
+  <!-- Flatpickr -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+  <title>ASI Asset Scheduler</title>
+  <!-- Apply saved theme before render to prevent flash -->
+  <script>if(localStorage.getItem('asi-theme')==='dark')document.documentElement.classList.add('dark-theme');</script>
 </head>
 <body>
 
-  <h1 class="title">{% block title %}{% endblock %}</h1>
+  <nav class="site-nav">
+    <a class="site-nav-brand" href="{% url 'cal:calendar' %}">
+      <i class="fas fa-hard-hat"></i> ASI Track Manager
+    </a>
+    <div class="site-nav-links">
+      <a href="{% url 'cal:calendar' %}"><i class="fas fa-calendar-alt"></i> Calendar</a>
+      <a href="{% url 'cal:asset_list' %}"><i class="fas fa-truck"></i> Assets</a>
+      <a href="{% url 'cal:event_new' %}"><i class="fas fa-plus-circle"></i> New Event</a>
+      {% if request.user.is_staff %}
+        <a href="{% url 'cal:pending_events' %}" class="nav-pending">
+          <i class="fas fa-clock"></i> Pending
+          {% if pending_count %}<span class="nav-badge">{{ pending_count }}</span>{% endif %}
+        </a>
+      {% endif %}
+    </div>
+    <!-- Dark / light theme toggle -->
+    <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" title="Toggle dark mode">
+      <i class="fas fa-moon" id="theme-icon"></i>
+    </button>
+
+    <div class="site-nav-user">
+      {% if request.user.is_authenticated %}
+        <span class="nav-user-name">
+          <i class="fas fa-user-shield"></i> {{ request.user.username }}
+          <span class="admin-chip">Admin</span>
+        </span>
+      {% elif request.session.user_name %}
+        <span class="nav-user-name">
+          <i class="fas fa-user"></i> {{ request.session.user_name }}
+        </span>
+      {% endif %}
+      {% if request.user.is_authenticated or request.session.user_name %}
+        <a href="{% url 'cal:logout' %}" class="nav-logout">
+          <i class="fas fa-sign-out-alt"></i> Logout
+        </a>
+      {% endif %}
+    </div>
+  </nav>
+
+  {% block page_header %}
+  <h1 class="title bubble">{% block title %}{% endblock %}</h1>
   <hr>
+  {% endblock %}
 
   {% block content %}
   {% endblock %}
@@ -30,6 +75,28 @@
     crossorigin="anonymous"></script>
   <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
     crossorigin="anonymous"></script>
+  <!-- Flatpickr -->
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+
+  <!-- Theme toggle -->
+  <script>
+    // Sync icon with current theme on load
+    (function() {
+      const icon = document.getElementById('theme-icon');
+      if (!icon) return;
+      if (document.documentElement.classList.contains('dark-theme')) {
+        icon.className = 'fas fa-sun';
+      }
+    })();
+
+    function toggleTheme() {
+      const root   = document.documentElement;
+      const isDark = root.classList.toggle('dark-theme');
+      const icon   = document.getElementById('theme-icon');
+      if (icon) icon.className = isDark ? 'fas fa-sun' : 'fas fa-moon';
+      localStorage.setItem('asi-theme', isDark ? 'dark' : 'light');
+    }
+  </script>
 
   {% block script %}
   {% endblock %}

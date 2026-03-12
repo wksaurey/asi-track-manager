@@ -12,7 +12,7 @@
     {% for vehicle in reservation.vehicles.all %}{{ vehicle }}{% if not forloop.last %}, {% endif %}{% empty %}None{% endfor %}
   </p>
   <p><strong>Created:</strong> {{ reservation.created_at }}</p>
-  <a href="{% url 'reservation_delete' reservation.id %}">Delete</a> |
-  <a href="{% url 'reservation_list' %}">Back</a>
+  <a href="{% url 'reservations:reservation_delete' reservation.id %}">Delete</a> |
+  <a href="{% url 'reservations:reservation_list' %}">Back</a>
 </body>
 </html>

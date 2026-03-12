@@ -3,12 +3,12 @@
 <head><title>My Reservations</title></head>
 <body>
   <h1>My Reservations</h1>
-  <a href="{% url 'reservation_create' %}">New Reservation</a>
+  <a href="{% url 'reservations:reservation_create' %}">New Reservation</a>
   {% if reservations %}
     <ul>
       {% for r in reservations %}
         <li>
-          <a href="{% url 'reservation_detail' r.id %}">{{ r }}</a>
+          <a href="{% url 'reservations:reservation_detail' r.id %}">{{ r }}</a>
         </li>
       {% endfor %}
     </ul>

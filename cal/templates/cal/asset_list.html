@@ -1,4 +1,4 @@
-{% extends 'base.html' %}
+{% extends 'cal/base.html' %}
 {% load static %}
 
 {% block title %}Assets{% endblock %}
@@ -8,113 +8,69 @@
 
   <div class="page-header">
     <h2 class="page-heading">Asset Registry</h2>
-    {% if request.user.is_staff %}
     <a class="btn" href="{% url 'cal:asset_create' %}">
       <i class="fas fa-plus"></i> New Asset
     </a>
-    {% endif %}
   </div>
 
-  {% if grouped_assets %}
-    {% for type_label, type_value, group in grouped_assets %}
-    <h3 class="section-heading asset-section-heading asset-section-{{ type_value }}">
-      {{ type_label }}
-    </h3>
-    <div class="asset-card-group">
-      {% for asset in group %}
-      {% if not asset.parent %}
-      <div class="asset-card{% if asset.subtracks.all %} asset-card-has-subtracks{% endif %}">
-        {% if request.user.is_staff %}
-        <form class="asset-card-delete-form" method="post" action="{% url 'cal:asset_delete' asset.id %}"
-              onsubmit="return confirmDelete(this, 'Delete {{ asset.get_asset_type_display|lower }} &quot;{{ asset.name|escapejs }}&quot;? This cannot be undone.')">
-          {% csrf_token %}
-          <button type="submit" class="asset-card-delete-btn" title="Delete {{ asset.name|escapejs }}">&times;</button>
-        </form>
-        {% endif %}
-        <div class="asset-card-body">
-          <div style="display:flex;align-items:center;gap:8px;">
-            {% if asset.asset_type == 'track' and asset.color %}<span class="asset-color-dot" style="background:{{ asset.color }};"></span>{% endif %}
-            <strong class="asset-card-name">{{ asset.name }}</strong>
-            {% if asset.subtracks.all %}
-            <button type="button" class="btn btn-sm btn-secondary subtrack-toggle"
-                    data-target="subtracks-{{ asset.id }}">
-              <i class="fas fa-chevron-right"></i> {{ asset.subtracks.all|length }} subtrack{{ asset.subtracks.all|length|pluralize }}
-            </button>
+  {% if assets %}
+  <div class="asset-table-wrap">
+    <table class="asset-table">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Identifier</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for asset in assets %}
+        <tr class="{% if not asset.is_active %}row-inactive{% endif %}">
+          <td><strong>{{ asset.name }}</strong></td>
+          <td>
+            <span class="type-badge badge-{{ asset.asset_type }}">
+              {{ asset.get_asset_type_display }}
+            </span>
+          </td>
+          <td class="text-muted">{{ asset.identifier|default:"—" }}</td>
+          <td>
+            {% if asset.is_active %}
+              <span class="status-pill status-active">Active</span>
+            {% else %}
+              <span class="status-pill status-inactive">Inactive</span>
             {% endif %}
-          </div>
-          {% if asset.description %}
-            <p class="asset-card-desc">{{ asset.description }}</p>
-          {% endif %}
-        </div>
-        <div class="asset-card-actions">
-          <span class="type-badge badge-{{ asset.asset_type }}">{{ asset.get_asset_type_display }}</span>
-          <a class="btn btn-sm" href="{% url 'cal:asset_detail' asset.id %}">
-            <i class="fas fa-calendar-check"></i> Schedule
-          </a>
-          {% if request.user.is_staff %}
-          <a class="btn btn-sm btn-secondary" href="{% url 'cal:asset_edit' asset.id %}">
-            <i class="fas fa-edit"></i> Edit
-          </a>
-          {% endif %}
-        </div>
-        {% for sub in asset.subtracks.all %}
-        <div class="subtrack-card" data-subtracks="{{ asset.id }}" style="display:none">
-          {% if request.user.is_staff %}
-          <form class="asset-card-delete-form" method="post" action="{% url 'cal:asset_delete' sub.id %}"
-                onsubmit="return confirmDelete(this, 'Delete subtrack &quot;{{ sub.name|escapejs }}&quot;? This cannot be undone.')">
-            {% csrf_token %}
-            <button type="submit" class="asset-card-delete-btn" title="Delete {{ sub.name|escapejs }}">&times;</button>
-          </form>
-          {% endif %}
-          <div class="asset-card-body">
-            <strong class="asset-card-name">{{ sub.name }}</strong>
-            {% if sub.description %}<p class="asset-card-desc">{{ sub.description }}</p>{% endif %}
-          </div>
-          <div class="asset-card-actions">
-            <a class="btn btn-sm" href="{% url 'cal:asset_detail' sub.id %}">
+          </td>
+          <td class="action-cell">
+            <a class="btn btn-sm" href="{% url 'cal:asset_detail' asset.id %}">
               <i class="fas fa-calendar-check"></i> Schedule
             </a>
-            {% if request.user.is_staff %}
-            <a class="btn btn-sm btn-secondary" href="{% url 'cal:asset_edit' sub.id %}">
+            <a class="btn btn-sm" href="{% url 'cal:asset_edit' asset.id %}">
               <i class="fas fa-edit"></i> Edit
             </a>
-            {% endif %}
-          </div>
-        </div>
+            <form method="post" action="{% url 'cal:asset_toggle' asset.id %}" style="display:inline;"
+                  onsubmit="return confirm('{% if asset.is_active %}Deactivate{% else %}Reactivate{% endif %} {{ asset.name }}?')">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-sm btn-muted">
+                {% if asset.is_active %}
+                  <i class="fas fa-ban"></i> Deactivate
+                {% else %}
+                  <i class="fas fa-check-circle"></i> Reactivate
+                {% endif %}
+              </button>
+            </form>
+          </td>
+        </tr>
         {% endfor %}
-      </div>
-      {% endif %}
-      {% endfor %}
-    </div>
-    {% endfor %}
+      </tbody>
+    </table>
+  </div>
   {% else %}
   <div class="empty-state">
-    <p>No assets yet.
-      {% if request.user.is_staff %}
-        <a href="{% url 'cal:asset_create' %}">Add your first asset.</a>
-      {% endif %}
-    </p>
+    <p>No assets yet. <a href="{% url 'cal:asset_create' %}">Add your first asset.</a></p>
   </div>
   {% endif %}
 
 </div>
-{% endblock %}
-
-{% block script %}
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-  document.querySelectorAll('.subtrack-toggle').forEach(btn => {
-    btn.addEventListener('click', function () {
-      const id   = this.dataset.target.replace('subtracks-', '');
-      const cards = document.querySelectorAll(`[data-subtracks="${id}"]`);
-      const icon  = this.querySelector('i');
-      const open  = icon.classList.contains('fa-chevron-down');
-      cards.forEach(c => c.style.display = open ? 'none' : 'flex');
-      icon.classList.toggle('fa-chevron-right', open);
-      icon.classList.toggle('fa-chevron-down',  !open);
-      this.closest('.asset-card').classList.toggle('subtracks-open', !open);
-    });
-  });
-});
-</script>
 {% endblock %}

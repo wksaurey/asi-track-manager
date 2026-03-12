@@ -8,6 +8,6 @@
     {% csrf_token %}
     <button type="submit">Confirm Delete</button>
   </form>
-  <a href="{% url 'reservation_detail' reservation.id %}">Cancel</a>
+  <a href="{% url 'reservations:reservation_detail' reservation.id %}">Cancel</a>
 </body>
 </html>

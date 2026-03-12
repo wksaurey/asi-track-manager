@@ -2,7 +2,7 @@
 {% if tracks %}
     <ul>
     {% for track in tracks %}
-        <li><a href="{% url 'track_detail' track.id %}">{{ track.name }}</a></li>
+        <li><a href="{% url 'asi_assets:track_detail' track.id %}">{{ track.name }}</a></li>
     {% endfor %}
     </ul>
 {% else %}
@@ -13,7 +13,7 @@
 {% if vehicles %}
     <ul>
     {% for vehicle in vehicles %}
-        <li><a href="{% url 'vehicle_detail' vehicle.id %}">{{ vehicle.name }}</a></li>
+        <li><a href="{% url 'asi_assets:vehicle_detail' vehicle.id %}">{{ vehicle.name }}</a></li>
     {% endfor %}
     </ul>
 {% else %}

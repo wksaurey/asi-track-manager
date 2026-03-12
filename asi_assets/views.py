@@ -1,10 +1,14 @@
-from multiprocessing import context
-
+from django.contrib.auth.decorators import login_required
 from django.shortcuts import render
 
 from .models import Track, Vehicle
 
-# Create your views here.
+
+def home(request):
+    return render(request, 'asi-assets/home.html')
+
+
+@login_required
 def index(request):
     # Placeholder for index view
     tracks = Track.objects.all()
@@ -15,6 +19,7 @@ def index(request):
     }
     return render(request, "asi-assets/index.html", context)
 
+@login_required
 def track_detail(request, track_id):
     # Placeholder for track detail view
     context = {
@@ -22,6 +27,7 @@ def track_detail(request, track_id):
     }
     return render(request, "asi-assets/track_detail.html", context)
 
+@login_required
 def vehicle_detail(request, vehicle_id):
     # Placeholder for vehicle detail view
     context = {

@@ -39,6 +39,9 @@ class EventAdmin(admin.ModelAdmin):
         return ', '.join(a.name for a in obj.assets.all()) or '—'
     asset_names.short_description = 'Assets'
 
+    def get_queryset(self, request):
+        return super().get_queryset(request).prefetch_related('assets')
+
     def approve_events(self, request, queryset):
         """Bulk action — mark all selected events as approved."""
         queryset.update(is_approved=True)

@@ -68,7 +68,10 @@ class Event(models.Model):
         blank=True,
         related_name='events',
     )
-    is_approved = models.BooleanField(default=True)
+    is_approved = models.BooleanField(default=False)
+
+    def __str__(self):
+        return self.title
 
     # ── Display helpers used by calendar templates ─────────────────────────
 

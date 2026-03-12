@@ -6,6 +6,8 @@ they integrate with the project's Bootstrap 4 styling without extra template
 markup.
 """
 
+from datetime import timedelta
+
 from django.forms import ModelForm, TextInput, CheckboxSelectMultiple, ValidationError
 from cal.models import Event, Asset
 
@@ -72,6 +74,10 @@ class EventForm(ModelForm):
         # End must come after start
         if start_time and end_time and start_time >= end_time:
             raise ValidationError('End time must be after start time.')
+
+        # Minimum duration of 1 hour
+        if start_time and end_time and (end_time - start_time) < timedelta(hours=1):
+            raise ValidationError('Reservations must be at least 1 hour long.')
 
         # Conflict check — for each selected asset, ensure no other event
         # occupies an overlapping time window (start < other_end AND end > other_start).

@@ -1,5 +1,5 @@
 from django.contrib.auth.decorators import login_required
-from django.shortcuts import render
+from django.shortcuts import get_object_or_404, render
 
 from .models import Track, Vehicle
 
@@ -23,7 +23,7 @@ def index(request):
 def track_detail(request, track_id):
     # Placeholder for track detail view
     context = {
-        "track": Track.objects.get(id=track_id)
+        "track": get_object_or_404(Track, pk=track_id)
     }
     return render(request, "asi-assets/track_detail.html", context)
 
@@ -31,6 +31,6 @@ def track_detail(request, track_id):
 def vehicle_detail(request, vehicle_id):
     # Placeholder for vehicle detail view
     context = {
-        "vehicle": Vehicle.objects.get(id=vehicle_id)
+        "vehicle": get_object_or_404(Vehicle, pk=vehicle_id)
     }
     return render(request, "asi-assets/vehicle_detail.html", context)   

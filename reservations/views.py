@@ -29,6 +29,8 @@ def reservation_create(request):
 @login_required
 def reservation_detail(request, reservation_id):
     reservation = get_object_or_404(Reservation, pk=reservation_id)
+    if not request.user.is_staff and reservation.user != request.user:
+        return redirect('reservations:reservation_list')
     return render(request, 'reservations/reservation_detail.html', {'reservation': reservation})
 
 

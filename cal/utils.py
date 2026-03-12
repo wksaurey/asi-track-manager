@@ -127,10 +127,10 @@ class Calendar(HTMLCalendar):
         # Snap to Monday of the week containing start_date
         start  = start_date - timedelta(days=start_date.weekday())
         end    = start + timedelta(days=6)
-        events = self._base_queryset().filter(
+        events = list(self._base_queryset().filter(
             start_time__date__gte=start,
             start_time__date__lte=end,
-        )
+        ))
 
         # Week range label — single-month vs. cross-month format
         if start.month == end.month:
@@ -165,11 +165,12 @@ class Calendar(HTMLCalendar):
             if i >= 5:            td_classes.append('weekend')
             td_cls = ' '.join(td_classes)
 
-            d_events = events.filter(
-                start_time__day=day.day,
-                start_time__month=day.month,
-                start_time__year=day.year,
-            ).order_by('start_time')
+            # NOTE: .date() returns the UTC date. Correct while TIME_ZONE='UTC'.
+            # If TIME_ZONE changes, use localtime(ev.start_time).date() here instead.
+            d_events = sorted(
+                [ev for ev in events if ev.start_time.date() == day],
+                key=lambda ev: ev.start_time,
+            )
 
             items = ''
             for ev in d_events:

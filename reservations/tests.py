@@ -217,9 +217,11 @@ class ReservationViewTest(TestCase):
         self.assertTemplateUsed(response, 'reservations/reservation_detail.html')
 
     def test_detail_other_users_reservation_is_visible(self):
+        # Fix 3 applied: a non-owner non-staff user is now redirected to the
+        # reservation list instead of being shown another user's reservation.
         other_r = self._make_reservation(user=self.other_user)
         response = self.client.get(reverse('reservations:reservation_detail', args=[other_r.pk]))
-        self.assertEqual(response.status_code, 200)
+        self.assertRedirects(response, reverse('reservations:reservation_list'))
 
     def test_delete_own_reservation(self):
         r = self._make_reservation()
@@ -232,3 +234,44 @@ class ReservationViewTest(TestCase):
         response = self.client.post(reverse('reservations:reservation_delete', args=[other_r.pk]))
         self.assertEqual(response.status_code, 404)
         self.assertTrue(Reservation.objects.filter(pk=other_r.pk).exists())
+
+
+# ── P1 Fix 3: reservation_detail ownership check with staff exception ─────────
+
+class ReservationDetailOwnershipTest(TestCase):
+    """Fix 3: reservation_detail must enforce ownership, with a staff override."""
+
+    def setUp(self):
+        self.owner = User.objects.create_user(username='owner', password='Testpass123!')
+        self.non_owner = User.objects.create_user(username='trespasser', password='Testpass123!')
+        self.staff = User.objects.create_user(
+            username='admin', password='Testpass123!', is_staff=True
+        )
+        self.track = Track.objects.create(name='Track A')
+        start = timezone.now() + timedelta(days=1)
+        end = start + timedelta(hours=2)
+        self.reservation = Reservation.objects.create(
+            user=self.owner, start_time=start, end_time=end
+        )
+        self.reservation.tracks.add(self.track)
+
+    def test_owner_can_view_reservation(self):
+        """Reservation owner receives a 200 on the detail page."""
+        self.client.login(username='owner', password='Testpass123!')
+        url = reverse('reservations:reservation_detail', args=[self.reservation.pk])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+
+    def test_non_owner_non_staff_is_redirected(self):
+        """Non-owner non-staff user must be redirected away from the detail page."""
+        self.client.login(username='trespasser', password='Testpass123!')
+        url = reverse('reservations:reservation_detail', args=[self.reservation.pk])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 302)
+
+    def test_staff_can_view_any_reservation(self):
+        """Staff user can view a reservation they do not own (200)."""
+        self.client.login(username='admin', password='Testpass123!')
+        url = reverse('reservations:reservation_detail', args=[self.reservation.pk])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)

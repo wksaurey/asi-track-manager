@@ -13,7 +13,7 @@ class UserModelTest(TestCase):
 
     def test_user_str(self):
         user = User.objects.create_user(username='testuser', password='pass1234!')
-        self.assertTrue(str(user))
+        self.assertEqual(str(user), 'testuser')
 
 
 class RegisterViewTest(TestCase):
@@ -66,7 +66,7 @@ class LoginViewTest(TestCase):
             'username': 'testuser',
             'password': 'Testpass123!',
         })
-        self.assertRedirects(response, '/assets/')
+        self.assertRedirects(response, '/cal/calendar/')
 
     def test_login_post_invalid(self):
         response = self.client.post(reverse('users:login'), {

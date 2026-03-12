@@ -59,9 +59,18 @@ class Event(models.Model):
         blank=True,
         related_name='events',
     )
-    # Auth / approval fields — default True keeps legacy events visible
-    created_by  = models.CharField(max_length=100, blank=True, default='')
-    is_approved = models.BooleanField(default=True)
+    # Auth / approval fields
+    created_by  = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='events',
+    )
+    is_approved = models.BooleanField(default=False)
+
+    def __str__(self):
+        return self.title
 
     # ── Display helpers used by calendar templates ─────────────────────────
 

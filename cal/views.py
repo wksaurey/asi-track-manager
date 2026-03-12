@@ -281,20 +281,16 @@ def event_delete(request, event_id):
     return HttpResponseRedirect(reverse('cal:calendar'))
 
 
+@login_required
+@require_POST
 def event_approve(request, event_id):
-    """
-    Admin only — mark a pending event as approved.
-
-    Accepts an optional ``?next=`` query parameter to control where the
-    admin is redirected after approval (defaults to the pending list).
-    """
-    if not is_admin(request):
+    """Admin only — mark a pending event as approved.  Redirects to the pending list."""
+    if not request.user.is_staff:
         return HttpResponseRedirect(reverse('cal:calendar'))
     event_obj = get_object_or_404(Event, pk=event_id)
     event_obj.is_approved = True
     event_obj.save(update_fields=['is_approved'])
-    next_url = request.GET.get('next', reverse('cal:pending_events'))
-    return HttpResponseRedirect(next_url)
+    return HttpResponseRedirect(reverse('cal:pending_events'))
 
 
 def pending_events(request):

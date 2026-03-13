@@ -1,5 +1,5 @@
 import os
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone as dt_timezone
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
@@ -573,3 +573,189 @@ class AssetListGroupedTest(TestCase):
         names = [a.name for a in track_group]
         self.assertIn('Track Alpha', names)
         self.assertIn('Track Beta', names)
+
+
+# ── Calendar UX Features: Hover Overlays & Track View ─────────────────────────
+
+class HoverOverlayMonthTest(TestCase):
+    """Month view must render hover-overlay markup for adding events."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='employee', password='Testpass123!')
+        self.client.force_login(self.user)
+
+    def test_month_view_returns_200(self):
+        response = self.client.get(reverse('cal:calendar') + '?view=month')
+        self.assertEqual(response.status_code, 200)
+
+    def test_month_view_contains_day_add_overlay(self):
+        response = self.client.get(reverse('cal:calendar') + '?view=month')
+        self.assertContains(response, 'day-add-overlay')
+
+    def test_month_view_contains_day_cell_header(self):
+        response = self.client.get(reverse('cal:calendar') + '?view=month')
+        self.assertContains(response, 'day-cell-header')
+
+    def test_month_view_date_is_span_not_anchor(self):
+        response = self.client.get(reverse('cal:calendar') + '?view=month')
+        self.assertContains(response, '<span class="date"')
+
+    def test_month_view_date_is_not_anchor(self):
+        response = self.client.get(reverse('cal:calendar') + '?view=month')
+        self.assertNotContains(response, '<a class="date"')
+
+
+class HoverOverlayWeekTest(TestCase):
+    """Week view must render hover-overlay markup in headers and body cells."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='employee', password='Testpass123!')
+        self.client.force_login(self.user)
+
+    def test_week_view_returns_200(self):
+        response = self.client.get(reverse('cal:calendar') + '?view=week')
+        self.assertEqual(response.status_code, 200)
+
+    def test_week_view_contains_day_add_overlay(self):
+        response = self.client.get(reverse('cal:calendar') + '?view=week')
+        self.assertContains(response, 'day-add-overlay')
+
+    def test_week_view_contains_wk_add_overlay(self):
+        response = self.client.get(reverse('cal:calendar') + '?view=week')
+        self.assertContains(response, 'wk-add-overlay')
+
+    def test_week_view_contains_wk_body_add_overlay(self):
+        response = self.client.get(reverse('cal:calendar') + '?view=week')
+        self.assertContains(response, 'wk-body-add-overlay')
+
+    def test_week_view_contains_wk_th_inner(self):
+        response = self.client.get(reverse('cal:calendar') + '?view=week')
+        self.assertContains(response, 'wk-th-inner')
+
+
+class TrackViewRenderTest(TestCase):
+    """Track view must render with the track-view CSS class."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='employee', password='Testpass123!')
+        self.client.force_login(self.user)
+
+    def test_track_view_returns_200(self):
+        response = self.client.get(reverse('cal:calendar') + '?view=track')
+        self.assertEqual(response.status_code, 200)
+
+    def test_track_view_contains_track_view_class(self):
+        response = self.client.get(reverse('cal:calendar') + '?view=track')
+        self.assertContains(response, 'track-view')
+
+
+class TrackViewContainsTracksTest(TestCase):
+    """Track view must show track assets and hide non-track assets."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='employee', password='Testpass123!')
+        self.client.force_login(self.user)
+        Asset.objects.create(name='North Loop', asset_type='track')
+        Asset.objects.create(name='South Loop', asset_type='track')
+        Asset.objects.create(name='Test Vehicle', asset_type='vehicle')
+
+    def test_track_view_shows_north_loop(self):
+        response = self.client.get(reverse('cal:calendar') + '?view=track')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'North Loop')
+
+    def test_track_view_shows_south_loop(self):
+        response = self.client.get(reverse('cal:calendar') + '?view=track')
+        self.assertContains(response, 'South Loop')
+
+    def test_track_view_hides_vehicle(self):
+        response = self.client.get(reverse('cal:calendar') + '?view=track')
+        self.assertNotContains(response, 'Test Vehicle')
+
+
+class TrackViewEmptyTracksTest(TestCase):
+    """Track view with no track assets must show an empty-state message."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='employee', password='Testpass123!')
+        self.client.force_login(self.user)
+
+    def test_track_view_shows_empty_message(self):
+        response = self.client.get(reverse('cal:calendar') + '?view=track')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'No tracks configured')
+
+
+class TrackViewEventAssignmentTest(TestCase):
+    """Events assigned to a track asset must appear in the track view for that week."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='employee', password='Testpass123!')
+        self.client.force_login(self.user)
+        self.track = Asset.objects.create(name='Test Track', asset_type='track')
+        # Monday 2026-03-09 10:00 UTC
+        start = datetime(2026, 3, 9, 10, 0, tzinfo=dt_timezone.utc)
+        end = datetime(2026, 3, 9, 12, 0, tzinfo=dt_timezone.utc)
+        event = Event.objects.create(
+            title='Sprint Test',
+            description='desc',
+            start_time=start,
+            end_time=end,
+            created_by=self.user,
+            is_approved=True,
+        )
+        event.assets.add(self.track)
+
+    def test_track_view_shows_event_title(self):
+        response = self.client.get(reverse('cal:calendar') + '?view=track&date=2026-3-9')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Sprint Test')
+
+
+class TrackViewTabVisibleTest(TestCase):
+    """The Track tab link must appear in calendar views."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='employee', password='Testpass123!')
+        self.client.force_login(self.user)
+
+    def test_month_view_has_track_tab(self):
+        response = self.client.get(reverse('cal:calendar') + '?view=month')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '?view=track')
+
+
+class TrackViewNavTest(TestCase):
+    """Track view navigation must link to prev/next week."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='employee', password='Testpass123!')
+        self.client.force_login(self.user)
+
+    def test_track_view_nav_contains_view_param(self):
+        response = self.client.get(reverse('cal:calendar') + '?view=track&date=2026-3-9')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'view=track')
+
+    def test_track_view_nav_prev_date(self):
+        """Prev navigation link must reference the date 7 days earlier: 2026-3-2."""
+        response = self.client.get(reverse('cal:calendar') + '?view=track&date=2026-3-9')
+        self.assertContains(response, '2026-3-2')
+
+    def test_track_view_nav_next_date(self):
+        """Next navigation link must reference the date 7 days later: 2026-3-16."""
+        response = self.client.get(reverse('cal:calendar') + '?view=track&date=2026-3-9')
+        self.assertContains(response, '2026-3-16')
+
+
+class AssetFilterHiddenInTrackViewTest(TestCase):
+    """The asset filter form must not appear in the track view."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='employee', password='Testpass123!')
+        self.client.force_login(self.user)
+
+    def test_asset_filter_form_not_in_track_view(self):
+        response = self.client.get(reverse('cal:calendar') + '?view=track')
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'asset-filter-form')

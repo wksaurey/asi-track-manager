@@ -64,3 +64,26 @@
 </div>
 
 {% endblock %}
+
+{% block script %}
+{% if view == 'month' %}
+<script>
+  // Show the day-add-overlay only while the user's mouse is inside that td.
+  // Inline styles take priority over any stylesheet, making this robust across browsers.
+  document.querySelectorAll('.month-table td, table.calendar td').forEach(function(td) {
+    var btn = td.querySelector('.day-add-overlay');
+    if (!btn) return;
+    btn.style.opacity = '0';
+    btn.style.visibility = 'hidden';
+    td.addEventListener('mouseenter', function() {
+      btn.style.opacity = '1';
+      btn.style.visibility = 'visible';
+    });
+    td.addEventListener('mouseleave', function() {
+      btn.style.opacity = '0';
+      btn.style.visibility = 'hidden';
+    });
+  });
+</script>
+{% endif %}
+{% endblock %}

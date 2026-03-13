@@ -71,6 +71,10 @@ class EventForm(ModelForm):
         start_time = cleaned.get('start_time')
         end_time   = cleaned.get('end_time')
 
+        # At least one asset must be selected
+        if 'assets' in cleaned and not assets:
+            self.add_error('assets', 'At least one asset (track, vehicle, or operator) must be selected.')
+
         # End must come after start
         if start_time and end_time and start_time >= end_time:
             raise ValidationError('End time must be after start time.')

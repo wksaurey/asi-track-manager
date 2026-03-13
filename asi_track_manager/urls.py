@@ -20,9 +20,7 @@ from django.views.generic import RedirectView
 
 urlpatterns = [
     path('', RedirectView.as_view(url='/cal/calendar/', permanent=False), name='home'),
-    path('assets/', include('asi_assets.urls')),
     path('users/', include('users.urls')),
-    path('reservations/', include('reservations.urls')),
     path('cal/', include('cal.urls')),
     path('admin/', admin.site.urls),
 ]

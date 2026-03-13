@@ -69,6 +69,7 @@ class Event(models.Model):
         related_name='events',
     )
     is_approved = models.BooleanField(default=False)
+    created_at  = models.DateTimeField(auto_now_add=True, null=True)
 
     def __str__(self):
         return self.title

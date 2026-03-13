@@ -124,6 +124,9 @@ class EventFormDurationTest(TestCase):
 
     def setUp(self):
         self.start = timezone.now().replace(second=0, microsecond=0) + timedelta(days=1)
+        self.asset = Asset.objects.create(
+            name='Test Track', asset_type=Asset.AssetType.TRACK
+        )
 
     def _form_data(self, duration_minutes):
         end = self.start + timedelta(minutes=duration_minutes)
@@ -132,7 +135,7 @@ class EventFormDurationTest(TestCase):
             'description': 'desc',
             'start_time': self.start.strftime('%Y-%m-%dT%H:%M'),
             'end_time': end.strftime('%Y-%m-%dT%H:%M'),
-            'assets': [],
+            'assets': [self.asset.pk],
         }
 
     def test_event_form_30_minutes_is_invalid(self):
@@ -272,3 +275,170 @@ class AssetToggleRequiresPostTest(TestCase):
         url = reverse('cal:asset_toggle', args=[self.asset.pk])
         response = self.client.get(url)
         self.assertEqual(response.status_code, 405)
+
+
+class EventFormAssetRequiredTest(TestCase):
+    """EventForm must require at least one asset to be selected."""
+
+    def setUp(self):
+        self.start = timezone.now().replace(second=0, microsecond=0) + timedelta(days=1)
+        self.end = self.start + timedelta(hours=2)
+
+    def test_no_assets_is_invalid(self):
+        """Submitting EventForm with no assets selected must fail validation."""
+        form = EventForm(data={
+            'title': 'Test Event',
+            'description': 'desc',
+            'start_time': self.start.strftime('%Y-%m-%dT%H:%M'),
+            'end_time': self.end.strftime('%Y-%m-%dT%H:%M'),
+            'assets': [],
+        })
+        self.assertFalse(form.is_valid())
+        self.assertIn(
+            'At least one asset (track, vehicle, or operator) must be selected.',
+            form.errors.get('assets', []),
+        )
+
+
+# ── UI Redesign: global base.html + nav gating ────────────────────────────────
+
+class GlobalBaseTemplateTest(TestCase):
+    """The project-wide base.html must be discoverable and used by cal pages.
+
+    These tests are RED before implementation (base.html does not exist yet,
+    DIRS is not configured, and context processor is not registered).
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='employee', password='Testpass123!')
+        self.staff = User.objects.create_user(
+            username='admin', password='Testpass123!', is_staff=True
+        )
+
+    def test_calendar_page_uses_global_base(self):
+        """Calendar page must be rendered via the project-wide base.html,
+        and cal/base.html must no longer be used (it is deleted in the redesign).
+
+        RED until: templates/base.html is created, DIRS includes BASE_DIR/'templates',
+        and cal/base.html is deleted with cal templates extending base.html directly.
+        """
+        self.client.login(username='employee', password='Testpass123!')
+        response = self.client.get(reverse('cal:calendar'))
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'base.html')
+        self.assertTemplateNotUsed(response, 'cal/base.html')
+
+    def test_pending_count_in_calendar_context(self):
+        """Calendar response context must include pending_count (from context processor).
+
+        RED until: cal/context_processors.py is created and registered in settings.py.
+        """
+        self.client.login(username='admin', password='Testpass123!')
+        response = self.client.get(reverse('cal:calendar'))
+        self.assertIn('pending_count', response.context)
+
+    def test_authenticated_user_sees_calendar_nav_link(self):
+        """Authenticated users must see a 'Calendar' nav link on the calendar page.
+
+        RED until: base.html is created with nav links gated by is_authenticated.
+        """
+        self.client.login(username='employee', password='Testpass123!')
+        response = self.client.get(reverse('cal:calendar'))
+        self.assertContains(response, 'Calendar')
+
+    def test_authenticated_user_sees_assets_nav_link(self):
+        """Authenticated users must see an 'Assets' nav link on the calendar page.
+
+        RED until: base.html is created with nav links gated by is_authenticated.
+        """
+        self.client.login(username='employee', password='Testpass123!')
+        response = self.client.get(reverse('cal:calendar'))
+        self.assertContains(response, 'Assets')
+
+    def test_staff_sees_pending_nav_link(self):
+        """Staff users must see a 'Pending' nav link on the calendar page.
+
+        RED until: base.html is created with the staff-gated Pending link.
+        """
+        self.client.login(username='admin', password='Testpass123!')
+        response = self.client.get(reverse('cal:calendar'))
+        self.assertContains(response, 'Pending')
+
+    def test_non_staff_does_not_see_pending_nav_link(self):
+        """Non-staff users must NOT see the 'Pending' nav link.
+
+        RED until: base.html gates the Pending link with {% if request.user.is_staff %}.
+        Note: currently cal/base.html already gates this correctly, but this test
+        also ensures the global base.html continues to enforce it after promotion.
+        """
+        self.client.login(username='employee', password='Testpass123!')
+        response = self.client.get(reverse('cal:calendar'))
+        self.assertNotContains(response, 'Pending Events')
+
+
+class LoginPageNavTest(TestCase):
+    """Login and register pages must use global base.html but show no authenticated nav.
+
+    These tests are RED before implementation because users/login.html and
+    users/register.html are currently standalone HTML (not extending base.html).
+    """
+
+    def test_login_page_uses_global_base(self):
+        """Login page must render via the project-wide base.html.
+
+        RED until: users/login.html is rewritten to extend 'base.html' and
+        BASE_DIR/'templates' is in DIRS.
+        """
+        response = self.client.get(reverse('users:login'))
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'base.html')
+
+    def test_register_page_uses_global_base(self):
+        """Register page must render via the project-wide base.html.
+
+        RED until: users/register.html is rewritten to extend 'base.html'.
+        """
+        response = self.client.get(reverse('users:register'))
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'base.html')
+
+    def test_login_page_contains_brand(self):
+        """Login page must show the site brand ('ASI Track Manager') from base.html.
+
+        RED until: users/login.html extends base.html which includes the brand.
+        """
+        response = self.client.get(reverse('users:login'))
+        self.assertContains(response, 'ASI Track Manager')
+
+    def test_register_page_contains_brand(self):
+        """Register page must show the site brand ('ASI Track Manager') from base.html.
+
+        RED until: users/register.html extends base.html which includes the brand.
+        """
+        response = self.client.get(reverse('users:register'))
+        self.assertContains(response, 'ASI Track Manager')
+
+    def test_login_page_has_no_authenticated_nav_links(self):
+        """Login page (unauthenticated) must NOT show any authenticated nav links.
+
+        All nav links (Calendar, Assets, New Event, Pending) are inside
+        {% if request.user.is_authenticated %} in base.html, so the login page
+        must show brand only.
+        RED until: base.html gates all nav links with is_authenticated.
+        """
+        response = self.client.get(reverse('users:login'))
+        self.assertNotContains(response, 'New Event')
+        self.assertNotContains(response, '>Calendar<')
+        self.assertNotContains(response, '>Assets<')
+        self.assertNotContains(response, '>Pending<')
+
+    def test_register_page_has_no_authenticated_nav_links(self):
+        """Register page (unauthenticated) must NOT show any authenticated nav links.
+
+        RED until: base.html gates all nav links with is_authenticated.
+        """
+        response = self.client.get(reverse('users:register'))
+        self.assertNotContains(response, 'New Event')
+        self.assertNotContains(response, '>Calendar<')
+        self.assertNotContains(response, '>Assets<')
+        self.assertNotContains(response, '>Pending<')

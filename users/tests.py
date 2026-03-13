@@ -77,11 +77,11 @@ class LoginViewTest(TestCase):
         self.assertFalse(response.wsgi_request.user.is_authenticated)
 
     def test_login_redirects_next(self):
-        response = self.client.post('/users/login/?next=/reservations/', {
+        response = self.client.post('/users/login/?next=/cal/calendar/', {
             'username': 'testuser',
             'password': 'Testpass123!',
         })
-        self.assertRedirects(response, '/reservations/')
+        self.assertRedirects(response, '/cal/calendar/')
 
 
 class LogoutViewTest(TestCase):
@@ -97,3 +97,45 @@ class LogoutViewTest(TestCase):
         self.client.post(reverse('users:logout'))
         response = self.client.get(reverse('users:login'))
         self.assertFalse(response.wsgi_request.user.is_authenticated)
+
+
+# ── UI Redesign: verify users/ templates after promotion to base.html ─────────
+
+class UsersTemplateBaseIntegrationTest(TestCase):
+    """These tests verify the users/ templates remain correct after the UI redesign.
+
+    test_login_uses_correct_template and test_register_uses_correct_template
+    remain GREEN before and after implementation (template names don't change).
+
+    test_login_extends_global_base and test_register_extends_global_base are
+    RED before implementation (templates are standalone HTML, not extending base.html).
+    """
+
+    def test_login_uses_correct_template(self):
+        """users:login must render users/login.html (template name must not change)."""
+        response = self.client.get(reverse('users:login'))
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'users/login.html')
+
+    def test_register_uses_correct_template(self):
+        """users:register must render users/register.html (template name must not change)."""
+        response = self.client.get(reverse('users:register'))
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'users/register.html')
+
+    def test_login_extends_global_base(self):
+        """users/login.html must extend the project-wide base.html after redesign.
+
+        RED until: users/login.html is rewritten to {% extends 'base.html' %} and
+        BASE_DIR/'templates' is in DIRS.
+        """
+        response = self.client.get(reverse('users:login'))
+        self.assertTemplateUsed(response, 'base.html')
+
+    def test_register_extends_global_base(self):
+        """users/register.html must extend the project-wide base.html after redesign.
+
+        RED until: users/register.html is rewritten to {% extends 'base.html' %}.
+        """
+        response = self.client.get(reverse('users:register'))
+        self.assertTemplateUsed(response, 'base.html')

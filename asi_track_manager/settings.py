@@ -31,9 +31,7 @@ ALLOWED_HOSTS = []
 # Application definition
 
 INSTALLED_APPS = [
-    'asi_assets',
     'users',
-    'reservations',
     'cal',
     'django.contrib.admin',
     'django.contrib.auth',
@@ -58,13 +56,14 @@ ROOT_URLCONF = 'asi_track_manager.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [BASE_DIR / 'templates'],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'cal.context_processors.pending_count',
             ],
         },
     },

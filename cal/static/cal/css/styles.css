@@ -286,7 +286,7 @@ table.calendar td.today {
   margin-bottom: 6px;
 }
 
-/* Hover-to-add "+" button — shared by month + week views */
+/* Hover-to-add "+" button — hidden by default, shown on cell hover */
 .day-add-overlay {
   display: inline-flex;
   align-items: center;
@@ -310,18 +310,10 @@ table.calendar td.today {
   color: #fff;
 }
 
-/* Show on month-view cell hover */
+/* Show on month-view cell hover (JS in calendar.html handles this reliably) */
 .month-table td:hover .day-add-overlay,
 table.calendar td:hover .day-add-overlay {
   opacity: 1;
-}
-
-
-/* Touch/mobile: always show at reduced opacity */
-@media (hover: none) {
-  .day-add-overlay {
-    opacity: 0.55;
-  }
 }
 
 /* Dark theme */

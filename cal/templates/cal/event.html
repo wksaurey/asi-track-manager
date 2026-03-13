@@ -1,0 +1,155 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block extra_css %}
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+{% endblock %}
+
+{% block title %}{% if event %}Edit Event{% else %}New Event{% endif %}{% endblock %}
+
+{% block content %}
+<div class="page-container form-page">
+
+  <div class="page-header">
+    <h2 class="page-heading">
+      {% if event %}
+        Edit Event
+        {% if not event.is_approved %}
+          <span class="status-pill status-inactive" style="font-size:13px;vertical-align:middle;">PENDING</span>
+        {% endif %}
+      {% else %}
+        New Event
+      {% endif %}
+    </h2>
+    <a class="btn btn-muted" href="{% url 'cal:calendar' %}">
+      <i class="fas fa-arrow-left"></i> Calendar
+    </a>
+  </div>
+
+  {% if event and event.created_by %}
+  <p class="event-meta">
+    <i class="fas fa-user"></i> Created by <strong>{{ event.created_by }}</strong>
+    {% if not event.is_approved %}
+      &nbsp;·&nbsp; <span style="color:#d97706;">Awaiting admin approval</span>
+    {% endif %}
+  </p>
+  {% endif %}
+
+  <!-- Form errors -->
+  {% if form.errors %}
+  <div class="form-errors">
+    {% for field in form %}
+      {% for error in field.errors %}
+        <p class="error-msg"><i class="fas fa-exclamation-circle"></i> {{ field.label }}: {{ error|escape }}</p>
+      {% endfor %}
+    {% endfor %}
+    {% for error in form.non_field_errors %}
+      <p class="error-msg"><i class="fas fa-exclamation-circle"></i> {{ error|escape }}</p>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <form method="post" class="asset-form">
+    {% csrf_token %}
+    <table class="form-table">
+      {% for field in form %}
+      <tr>
+        <td><label for="{{ field.id_for_label }}">{{ field.label }}</label></td>
+        <td>
+          {{ field }}
+          {% if field.help_text %}
+            <small class="field-help">{{ field.help_text }}</small>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+
+    <div class="form-actions">
+      <button type="submit" class="btn">
+        <i class="fas fa-save"></i> Save Event
+      </button>
+
+    </div>
+  </form>
+
+  {# Approve / Delete forms are OUTSIDE the event form — nested forms are invalid HTML #}
+  {% if is_admin and event %}
+    {% if not event.is_approved %}
+    <form method="post" action="{% url 'cal:event_approve' event.id %}"
+          class="form-actions" style="margin-top:0;display:inline;">
+      {% csrf_token %}
+      <button type="submit" class="btn"
+              style="background:linear-gradient(180deg,#10b981,#059669);">
+        <i class="fas fa-check-circle"></i> Approve
+      </button>
+    </form>
+    {% endif %}
+  <form method="post" action="{% url 'cal:event_delete' event.id %}"
+        class="form-actions" style="margin-top:0;"
+        onsubmit="return confirm('Delete this event? This cannot be undone.')">
+    {% csrf_token %}
+    <button type="submit" class="btn" style="background:linear-gradient(180deg,#ef4444,#dc2626);">
+      <i class="fas fa-trash"></i> Delete
+    </button>
+  </form>
+  {% endif %}
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+{% endblock %}
+
+{% block script %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const fpOpts = {
+    enableTime:    true,
+    dateFormat:    'Y-m-d\\TH:i',      // value submitted to Django
+    altInput:      true,
+    altFormat:     'F j, Y  \\a\\t  h:i K',  // friendly display
+    altInputClass: 'form-control flatpickr-display',
+    minuteIncrement: 15,
+    time_24hr:     false,
+  };
+
+  // Compute default start/end times for new events only
+  const startInput = document.getElementById('id_start_time');
+  const endInput   = document.getElementById('id_end_time');
+
+  let endOpts;
+  if (!startInput.value) {
+    const now  = new Date();
+    const mins = now.getMinutes();
+    // Round UP strictly to next half-hour boundary
+    let nextMin;
+    if (mins < 30) {
+      nextMin = 30;
+    } else {
+      nextMin = 60;  // will roll over to next hour
+    }
+    const defStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(),
+                              now.getHours(), nextMin, 0, 0);
+    const defEnd = new Date(defStart.getTime() + 60 * 60 * 1000);
+    fpOpts.defaultDate = defStart;
+    endOpts = Object.assign({}, fpOpts, { defaultDate: defEnd });
+  } else {
+    endOpts = Object.assign({}, fpOpts);
+  }
+
+  const fpStart = flatpickr('#id_start_time', fpOpts);
+  const fpEnd   = flatpickr('#id_end_time',   endOpts);
+
+  // Ensure defaultDate values are written to the hidden inputs
+  if (fpOpts.defaultDate) fpStart.setDate(fpOpts.defaultDate, true);
+  if (endOpts.defaultDate) fpEnd.setDate(endOpts.defaultDate, true);
+
+  // Auto-set end minimum to match start so you can't pick an earlier end time
+  fpStart.config.onChange.push(function(dates) {
+    if (dates[0]) fpEnd.set('minDate', dates[0]);
+  });
+});
+</script>
+{% endblock %}

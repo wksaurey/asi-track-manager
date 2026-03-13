@@ -122,23 +122,11 @@ form input, form select, form textarea {
 .form-actions { display: flex; gap: 10px; margin-top: 20px; }
 .event-meta   { font-size: 13px; color: var(--muted); margin: -8px 0 16px; }
 
-/* ── Asset table ────────────────────────────────────────────── */
-.asset-table-wrap { background: var(--card); border-radius: var(--radius); border: 1px solid var(--border); overflow: hidden; box-shadow: 0 4px 18px rgba(6,36,48,0.05); }
-.asset-table      { width: 100%; border-collapse: collapse; }
-.asset-table th   { padding: 12px 14px; background: linear-gradient(180deg,rgba(46,168,229,0.10),rgba(46,168,229,0.04)); text-align: left; font-size: 13px; font-weight: 600; color: #034259; border-bottom: 1px solid var(--border); }
-.asset-table td   { padding: 12px 14px; font-size: 14px; border-bottom: 1px solid rgba(0,0,0,0.04); vertical-align: middle; }
-.asset-table tr:last-child td  { border-bottom: none; }
-.asset-table tr.row-inactive td{ opacity: 0.55; }
-.action-cell      { display: flex; gap: 6px; flex-wrap: wrap; }
-
 /* ── Badges & pills ─────────────────────────────────────────── */
-.type-badge     { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+.type-badge     { display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
 .badge-vehicle  { background: rgba(245,158,11,0.15);  color: #92400e; }
 .badge-track    { background: rgba(16,185,129,0.15);   color: #065f46; }
 .badge-operator { background: rgba(99,102,241,0.15);   color: #3730a3; }
-.status-pill    { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
-.status-active  { background: rgba(16,185,129,0.15); color: #065f46; }
-.status-inactive{ background: rgba(107,114,128,0.15); color: #374151; }
 
 /* ── Asset detail / schedule ────────────────────────────────── */
 .asset-header-card    { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px; padding: 20px; border-radius: var(--radius); margin-bottom: 24px; border: 1px solid var(--border); background: var(--card); box-shadow: 0 4px 18px rgba(6,36,48,0.05); }
@@ -753,6 +741,72 @@ html.dark-theme .asset-checklist li:has(input:checked) label { background: rgba(
   cursor: pointer;
 }
 
+/* ── Asset cards ──────────────────────────────────────────── */
+.asset-section-heading {
+  border-left: 4px solid var(--primary);
+  padding-left: 10px;
+  margin: 24px 0 10px;
+}
+.asset-section-vehicle  { border-left-color: #f59e0b; }
+.asset-section-track    { border-left-color: #10b981; }
+.asset-section-operator { border-left-color: #6366f1; }
+
+.asset-card-group { display: flex; flex-direction: column; gap: 10px; margin-bottom: 8px; }
+
+.asset-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 2px 8px rgba(6,36,48,0.04);
+  flex-wrap: wrap;
+  padding: 14px 40px 14px 18px;
+}
+.asset-card:hover { box-shadow: 0 4px 16px rgba(6,36,48,0.08); }
+.asset-card-body  { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; flex: 1; min-width: 0; }
+.asset-card-name  { font-size: 15px; color: #023447; }
+.asset-card-desc  { font-size: 13px; color: var(--muted); margin: 0; }
+.asset-card-actions { display: flex; gap: 6px; flex-wrap: wrap; flex-shrink: 0; }
+
+/* Delete X button — top-right corner of card */
+.asset-card-delete-form { margin: 0; }
+.asset-card-delete-btn {
+  position: absolute;
+  top: 8px; right: 10px;
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(239,68,68,0.12);
+  color: #dc2626;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.15s, color 0.15s;
+  padding: 0;
+}
+.asset-card-delete-btn:hover { background: #ef4444; color: #fff; }
+
+/* Secondary (Edit) button */
+.btn-secondary {
+  background: var(--card);
+  color: var(--primary);
+  border: 1px solid var(--primary);
+  box-shadow: none;
+}
+.btn-secondary:hover { background: rgba(46,168,229,0.08); color: var(--primary-dark); transform: none; }
+
+html.dark-theme .asset-card { background: var(--card); border-color: var(--border); }
+html.dark-theme .asset-card-name { color: #c0d8e4; }
+html.dark-theme .asset-card-delete-btn { background: rgba(239,68,68,0.18); color: #fca5a5; }
+html.dark-theme .asset-card-delete-btn:hover { background: #b91c1c; color: #fff; }
+html.dark-theme .btn-secondary { background: transparent; color: var(--primary); border-color: var(--primary); }
+html.dark-theme .btn-secondary:hover { background: rgba(46,168,229,0.12); }
+
 /* ════════════════════════════════════════════════════════════════
    DARK THEME
    (applied via html.dark-theme class — set before render to avoid flash)
@@ -899,10 +953,7 @@ html.dark-theme .section-heading{ color: #c0d8e4; }
 html.dark-theme .form-errors    { background: #2a1f0a; border-color: #7a5000; }
 html.dark-theme .error-msg      { color: #f0c060; }
 
-/* Asset table */
-html.dark-theme .asset-table-wrap  { background: #1a2b38; border-color: rgba(46,168,229,0.18); }
-html.dark-theme .asset-table th    { background: rgba(46,168,229,0.07); color: #6090a0; border-color: rgba(46,168,229,0.15); }
-html.dark-theme .asset-table td    { border-color: rgba(46,168,229,0.10); color: #c0d8e4; }
+/* Asset cards + detail */
 html.dark-theme .asset-header-card { background: #1a2b38; border-color: rgba(46,168,229,0.18); }
 html.dark-theme .schedule-row      { background: #1a2b38; border-color: rgba(46,168,229,0.18); }
 html.dark-theme .sched-num         { color: #c0d8e4; }
@@ -947,6 +998,16 @@ html.dark-theme .flatpickr-months .flatpickr-next-month   { fill: #7090a0 !impor
 html.dark-theme .flatpickr-current-month .flatpickr-monthDropdown-months,
 html.dark-theme .flatpickr-current-month input.cur-year   { color: #c0d8e4 !important; background: transparent !important; }
 html.dark-theme .flatpickr-input.flatpickr-display        { background: #1a2b38 !important; color: #c0d8e4 !important; border-color: rgba(46,168,229,0.25) !important; }
+
+/* Login card */
+html.dark-theme .card              { background: var(--card); border-color: var(--border); }
+html.dark-theme .card-body         { background: var(--card); }
+html.dark-theme .card-title        { color: #c0d8e4; }
+html.dark-theme .card label        { color: #c0d8e4; }
+html.dark-theme .card .helptext,
+html.dark-theme .card .form-text   { color: #7090a0; }
+html.dark-theme .card input        { background: #0f1923; color: #c0d8e4; border-color: rgba(46,168,229,0.25); }
+html.dark-theme .card a            { color: var(--primary); }
 
 /* Cal-body dark bg fill */
 html.dark-theme .cal-body { background: var(--bg); }

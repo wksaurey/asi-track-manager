@@ -1,9 +1,10 @@
 """
 Views for the ASI Track Manager calendar application.
 
-Handles authentication (dual-mode: simple session name or Django admin),
-calendar rendering (month/week/day), event CRUD with approval workflow,
-and asset management (list, create, edit, toggle, detail/schedule).
+Handles calendar rendering (month/week/day), event CRUD with approval
+workflow, and asset management (list, create, edit, delete, detail/schedule).
+Authentication is handled by Django's built-in auth framework via
+@login_required and request.user.is_staff.
 """
 
 from datetime import datetime, timedelta, date
@@ -173,7 +174,7 @@ class CalendarView(generic.ListView):
         context['prev']           = prev_for(d, view) + (f'&asset={asset_id}' if asset_id else '')
         context['next']           = next_for(d, view) + (f'&asset={asset_id}' if asset_id else '')
         context['view']           = view
-        context['assets']         = Asset.objects.filter(is_active=True)
+        context['assets']         = Asset.objects.all()
         context['selected_asset'] = asset_id
         return context
 
@@ -303,11 +304,17 @@ def pending_events(request):
 # ── Asset management ──────────────────────────────────────────────────────────
 
 def asset_list(request):
-    """Display all assets (active and inactive). Requires login."""
-    if not is_logged_in(request):
-        return HttpResponseRedirect(reverse('cal:login'))
+    """Display all assets grouped by type. Requires login."""
     assets = Asset.objects.all()
-    return render(request, 'cal/asset_list.html', {'assets': assets})
+    grouped_assets = []
+    for type_value, type_label in Asset.AssetType.choices:
+        group = [a for a in assets if a.asset_type == type_value]
+        if group:
+            grouped_assets.append((type_label, type_value, group))
+    return render(request, 'cal/asset_list.html', {
+        'assets': assets,
+        'grouped_assets': grouped_assets,
+    })
 
 
 def asset_create(request):
@@ -338,13 +345,12 @@ def asset_edit(request, asset_id):
 
 
 @require_POST
-def asset_toggle(request, asset_id):
-    """Admin only — flip an asset's is_active flag.  Requires POST for safety."""
-    if not is_admin(request):
-        return HttpResponseRedirect(reverse('cal:calendar'))
+def asset_delete(request, asset_id):
+    """Admin only — delete an asset.  Requires POST for safety."""
+    if not request.user.is_staff:
+        return HttpResponseRedirect(reverse('cal:asset_list'))
     asset = get_object_or_404(Asset, pk=asset_id)
-    asset.is_active = not asset.is_active
-    asset.save(update_fields=['is_active'])
+    asset.delete()
     return HttpResponseRedirect(reverse('cal:asset_list'))
 
 

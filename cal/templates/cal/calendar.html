@@ -1,0 +1,89 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}ASI Asset Scheduler{% endblock %}
+
+{# Suppress the big H1 title on the calendar page — toolbar handles navigation #}
+{% block page_header %}{% endblock %}
+
+{% block content %}
+
+<!-- ── Calendar Toolbar ─────────────────────────────────────────── -->
+<div class="cal-toolbar">
+
+  <!-- Left: nav arrows + Today -->
+  <div class="cal-tb-left">
+    <a class="cal-nav-arrow" href="{% url 'cal:calendar' %}?{{ prev }}">&#8249;</a>
+    <a class="cal-nav-arrow" href="{% url 'cal:calendar' %}?{{ next }}">&#8250;</a>
+    <a class="cal-today-btn" href="{% url 'cal:calendar' %}?view={{ view }}">Today</a>
+  </div>
+
+  <!-- Center: asset filter -->
+  {% if view == 'month' %}
+  <form method="get" action="{% url 'cal:calendar' %}" class="asset-filter-form">
+    <input type="hidden" name="view" value="{{ view }}">
+    {% if view == 'month' %}
+      <input type="hidden" name="month" value="{{ request.GET.month }}">
+    {% else %}
+      <input type="hidden" name="date" value="{{ request.GET.date }}">
+    {% endif %}
+    <select name="asset" class="asset-filter-select" onchange="this.form.submit()">
+      <option value="">All Assets</option>
+      {% for asset in assets %}
+        <option value="{{ asset.id }}" {% if selected_asset == asset.id|stringformat:"s" %}selected{% endif %}>
+          {{ asset }}
+        </option>
+      {% endfor %}
+    </select>
+  </form>
+  {% endif %}
+
+  <!-- Right: view switcher + new event -->
+  <div class="cal-tb-right">
+    <div class="view-switcher">
+      <a class="vsw {% if view == 'month' %}vsw-active{% endif %}" href="{% url 'cal:calendar' %}?view=month&{{ current_q }}">Month</a>
+      <a class="vsw {% if view == 'week' %}vsw-active{% endif %}"  href="{% url 'cal:calendar' %}?view=week&{{ current_q }}">Week</a>
+      <a class="vsw {% if view == 'day' %}vsw-active{% endif %}"   href="{% url 'cal:calendar' %}?view=day&{{ current_q }}">Day</a>
+    </div>
+    <a class="btn-new-event" href="{% url 'cal:event_new' %}"><i class="fas fa-plus"></i> New Event</a>
+  </div>
+
+</div>
+
+<!-- ── Calendar Body ────────────────────────────────────────────── -->
+<div class="cal-body">
+  {{ calendar }}
+</div>
+
+<!-- ── Legend ───────────────────────────────────────────────────── -->
+<div class="cal-legend">
+  <span class="legend-item"><span class="legend-dot dot-vehicle"></span> Vehicle</span>
+  <span class="legend-item"><span class="legend-dot dot-track"></span> Track</span>
+  <span class="legend-item"><span class="legend-dot dot-operator"></span> Operator</span>
+  <span class="legend-item"><span class="legend-dot dot-pending"></span> Pending Approval</span>
+</div>
+
+{% endblock %}
+
+{% block script %}
+{% if view == 'month' %}
+<script>
+  // Show the day-add-overlay only while the user's mouse is inside that td.
+  // Inline styles take priority over any stylesheet, making this robust across browsers.
+  document.querySelectorAll('.month-table td, table.calendar td').forEach(function(td) {
+    var btn = td.querySelector('.day-add-overlay');
+    if (!btn) return;
+    btn.style.opacity = '0';
+    btn.style.visibility = 'hidden';
+    td.addEventListener('mouseenter', function() {
+      btn.style.opacity = '1';
+      btn.style.visibility = 'visible';
+    });
+    td.addEventListener('mouseleave', function() {
+      btn.style.opacity = '0';
+      btn.style.visibility = 'hidden';
+    });
+  });
+</script>
+{% endif %}
+{% endblock %}

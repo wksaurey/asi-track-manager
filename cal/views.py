@@ -156,6 +156,8 @@ class CalendarView(generic.ListView):
             html_cal = cal.formatweekview(d)
         elif view == 'day':
             html_cal = cal.formatdayview(d)
+        elif view == 'track':
+            html_cal = cal.formattrackview(d)
         else:
             html_cal = cal.formatmonth(withyear=True)
 
@@ -207,9 +209,9 @@ def prev_for(d, view):
         first = d.replace(day=1)
         prev_month = first - timedelta(days=1)
         return f"view=month&month={prev_month.year}-{prev_month.month}"
-    elif view == 'week':
+    elif view in ('week', 'track'):
         prev_date = d - timedelta(days=7)
-        return f"view=week&date={prev_date.year}-{prev_date.month}-{prev_date.day}"
+        return f"view={view}&date={prev_date.year}-{prev_date.month}-{prev_date.day}"
     else:
         prev_date = d - timedelta(days=1)
         return f"view=day&date={prev_date.year}-{prev_date.month}-{prev_date.day}"
@@ -222,9 +224,9 @@ def next_for(d, view):
         last = d.replace(day=days_in_month)
         next_month = last + timedelta(days=1)
         return f"view=month&month={next_month.year}-{next_month.month}"
-    elif view == 'week':
+    elif view in ('week', 'track'):
         next_date = d + timedelta(days=7)
-        return f"view=week&date={next_date.year}-{next_date.month}-{next_date.day}"
+        return f"view={view}&date={next_date.year}-{next_date.month}-{next_date.day}"
     else:
         next_date = d + timedelta(days=1)
         return f"view=day&date={next_date.year}-{next_date.month}-{next_date.day}"

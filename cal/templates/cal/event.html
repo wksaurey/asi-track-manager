@@ -130,8 +130,22 @@ document.addEventListener('DOMContentLoaded', function () {
     } else {
       nextMin = 60;  // will roll over to next hour
     }
-    const defStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(),
-                              now.getHours(), nextMin, 0, 0);
+
+    // Use ?date=YYYY-MM-DD from the URL (set when clicking a calendar day)
+    const dateParam = new URLSearchParams(window.location.search).get('date');
+    let baseYear, baseMonth, baseDay;
+    if (dateParam) {
+      const parts = dateParam.split('-');
+      baseYear  = parseInt(parts[0], 10);
+      baseMonth = parseInt(parts[1], 10) - 1;  // 0-indexed
+      baseDay   = parseInt(parts[2], 10);
+    } else {
+      baseYear  = now.getFullYear();
+      baseMonth = now.getMonth();
+      baseDay   = now.getDate();
+    }
+
+    const defStart = new Date(baseYear, baseMonth, baseDay, now.getHours(), nextMin, 0, 0);
     const defEnd = new Date(defStart.getTime() + 60 * 60 * 1000);
     fpOpts.defaultDate = defStart;
     endOpts = Object.assign({}, fpOpts, { defaultDate: defEnd });

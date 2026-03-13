@@ -10,9 +10,9 @@ from datetime import datetime, timedelta, date as date_type
 from calendar import HTMLCalendar
 
 from django.urls import reverse
+from django.utils.html import escape
 
-from reservations.models import Reservation
-
+from cal.models import Asset, Event
 
 
 class Calendar(HTMLCalendar):
@@ -74,18 +74,21 @@ class Calendar(HTMLCalendar):
                 and self.month == self.today.month
                 and self.year  == self.today.year
             )
-            is_weekend = date_type(self.year, self.month, day).weekday() >= 5
+            day_date  = date_type(self.year, self.month, day)
+            is_weekend = day_date.weekday() >= 5
 
             td_classes = []
             if is_today:   td_classes.append('today')
             if is_weekend: td_classes.append('weekend')
             td_cls    = (' class="' + ' '.join(td_classes) + '"') if td_classes else ''
-            date_span = (
+            new_url  = reverse('cal:event_new') + f'?date={day_date.isoformat()}'
+            date_num = (
                 f'<span class="date today-circle">{day}</span>'
                 if is_today else
                 f'<span class="date">{day}</span>'
             )
-            return f'<td{td_cls}>{date_span}<ul>{d}</ul></td>'
+            add_link = f'<a class="day-add-overlay" href="{new_url}" title="Add event">+</a>'
+            return f'<td{td_cls}><div class="day-cell-header">{date_num}{add_link}</div><ul>{d}</ul></td>'
         return '<td class="noday"></td>'
 
     def formatweek(self, theweek, events):
@@ -149,10 +152,14 @@ class Calendar(HTMLCalendar):
             if is_today: th_class += ' wk-today-head'
             elif i >= 5: th_class += ' wk-weekend-head'
             num_class = 'wk-daynum wk-today-num' if is_today else 'wk-daynum'
+            new_url   = reverse('cal:event_new') + f'?date={day.isoformat()}'
             header += (
                 f'<th class="{th_class}">'
+                f'<div class="wk-th-inner">'
                 f'<div class="wk-dayname">{day_abbr[i]}</div>'
-                f'<div class="{num_class}">{day.day}</div>'
+                f'<span class="{num_class}">{day.day}</span>'
+                f'<a class="day-add-overlay wk-add-overlay" href="{new_url}" title="Add event">+</a>'
+                f'</div>'
                 f'</th>'
             )
 
@@ -180,7 +187,9 @@ class Calendar(HTMLCalendar):
                     f'</li>'
                 )
 
-            body += f'<td class="{td_cls}"><ul class="wk-events">{items}</ul></td>'
+            add_url  = reverse('cal:event_new') + f'?date={day.isoformat()}'
+            add_link = f'<a class="day-add-overlay wk-body-add-overlay" href="{add_url}" title="Add event">+</a>'
+            body += f'<td class="{td_cls}"><ul class="wk-events">{items}</ul>{add_link}</td>'
 
         return (
             f'<div class="calendar week-view">'
@@ -242,5 +251,118 @@ class Calendar(HTMLCalendar):
             f'<div class="calendar day-view">'
             f'<div class="day-view-title">{title}</div>'
             f'{body}'
+            f'</div>'
+        )
+
+    # ── Track view ──────────────────────────────────────────────────────
+
+    def formattrackview(self, start_date):
+        """
+        Render a per-track timeline table for the week containing start_date.
+
+        Rows    = all Track assets (asset_type='track'), ordered by name.
+        Columns = Mon–Sun of the week.
+        Each cell shows events booked for that track on that day, or a gap
+        indicator ('—') if empty.
+
+        NOTE: Intentionally ignores self.asset_id — the track view shows all
+        tracks regardless of the asset filter. Documented here for future maintainers.
+        """
+        start = start_date - timedelta(days=start_date.weekday())  # snap to Monday
+        end   = start + timedelta(days=6)
+
+        tracks = Asset.objects.filter(
+            asset_type=Asset.AssetType.TRACK
+        ).order_by('name')
+
+        # Single query for all track-related events this week.
+        # .distinct() prevents duplicates from the M2M join when an event
+        # has multiple track assets.
+        events = list(
+            Event.objects.filter(
+                assets__asset_type=Asset.AssetType.TRACK,
+                start_time__date__gte=start,
+                start_time__date__lte=end,
+            ).prefetch_related('assets').distinct()
+        )
+
+        # Week range label — same format as formatweekview
+        if start.month == end.month:
+            label = f'{start.strftime("%B %d")} &ndash; {end.strftime("%d, %Y")}'
+        else:
+            label = f'{start.strftime("%b %d")} &ndash; {end.strftime("%b %d, %Y")}'
+
+        day_abbr = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+        days = [start + timedelta(days=i) for i in range(7)]
+
+        # ── Header row ──────────────────────────────────────────────────────
+        header_cells = '<th class="trk-label-th"></th>'  # empty top-left corner
+        for i, day in enumerate(days):
+            is_today  = (day == self.today)
+            th_class  = 'trk-th'
+            if is_today:  th_class += ' wk-today-head'
+            elif i >= 5:  th_class += ' wk-weekend-head'
+            num_class = 'wk-daynum wk-today-num' if is_today else 'wk-daynum'
+            header_cells += (
+                f'<th class="{th_class}">'
+                f'<div class="wk-dayname">{day_abbr[i]}</div>'
+                f'<span class="{num_class}">{day.day}</span>'
+                f'</th>'
+            )
+
+        # ── Body rows — one per track ────────────────────────────────────────
+        body_rows = ''
+        for track in tracks:
+            row = (
+                f'<td class="trk-label-cell">'
+                f'<span class="trk-name">{escape(track.name)}</span>'
+                f'</td>'
+            )
+            for i, day in enumerate(days):
+                td_classes = ['trk-td']
+                if day == self.today: td_classes.append('today')
+                if i >= 5:            td_classes.append('weekend')
+                td_cls = ' '.join(td_classes)
+
+                # Filter events for this track on this day.
+                # ev.assets.all() uses the prefetch cache — no extra queries.
+                day_events = sorted(
+                    [
+                        ev for ev in events
+                        if ev.start_time.date() == day
+                        and any(a.id == track.id for a in ev.assets.all())
+                    ],
+                    key=lambda ev: ev.start_time,
+                )
+
+                if day_events:
+                    items = ''.join(
+                        f'<li class="{self._event_classes(ev)}">{ev.get_html_url}</li>'
+                        for ev in day_events
+                    )
+                    cell_content = f'<ul class="trk-events">{items}</ul>'
+                else:
+                    cell_content = '<span class="trk-gap">&#8212;</span>'
+
+                row += f'<td class="{td_cls}">{cell_content}</td>'
+
+            body_rows += f'<tr>{row}</tr>'
+
+        if not body_rows:
+            body_rows = (
+                '<tr>'
+                '<td colspan="8" class="trk-empty">No tracks configured.</td>'
+                '</tr>'
+            )
+
+        return (
+            f'<div class="calendar track-view">'
+            f'<div class="week-label">{label}</div>'
+            f'<div class="trk-scroll-wrap">'
+            f'<table class="trk-table">'
+            f'<thead><tr>{header_cells}</tr></thead>'
+            f'<tbody>{body_rows}</tbody>'
+            f'</table>'
+            f'</div>'
             f'</div>'
         )

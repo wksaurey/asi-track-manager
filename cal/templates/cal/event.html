@@ -1,5 +1,9 @@
-{% extends 'cal/base.html' %}
+{% extends 'base.html' %}
 {% load static %}
+
+{% block extra_css %}
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+{% endblock %}
 
 {% block title %}{% if event %}Edit Event{% else %}New Event{% endif %}{% endblock %}
 
@@ -66,20 +70,21 @@
         <i class="fas fa-save"></i> Save Event
       </button>
 
-      {% if is_admin and event %}
-        {% if not event.is_approved %}
-        <a class="btn"
-           href="{% url 'cal:event_approve' event.id %}?next={% url 'cal:calendar' %}"
-           style="background:linear-gradient(180deg,#10b981,#059669);">
-          <i class="fas fa-check-circle"></i> Approve
-        </a>
-        {% endif %}
-      {% endif %}
     </div>
   </form>
 
-  {# Delete form is OUTSIDE the event form — nested forms are invalid HTML #}
+  {# Approve / Delete forms are OUTSIDE the event form — nested forms are invalid HTML #}
   {% if is_admin and event %}
+    {% if not event.is_approved %}
+    <form method="post" action="{% url 'cal:event_approve' event.id %}"
+          class="form-actions" style="margin-top:0;display:inline;">
+      {% csrf_token %}
+      <button type="submit" class="btn"
+              style="background:linear-gradient(180deg,#10b981,#059669);">
+        <i class="fas fa-check-circle"></i> Approve
+      </button>
+    </form>
+    {% endif %}
   <form method="post" action="{% url 'cal:event_delete' event.id %}"
         class="form-actions" style="margin-top:0;"
         onsubmit="return confirm('Delete this event? This cannot be undone.')">
@@ -91,6 +96,10 @@
   {% endif %}
 
 </div>
+{% endblock %}
+
+{% block extra_js %}
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 {% endblock %}
 
 {% block script %}

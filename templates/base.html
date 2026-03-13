@@ -13,7 +13,6 @@
     crossorigin="anonymous">
   <link rel="stylesheet" type="text/css" href="{% static 'cal/css/styles.css' %}">
   {% block extra_css %}{% endblock %}
-  {% block extra_head %}{% endblock %}
   <title>{% block title %}ASI Asset Scheduler{% endblock %}</title>
   <!-- Apply saved theme before render to prevent flash -->
   <script>if(localStorage.getItem('asi-theme')==='dark')document.documentElement.classList.add('dark-theme');</script>
@@ -22,25 +21,18 @@
 
   <nav class="site-nav">
     <a class="site-nav-brand" href="{% url 'cal:calendar' %}">
-      <img src="{% static 'cal/img/ASI_Logo.svg' %}" class="nav-logo" alt="" />
-      ASI Track Manager
+      <i class="fas fa-hard-hat"></i> ASI Track Manager
     </a>
     <div class="site-nav-links">
       {% if request.user.is_authenticated %}
         <a href="{% url 'cal:calendar' %}"><i class="fas fa-calendar-alt"></i> Calendar</a>
         <a href="{% url 'cal:asset_list' %}"><i class="fas fa-truck"></i> Assets</a>
-        <a href="{% url 'cal:event_new' %}?next={{ request.get_full_path|urlencode }}"><i class="fas fa-plus-circle"></i> New Event</a>
+        <a href="{% url 'cal:event_new' %}"><i class="fas fa-plus-circle"></i> New Event</a>
         {% if request.user.is_staff %}
           <a href="{% url 'cal:pending_events' %}" class="nav-pending">
             <i class="fas fa-clock"></i> Pending
             {% if pending_count %}<span class="nav-badge">{{ pending_count }}</span>{% endif %}
           </a>
-          <a href="{% url 'cal:dashboard' %}"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
-          <a href="{% url 'cal:analytics' %}"><i class="fas fa-chart-bar"></i> Analytics</a>
-          <a href="{% url 'users:user_management' %}"><i class="fas fa-users"></i> Users</a>
-        {% endif %}
-        {% if request.user.is_developer %}
-          <a href="{% url 'cal:feedback_list' %}"><i class="fas fa-comment-alt"></i> Feedback</a>
         {% endif %}
       {% endif %}
     </div>
@@ -52,15 +44,8 @@
     <div class="site-nav-user">
       {% if request.user.is_authenticated %}
         <span class="nav-user-name">
-          {% if request.user.is_developer %}
-            <i class="fas fa-user-cog"></i> {{ request.user.username }}
-            <span class="admin-chip" style="background:#10b981;">Staff</span>
-          {% elif request.user.is_staff %}
-            <i class="fas fa-user-shield"></i> {{ request.user.username }}
-            <span class="admin-chip">Admin</span>
-          {% else %}
-            <i class="fas fa-user"></i> {{ request.user.username }}
-          {% endif %}
+          <i class="fas fa-user-shield"></i> {{ request.user.username }}
+          <span class="admin-chip">Admin</span>
         </span>
         <form method="post" action="{% url 'users:logout' %}" style="display:inline;">
           {% csrf_token %}
@@ -77,58 +62,6 @@
   {% block content %}
   {% endblock %}
 
-  {% if user.is_authenticated %}
-  <!-- ── Feedback FAB + modal ──────────────────────────────────── -->
-  <button type="button" class="feedback-fab" id="feedback-fab" title="Send feedback">
-    <i class="fas fa-comment-alt"></i> <span class="feedback-fab-label">Feedback</span>
-  </button>
-
-  <div id="feedback-modal" class="feedback-modal-overlay" hidden>
-    <div class="feedback-modal">
-      <h5 style="margin:0 0 16px;font-weight:600;">Send Feedback</h5>
-      <form id="feedback-form">
-        {% csrf_token %}
-        <input type="hidden" name="page_url" id="feedback-page-url">
-        <div class="form-group" style="margin-bottom:12px;">
-          <label for="feedback-category" style="font-size:13px;font-weight:500;margin-bottom:4px;display:block;">Category</label>
-          <select name="category" id="feedback-category" class="form-control" style="font-size:14px;">
-            <option value="bug">Bug Report</option>
-            <option value="feature">Feature Request</option>
-            <option value="other">Other</option>
-          </select>
-        </div>
-        <div class="form-group" style="margin-bottom:12px;">
-          <label for="feedback-subject" style="font-size:13px;font-weight:500;margin-bottom:4px;display:block;">Subject <span style="color:#ef4444;">*</span></label>
-          <input type="text" name="subject" id="feedback-subject" class="form-control" required maxlength="200" style="font-size:14px;">
-        </div>
-        <div class="form-group" style="margin-bottom:16px;">
-          <label for="feedback-message" style="font-size:13px;font-weight:500;margin-bottom:4px;display:block;">Message <span style="color:#ef4444;">*</span></label>
-          <textarea name="message" id="feedback-message" class="form-control" required rows="4" style="font-size:14px;resize:vertical;"></textarea>
-        </div>
-        <div id="feedback-errors" style="display:none;color:#ef4444;font-size:13px;margin-bottom:12px;"></div>
-        <div style="display:flex;gap:10px;justify-content:flex-end;">
-          <button type="button" class="btn btn-muted" id="feedback-cancel">Cancel</button>
-          <button type="submit" class="btn">Submit</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <div id="feedback-toast" class="feedback-toast" hidden>Feedback submitted — thank you!</div>
-  {% endif %}
-
-  <!-- ── Delete confirmation modal ──────────────────────────────── -->
-  <div id="delete-modal" class="delete-modal-overlay" hidden>
-    <div class="delete-modal-box">
-      <div class="delete-modal-icon"><i class="fas fa-exclamation-triangle"></i></div>
-      <p class="delete-modal-msg" id="delete-modal-msg">Delete this item? This cannot be undone.</p>
-      <div class="delete-modal-actions">
-        <button type="button" class="btn btn-muted" id="delete-modal-cancel">Cancel</button>
-        <button type="button" class="btn btn-danger" id="delete-modal-confirm">Delete</button>
-      </div>
-    </div>
-  </div>
-
   <!-- Optional JavaScript -->
   <!-- jQuery first, then Popper.js, then Bootstrap JS -->
   <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
@@ -137,14 +70,6 @@
     crossorigin="anonymous"></script>
   <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
     crossorigin="anonymous"></script>
-
-  <!-- Measure nav height for sticky toolbar positioning -->
-  <script>
-    (function() {
-      var nav = document.querySelector('.site-nav');
-      if (nav) document.documentElement.style.setProperty('--nav-height', nav.offsetHeight + 'px');
-    })();
-  </script>
 
   <!-- Theme toggle -->
   <script>
@@ -165,147 +90,6 @@
       localStorage.setItem('asi-theme', isDark ? 'dark' : 'light');
     }
   </script>
-
-  <!-- Confirmation modal logic -->
-  <script>
-    (function() {
-      var modal      = document.getElementById('delete-modal');
-      var msgEl      = document.getElementById('delete-modal-msg');
-      var cancelBtn  = document.getElementById('delete-modal-cancel');
-      var confirmBtn = document.getElementById('delete-modal-confirm');
-      var pendingForm = null;
-      var pendingCallback = null;
-
-      function open(msg, opts) {
-        // opts: { form, onConfirm, confirmLabel, confirmClass }
-        opts = opts || {};
-        pendingForm     = opts.form || null;
-        pendingCallback = opts.onConfirm || null;
-        msgEl.textContent = msg || 'Are you sure?';
-        confirmBtn.textContent = opts.confirmLabel || 'Delete';
-        confirmBtn.className   = 'btn ' + (opts.confirmClass || 'btn-danger');
-        modal.hidden = false;
-      }
-      function close() {
-        modal.hidden = true;
-        pendingForm = null;
-        pendingCallback = null;
-      }
-
-      cancelBtn.addEventListener('click', close);
-      modal.addEventListener('click', function(e) { if (e.target === modal) close(); });
-      document.addEventListener('keydown', function(e) { if (e.key === 'Escape' && !modal.hidden) close(); });
-
-      confirmBtn.addEventListener('click', function() {
-        if (pendingCallback) {
-          var cb = pendingCallback;
-          close();
-          cb();
-          return;
-        }
-        if (!pendingForm) return;
-        var action = pendingForm.getAttribute('action');
-        var csrf   = pendingForm.querySelector('[name=csrfmiddlewaretoken]').value;
-        var card   = pendingForm.closest('.asset-card, .event-row, tr, .form-page');
-        close();
-        fetch(action, {
-          method: 'POST',
-          headers: { 'X-CSRFToken': csrf },
-          redirect: 'follow',
-        }).then(function() {
-          if (card && !card.classList.contains('form-page')) {
-            card.style.transition = 'opacity .25s';
-            card.style.opacity = '0';
-            setTimeout(function() { card.remove(); }, 250);
-          } else {
-            window.location.href = '{% url "cal:calendar" %}';
-          }
-        });
-      });
-
-      // Form-based: used by onsubmit="return confirmDelete(this, msg, opts)"
-      window.confirmDelete = function(form, msg, opts) {
-        open(msg, Object.assign({ form: form }, opts || {}));
-        return false;
-      };
-
-      // Callback-based: used by JS code that needs a confirm() replacement
-      // showConfirmModal(msg, onConfirm) or showConfirmModal(msg, opts)
-      window.showConfirmModal = function(msg, optsOrCb) {
-        if (typeof optsOrCb === 'function') {
-          open(msg, { onConfirm: optsOrCb });
-        } else {
-          open(msg, optsOrCb);
-        }
-      };
-    })();
-  </script>
-
-  <!-- Feedback modal logic -->
-  {% if user.is_authenticated %}
-  <script>
-    (function() {
-      var fab     = document.getElementById('feedback-fab');
-      var modal   = document.getElementById('feedback-modal');
-      var form    = document.getElementById('feedback-form');
-      var cancel  = document.getElementById('feedback-cancel');
-      var toast   = document.getElementById('feedback-toast');
-      var errBox  = document.getElementById('feedback-errors');
-      var urlField = document.getElementById('feedback-page-url');
-
-      if (!fab) return;
-
-      function openModal() {
-        urlField.value = window.location.href;
-        errBox.style.display = 'none';
-        errBox.textContent = '';
-        modal.hidden = false;
-      }
-      function closeModal() {
-        modal.hidden = true;
-        form.reset();
-      }
-      function showToast() {
-        toast.hidden = false;
-        setTimeout(function() { toast.hidden = true; }, 3000);
-      }
-
-      fab.addEventListener('click', openModal);
-      cancel.addEventListener('click', closeModal);
-      modal.addEventListener('click', function(e) { if (e.target === modal) closeModal(); });
-      document.addEventListener('keydown', function(e) { if (e.key === 'Escape' && !modal.hidden) closeModal(); });
-
-      form.addEventListener('submit', function(e) {
-        e.preventDefault();
-        var csrf = form.querySelector('[name=csrfmiddlewaretoken]').value;
-        var data = new FormData(form);
-        fetch('{% url "cal:submit_feedback" %}', {
-          method: 'POST',
-          headers: { 'X-CSRFToken': csrf },
-          body: data,
-        }).then(function(resp) {
-          return resp.json().then(function(json) { return { ok: resp.ok, data: json }; });
-        }).then(function(result) {
-          if (result.ok) {
-            closeModal();
-            showToast();
-          } else {
-            var msgs = [];
-            var errs = result.data.errors || {};
-            for (var field in errs) {
-              var fieldErrs = errs[field];
-              for (var i = 0; i < fieldErrs.length; i++) {
-                msgs.push(fieldErrs[i].message || fieldErrs[i]);
-              }
-            }
-            errBox.textContent = msgs.join(' ');
-            errBox.style.display = 'block';
-          }
-        });
-      });
-    })();
-  </script>
-  {% endif %}
 
   {% block extra_js %}{% endblock %}
 

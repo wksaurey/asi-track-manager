@@ -175,7 +175,6 @@ class CalendarView(generic.ListView):
         context['view']           = view
         context['assets']         = Asset.objects.filter(is_active=True)
         context['selected_asset'] = asset_id
-        context['pending_count']  = Event.objects.filter(is_approved=False).count() if is_admin(self.request) else 0
         return context
 
 

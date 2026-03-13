@@ -11,11 +11,11 @@ from cal.models import Asset, Event
 
 @admin.register(Asset)
 class AssetAdmin(admin.ModelAdmin):
-    """Admin list view for assets — filterable by type and active status."""
+    """Admin list view for assets — filterable by type."""
 
-    list_display  = ('name', 'asset_type', 'identifier', 'is_active')
-    list_filter   = ('asset_type', 'is_active')
-    search_fields = ('name', 'identifier')
+    list_display  = ('name', 'asset_type')
+    list_filter   = ('asset_type',)
+    search_fields = ('name',)
 
 
 @admin.register(Event)

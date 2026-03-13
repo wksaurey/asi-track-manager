@@ -1,3 +1,4 @@
+import os
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
@@ -258,24 +259,6 @@ class AssetCreateAdminOnlyTest(TestCase):
         self.assertEqual(response.status_code, 302)
 
 
-class AssetToggleRequiresPostTest(TestCase):
-    """cal:asset_toggle must reject GET with 405."""
-
-    def setUp(self):
-        self.staff = User.objects.create_user(
-            username='admin', password='Testpass123!', is_staff=True
-        )
-        self.asset = Asset.objects.create(
-            name='Test Track', asset_type=Asset.AssetType.TRACK
-        )
-
-    def test_asset_toggle_requires_post(self):
-        """GET to cal:asset_toggle must return 405 Method Not Allowed."""
-        self.client.login(username='admin', password='Testpass123!')
-        url = reverse('cal:asset_toggle', args=[self.asset.pk])
-        response = self.client.get(url)
-        self.assertEqual(response.status_code, 405)
-
 
 class EventFormAssetRequiredTest(TestCase):
     """EventForm must require at least one asset to be selected."""
@@ -442,3 +425,151 @@ class LoginPageNavTest(TestCase):
         self.assertNotContains(response, '>Calendar<')
         self.assertNotContains(response, '>Assets<')
         self.assertNotContains(response, '>Pending<')
+
+
+# ── Bug fix tests ─────────────────────────────────────────────────────────────
+
+class AssetListStaffLinkTest(TestCase):
+    """Bug 1: 'New Asset' link in asset_list.html must only appear for staff."""
+
+    def setUp(self):
+        self.staff = User.objects.create_user(
+            username='admin', password='Testpass123!', is_staff=True
+        )
+        self.regular = User.objects.create_user(username='employee', password='Testpass123!')
+
+    def test_staff_sees_new_asset_link(self):
+        """Staff user must see the 'New Asset' link in the asset list."""
+        self.client.login(username='admin', password='Testpass123!')
+        response = self.client.get(reverse('cal:asset_list'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, reverse('cal:asset_create'))
+
+    def test_non_staff_does_not_see_new_asset_link(self):
+        """Non-staff user must NOT see the asset create URL in the asset list."""
+        self.client.login(username='employee', password='Testpass123!')
+        response = self.client.get(reverse('cal:asset_list'))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, reverse('cal:asset_create'))
+
+
+class EventFormDefaultDateTest(TestCase):
+    """Bug 2: GET /cal/event/new/ response must contain 'defaultDate' in the JS."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='employee', password='Testpass123!')
+
+    def test_event_new_renders_successfully(self):
+        """GET /cal/event/new/ must return 200."""
+        self.client.login(username='employee', password='Testpass123!')
+        response = self.client.get(reverse('cal:event_new'))
+        self.assertEqual(response.status_code, 200)
+
+    def test_event_new_contains_default_date_js(self):
+        """Response for GET /cal/event/new/ must include 'defaultDate' in the page source."""
+        self.client.login(username='employee', password='Testpass123!')
+        response = self.client.get(reverse('cal:event_new'))
+        self.assertContains(response, 'defaultDate')
+
+
+class DarkModeCSSTest(TestCase):
+    """Bug 3: The CSS file must contain dark-theme overrides targeting .card."""
+
+    def test_css_contains_dark_theme_card_overrides(self):
+        """styles.css must have html.dark-theme rules targeting .card."""
+        from django.conf import settings
+        css_path = os.path.join(
+            settings.BASE_DIR, 'cal', 'static', 'cal', 'css', 'styles.css'
+        )
+        with open(css_path, 'r') as f:
+            css_content = f.read()
+        self.assertIn('dark-theme', css_content)
+        self.assertIn('.card', css_content)
+        # Ensure there is a combined dark-theme + .card rule
+        self.assertIn('html.dark-theme .card', css_content)
+
+
+# ── Asset delete and grouped list ─────────────────────────────────────────────
+
+class AssetDeleteStaffOnlyTest(TestCase):
+    """cal:asset_delete must block non-staff users."""
+
+    def setUp(self):
+        self.regular = User.objects.create_user(username='employee', password='Testpass123!')
+        self.asset = Asset.objects.create(
+            name='Track A', asset_type=Asset.AssetType.TRACK
+        )
+
+    def test_non_staff_post_is_blocked(self):
+        """Non-staff POST to cal:asset_delete must redirect and NOT delete the asset."""
+        self.client.login(username='employee', password='Testpass123!')
+        url = reverse('cal:asset_delete', args=[self.asset.pk])
+        response = self.client.post(url)
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(Asset.objects.filter(pk=self.asset.pk).exists())
+
+
+class AssetDeleteRequiresPostTest(TestCase):
+    """cal:asset_delete must require POST; GET must not delete the asset."""
+
+    def setUp(self):
+        self.staff = User.objects.create_user(
+            username='admin', password='Testpass123!', is_staff=True
+        )
+        self.asset = Asset.objects.create(
+            name='Track B', asset_type=Asset.AssetType.TRACK
+        )
+
+    def test_staff_get_does_not_delete(self):
+        """Staff GET to cal:asset_delete must not delete the asset."""
+        self.client.login(username='admin', password='Testpass123!')
+        url = reverse('cal:asset_delete', args=[self.asset.pk])
+        self.client.get(url)
+        self.assertTrue(Asset.objects.filter(pk=self.asset.pk).exists())
+
+    def test_staff_post_deletes_and_redirects(self):
+        """Staff POST to cal:asset_delete must delete the asset and redirect to cal:asset_list."""
+        self.client.login(username='admin', password='Testpass123!')
+        url = reverse('cal:asset_delete', args=[self.asset.pk])
+        response = self.client.post(url)
+        self.assertFalse(Asset.objects.filter(pk=self.asset.pk).exists())
+        self.assertRedirects(response, reverse('cal:asset_list'))
+
+
+class AssetListGroupedTest(TestCase):
+    """GET cal:asset_list must pass grouped_assets in context, grouped by type."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='employee', password='Testpass123!')
+        Asset.objects.create(name='Track Alpha', asset_type=Asset.AssetType.TRACK)
+        Asset.objects.create(name='Vehicle One', asset_type=Asset.AssetType.VEHICLE)
+        Asset.objects.create(name='Track Beta', asset_type=Asset.AssetType.TRACK)
+
+    def test_grouped_assets_in_context(self):
+        """Response context must include grouped_assets."""
+        self.client.login(username='employee', password='Testpass123!')
+        response = self.client.get(reverse('cal:asset_list'))
+        self.assertIn('grouped_assets', response.context)
+
+    def test_grouped_assets_is_list_of_3_tuples(self):
+        """grouped_assets must be a list/sequence of (type_label, type_value, group) 3-tuples."""
+        self.client.login(username='employee', password='Testpass123!')
+        response = self.client.get(reverse('cal:asset_list'))
+        grouped = response.context['grouped_assets']
+        self.assertTrue(len(grouped) > 0)
+        for item in grouped:
+            self.assertEqual(len(item), 3, "Each group must be a 3-tuple of (type_label, type_value, assets)")
+
+    def test_track_assets_grouped_together(self):
+        """Both Track assets must appear in the same group."""
+        self.client.login(username='employee', password='Testpass123!')
+        response = self.client.get(reverse('cal:asset_list'))
+        grouped = response.context['grouped_assets']
+        track_group = next(
+            (assets for label, type_val, assets in grouped if 'Track' in label or 'track' in label.lower()),
+            None,
+        )
+        self.assertIsNotNone(track_group, "Expected a group for Track assets")
+        names = [a.name for a in track_group]
+        self.assertIn('Track Alpha', names)
+        self.assertIn('Track Beta', names)

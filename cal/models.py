@@ -9,6 +9,7 @@ Defines two core models:
 from django.conf import settings
 from django.db import models
 from django.urls import reverse
+from django.utils.html import escape
 
 
 class Asset(models.Model):
@@ -16,9 +17,7 @@ class Asset(models.Model):
     A reservable resource on the ASI Mendon Campus.
 
     Each asset belongs to one of three types (vehicle, track, operator) and
-    can be linked to many events via a ManyToMany relationship.  Assets can
-    be deactivated so they stop appearing in the booking form while their
-    historical event data is preserved.
+    can be linked to many events via a ManyToMany relationship.
     """
 
     class AssetType(models.TextChoices):
@@ -26,11 +25,9 @@ class Asset(models.Model):
         TRACK    = 'track',    'Track'
         OPERATOR = 'operator', 'Operator'
 
-    name        = models.CharField(max_length=200)
+    name        = models.CharField(max_length=200, unique=True)
     asset_type  = models.CharField(max_length=20, choices=AssetType.choices)
     description = models.TextField(blank=True)
-    identifier  = models.CharField(max_length=50, blank=True, help_text='Unit number, badge ID, or track ID')
-    is_active   = models.BooleanField(default=True)
 
     class Meta:
         ordering = ['asset_type', 'name']
@@ -98,7 +95,7 @@ class Event(models.Model):
     def asset_badge_html(self):
         """Return inline HTML badge spans for each attached asset, colour-coded by type."""
         return ''.join(
-            f'<span class="asset-badge badge-{a.asset_type}">{a.name}</span>'
+            f'<span class="asset-badge badge-{a.asset_type}">{escape(a.name)}</span>'
             for a in self.assets.all()
         )
 
@@ -135,7 +132,7 @@ class Event(models.Model):
         )
         return (
             f'<a class="event-link" href="{url}">'
-            f'<span class="event-title">{self.title}</span>'
+            f'<span class="event-title">{escape(self.title)}</span>'
             f'<span class="event-time">{self._time_range}</span>'
             f'{pending}'
             f'{self.asset_badge_html}'

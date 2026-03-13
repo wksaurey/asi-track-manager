@@ -115,8 +115,36 @@ document.addEventListener('DOMContentLoaded', function () {
     time_24hr:     false,
   };
 
+  // Compute default start/end times for new events only
+  const startInput = document.getElementById('id_start_time');
+  const endInput   = document.getElementById('id_end_time');
+
+  let endOpts;
+  if (!startInput.value) {
+    const now  = new Date();
+    const mins = now.getMinutes();
+    // Round UP strictly to next half-hour boundary
+    let nextMin;
+    if (mins < 30) {
+      nextMin = 30;
+    } else {
+      nextMin = 60;  // will roll over to next hour
+    }
+    const defStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(),
+                              now.getHours(), nextMin, 0, 0);
+    const defEnd = new Date(defStart.getTime() + 60 * 60 * 1000);
+    fpOpts.defaultDate = defStart;
+    endOpts = Object.assign({}, fpOpts, { defaultDate: defEnd });
+  } else {
+    endOpts = Object.assign({}, fpOpts);
+  }
+
   const fpStart = flatpickr('#id_start_time', fpOpts);
-  const fpEnd   = flatpickr('#id_end_time',   fpOpts);
+  const fpEnd   = flatpickr('#id_end_time',   endOpts);
+
+  // Ensure defaultDate values are written to the hidden inputs
+  if (fpOpts.defaultDate) fpStart.setDate(fpOpts.defaultDate, true);
+  if (endOpts.defaultDate) fpEnd.setDate(endOpts.defaultDate, true);
 
   // Auto-set end minimum to match start so you can't pick an earlier end time
   fpStart.config.onChange.push(function(dates) {

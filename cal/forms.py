@@ -17,7 +17,7 @@ class AssetForm(ModelForm):
 
     class Meta:
         model  = Asset
-        fields = ['name', 'asset_type', 'identifier', 'description', 'is_active']
+        fields = ['name', 'asset_type', 'description']
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -34,7 +34,7 @@ class EventForm(ModelForm):
     Custom behaviour:
     - start_time and end_time use plain TextInput widgets so the Flatpickr
       JavaScript date-picker can attach to them in the template.
-    - The assets field renders as a checkbox list limited to active assets.
+    - The assets field renders as a checkbox list.
     - ``clean()`` enforces two rules:
         1. End time must be strictly after start time.
         2. No two events may book the same asset for overlapping time slots
@@ -55,8 +55,8 @@ class EventForm(ModelForm):
         # Flatpickr submits dates in ISO-like format (e.g. '2026-03-12T14:30')
         self.fields['start_time'].input_formats = ('%Y-%m-%dT%H:%M',)
         self.fields['end_time'].input_formats   = ('%Y-%m-%dT%H:%M',)
-        # Only show active assets in the checklist
-        self.fields['assets'].queryset = Asset.objects.filter(is_active=True)
+        # Show all assets in the checklist
+        self.fields['assets'].queryset = Asset.objects.all()
         # Add Bootstrap form-control to all fields except the checkbox group
         for name, field in self.fields.items():
             if name == 'assets':

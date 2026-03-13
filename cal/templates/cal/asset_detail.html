@@ -13,9 +13,6 @@
         {{ asset.get_asset_type_display }}
       </span>
       <h2 class="page-heading" style="margin:8px 0 4px;">{{ asset.name }}</h2>
-      {% if asset.identifier %}
-        <p class="text-muted" style="margin:0;">ID / Unit: <strong>{{ asset.identifier }}</strong></p>
-      {% endif %}
       {% if asset.description %}
         <p style="margin:8px 0 0; font-size:14px;">{{ asset.description }}</p>
       {% endif %}

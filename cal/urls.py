@@ -28,6 +28,6 @@ urlpatterns = [
     path('assets/',                        views.asset_list,   name='asset_list'),
     path('assets/new/',                    views.asset_create, name='asset_create'),
     path('assets/edit/<int:asset_id>/',    views.asset_edit,   name='asset_edit'),
-    path('assets/toggle/<int:asset_id>/',  views.asset_toggle, name='asset_toggle'),
+    path('assets/delete/<int:asset_id>/',   views.asset_delete, name='asset_delete'),
     path('assets/<int:asset_id>/',         views.asset_detail, name='asset_detail'),
 ]

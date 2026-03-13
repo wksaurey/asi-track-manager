@@ -606,7 +606,7 @@ class HoverOverlayMonthTest(TestCase):
 
 
 class HoverOverlayWeekTest(TestCase):
-    """Week view must render hover-overlay markup in headers and body cells."""
+    """Week view (now per-track chip grid) must render track-grid markup."""
 
     def setUp(self):
         self.user = User.objects.create_user(username='employee', password='Testpass123!')
@@ -616,36 +616,40 @@ class HoverOverlayWeekTest(TestCase):
         response = self.client.get(reverse('cal:calendar') + '?view=week')
         self.assertEqual(response.status_code, 200)
 
-    def test_week_view_contains_day_add_overlay(self):
+    def test_week_view_does_not_contain_wk_body_add_overlay(self):
         response = self.client.get(reverse('cal:calendar') + '?view=week')
-        self.assertContains(response, 'day-add-overlay')
+        self.assertNotContains(response, 'wk-body-add-overlay')
 
-    def test_week_view_contains_wk_add_overlay(self):
+    def test_week_view_does_not_contain_day_add_overlay(self):
         response = self.client.get(reverse('cal:calendar') + '?view=week')
-        self.assertContains(response, 'wk-add-overlay')
+        self.assertNotContains(response, 'day-add-overlay')
 
-    def test_week_view_contains_wk_body_add_overlay(self):
+    def test_week_view_does_not_contain_wk_add_overlay(self):
         response = self.client.get(reverse('cal:calendar') + '?view=week')
-        self.assertContains(response, 'wk-body-add-overlay')
+        self.assertNotContains(response, 'wk-add-overlay')
 
-    def test_week_view_contains_wk_th_inner(self):
+    def test_week_view_does_not_contain_wk_th_inner(self):
         response = self.client.get(reverse('cal:calendar') + '?view=week')
-        self.assertContains(response, 'wk-th-inner')
+        self.assertNotContains(response, 'wk-th-inner')
+
+    def test_week_view_contains_track_view_class(self):
+        response = self.client.get(reverse('cal:calendar') + '?view=week')
+        self.assertContains(response, 'track-view')
 
 
 class TrackViewRenderTest(TestCase):
-    """Track view must render with the track-view CSS class."""
+    """Track view (now week) must render with the track-view CSS class."""
 
     def setUp(self):
         self.user = User.objects.create_user(username='employee', password='Testpass123!')
         self.client.force_login(self.user)
 
     def test_track_view_returns_200(self):
-        response = self.client.get(reverse('cal:calendar') + '?view=track')
+        response = self.client.get(reverse('cal:calendar') + '?view=week')
         self.assertEqual(response.status_code, 200)
 
     def test_track_view_contains_track_view_class(self):
-        response = self.client.get(reverse('cal:calendar') + '?view=track')
+        response = self.client.get(reverse('cal:calendar') + '?view=week')
         self.assertContains(response, 'track-view')
 
 
@@ -660,16 +664,16 @@ class TrackViewContainsTracksTest(TestCase):
         Asset.objects.create(name='Test Vehicle', asset_type='vehicle')
 
     def test_track_view_shows_north_loop(self):
-        response = self.client.get(reverse('cal:calendar') + '?view=track')
+        response = self.client.get(reverse('cal:calendar') + '?view=week')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'North Loop')
 
     def test_track_view_shows_south_loop(self):
-        response = self.client.get(reverse('cal:calendar') + '?view=track')
+        response = self.client.get(reverse('cal:calendar') + '?view=week')
         self.assertContains(response, 'South Loop')
 
     def test_track_view_hides_vehicle(self):
-        response = self.client.get(reverse('cal:calendar') + '?view=track')
+        response = self.client.get(reverse('cal:calendar') + '?view=week')
         self.assertNotContains(response, 'Test Vehicle')
 
 
@@ -681,7 +685,7 @@ class TrackViewEmptyTracksTest(TestCase):
         self.client.force_login(self.user)
 
     def test_track_view_shows_empty_message(self):
-        response = self.client.get(reverse('cal:calendar') + '?view=track')
+        response = self.client.get(reverse('cal:calendar') + '?view=week')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'No tracks configured')
 
@@ -707,22 +711,22 @@ class TrackViewEventAssignmentTest(TestCase):
         event.assets.add(self.track)
 
     def test_track_view_shows_event_title(self):
-        response = self.client.get(reverse('cal:calendar') + '?view=track&date=2026-3-9')
+        response = self.client.get(reverse('cal:calendar') + '?view=week&date=2026-3-9')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Sprint Test')
 
 
 class TrackViewTabVisibleTest(TestCase):
-    """The Track tab link must appear in calendar views."""
+    """The Track tab link must NOT appear in calendar views."""
 
     def setUp(self):
         self.user = User.objects.create_user(username='employee', password='Testpass123!')
         self.client.force_login(self.user)
 
-    def test_month_view_has_track_tab(self):
+    def test_month_view_has_no_track_tab(self):
         response = self.client.get(reverse('cal:calendar') + '?view=month')
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, '?view=track')
+        self.assertNotContains(response, '?view=track')
 
 
 class TrackViewNavTest(TestCase):
@@ -733,18 +737,18 @@ class TrackViewNavTest(TestCase):
         self.client.force_login(self.user)
 
     def test_track_view_nav_contains_view_param(self):
-        response = self.client.get(reverse('cal:calendar') + '?view=track&date=2026-3-9')
+        response = self.client.get(reverse('cal:calendar') + '?view=week&date=2026-3-9')
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'view=track')
+        self.assertContains(response, 'view=week')
 
     def test_track_view_nav_prev_date(self):
         """Prev navigation link must reference the date 7 days earlier: 2026-3-2."""
-        response = self.client.get(reverse('cal:calendar') + '?view=track&date=2026-3-9')
+        response = self.client.get(reverse('cal:calendar') + '?view=week&date=2026-3-9')
         self.assertContains(response, '2026-3-2')
 
     def test_track_view_nav_next_date(self):
         """Next navigation link must reference the date 7 days later: 2026-3-16."""
-        response = self.client.get(reverse('cal:calendar') + '?view=track&date=2026-3-9')
+        response = self.client.get(reverse('cal:calendar') + '?view=week&date=2026-3-9')
         self.assertContains(response, '2026-3-16')
 
 
@@ -756,6 +760,89 @@ class AssetFilterHiddenInTrackViewTest(TestCase):
         self.client.force_login(self.user)
 
     def test_asset_filter_form_not_in_track_view(self):
-        response = self.client.get(reverse('cal:calendar') + '?view=track')
+        response = self.client.get(reverse('cal:calendar') + '?view=week')
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'asset-filter-form')
+
+
+# ── Calendar UX: Gantt Day View ───────────────────────────────────────────────
+
+class GanttDayViewTest(TestCase):
+    """Day view (Gantt timeline) renders per-track horizontal blocks."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='employee', password='Testpass123!')
+        self.client.force_login(self.user)
+        self.track = Asset.objects.create(name='North Loop', asset_type='track')
+
+    def test_day_view_returns_200(self):
+        response = self.client.get(reverse('cal:calendar') + '?view=day&date=2026-3-9')
+        self.assertEqual(response.status_code, 200)
+
+    def test_day_view_shows_gantt_view_class(self):
+        response = self.client.get(reverse('cal:calendar') + '?view=day&date=2026-3-9')
+        self.assertContains(response, 'gantt-view')
+
+    def test_day_view_no_tracks_shows_empty_message(self):
+        Asset.objects.all().delete()
+        response = self.client.get(reverse('cal:calendar') + '?view=day&date=2026-3-9')
+        self.assertContains(response, 'No tracks configured')
+
+    def test_day_view_shows_track_name(self):
+        response = self.client.get(reverse('cal:calendar') + '?view=day&date=2026-3-9')
+        self.assertContains(response, 'North Loop')
+
+    def test_day_view_shows_event_in_gantt(self):
+        start = datetime(2026, 3, 9, 9, 0, tzinfo=dt_timezone.utc)
+        end   = datetime(2026, 3, 9, 11, 0, tzinfo=dt_timezone.utc)
+        ev = Event.objects.create(
+            title='Morning Test', description='', start_time=start, end_time=end,
+            created_by=self.user, is_approved=True,
+        )
+        ev.assets.add(self.track)
+        response = self.client.get(reverse('cal:calendar') + '?view=day&date=2026-3-9')
+        self.assertContains(response, 'Morning Test')
+        self.assertContains(response, 'gantt-block')
+
+    def test_day_view_event_position_in_html(self):
+        """9am start = 180 min after 6am; 180/840*100 = 21.4286%."""
+        start = datetime(2026, 3, 9, 9, 0, tzinfo=dt_timezone.utc)
+        end   = datetime(2026, 3, 9, 11, 0, tzinfo=dt_timezone.utc)
+        ev = Event.objects.create(
+            title='Position Test', description='', start_time=start, end_time=end,
+            created_by=self.user, is_approved=True,
+        )
+        ev.assets.add(self.track)
+        response = self.client.get(reverse('cal:calendar') + '?view=day&date=2026-3-9')
+        self.assertContains(response, 'left:21.4286%')
+
+    def test_day_view_event_outside_range_not_rendered(self):
+        """Event entirely before 6am (4am-5am) must not produce a gantt-block."""
+        start = datetime(2026, 3, 9, 4, 0, tzinfo=dt_timezone.utc)
+        end   = datetime(2026, 3, 9, 5, 0, tzinfo=dt_timezone.utc)
+        ev = Event.objects.create(
+            title='Pre-Dawn Test', description='', start_time=start, end_time=end,
+            created_by=self.user, is_approved=True,
+        )
+        ev.assets.add(self.track)
+        response = self.client.get(reverse('cal:calendar') + '?view=day&date=2026-3-9')
+        self.assertNotContains(response, 'Pre-Dawn Test')
+
+    def test_day_view_asset_filter_hidden(self):
+        response = self.client.get(reverse('cal:calendar') + '?view=day&date=2026-3-9')
+        self.assertNotContains(response, 'asset-filter-form')
+
+    def test_day_view_overlapping_events_use_multiple_sub_rows(self):
+        """Two overlapping events on the same track appear in separate sub-rows."""
+        start1 = datetime(2026, 3, 9, 9, 0, tzinfo=dt_timezone.utc)
+        end1   = datetime(2026, 3, 9, 12, 0, tzinfo=dt_timezone.utc)
+        start2 = datetime(2026, 3, 9, 10, 0, tzinfo=dt_timezone.utc)
+        end2   = datetime(2026, 3, 9, 13, 0, tzinfo=dt_timezone.utc)
+        for t, s, e in [('Event A', start1, end1), ('Event B', start2, end2)]:
+            ev = Event.objects.create(
+                title=t, description='', start_time=s, end_time=e,
+                created_by=self.user, is_approved=True,
+            )
+            ev.assets.add(self.track)
+        response = self.client.get(reverse('cal:calendar') + '?view=day&date=2026-3-9')
+        self.assertGreaterEqual(response.content.decode().count('gantt-sub-row'), 2)

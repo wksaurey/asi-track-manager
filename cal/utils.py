@@ -54,6 +54,28 @@ class Calendar(HTMLCalendar):
         """Format a datetime as '8:30 AM' (no leading zero on the hour)."""
         return dt.strftime('%I:%M %p').lstrip('0') or '12:00 AM'
 
+    @staticmethod
+    def _assign_rows(events):
+        """
+        Assign each event to a sub-row index (0-based) such that no two events
+        in the same sub-row overlap. O(N²), acceptable at this scale.
+        Returns (assignments, n_rows) where assignments is a list of (event, row_idx).
+        """
+        assignments = []
+        row_end_times = []
+        for ev in sorted(events, key=lambda e: e.start_time):
+            placed = False
+            for i, row_end in enumerate(row_end_times):
+                if ev.start_time >= row_end:
+                    assignments.append((ev, i))
+                    row_end_times[i] = ev.end_time
+                    placed = True
+                    break
+            if not placed:
+                assignments.append((ev, len(row_end_times)))
+                row_end_times.append(ev.end_time)
+        return assignments, len(row_end_times)
+
     # ── Month view ─────────────────────────────────────────────────────────
 
     def formatday(self, day, events):
@@ -117,146 +139,124 @@ class Calendar(HTMLCalendar):
         cal += '</table>'
         return cal
 
-    # ── Week view ──────────────────────────────────────────────────────────
-
-    def formatweekview(self, start_date):
-        """
-        Render a 7-day week view as an HTML table.
-
-        The week always starts on Monday.  Generates a header row with day
-        abbreviations/dates and a body row with event lists per day.
-        Produces a label like "March 9 - 15, 2026" (or cross-month variant).
-        """
-        # Snap to Monday of the week containing start_date
-        start  = start_date - timedelta(days=start_date.weekday())
-        end    = start + timedelta(days=6)
-        events = list(self._base_queryset().filter(
-            start_time__date__gte=start,
-            start_time__date__lte=end,
-        ))
-
-        # Week range label — single-month vs. cross-month format
-        if start.month == end.month:
-            label = f'{start.strftime("%B %d")} &ndash; {end.strftime("%d, %Y")}'
-        else:
-            label = f'{start.strftime("%b %d")} &ndash; {end.strftime("%b %d, %Y")}'
-
-        day_abbr = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-
-        # Header row: day abbreviation + date number
-        header = ''
-        for i in range(7):
-            day      = start + timedelta(days=i)
-            is_today = (day == self.today)
-            th_class = 'wk-th'
-            if is_today: th_class += ' wk-today-head'
-            elif i >= 5: th_class += ' wk-weekend-head'
-            num_class = 'wk-daynum wk-today-num' if is_today else 'wk-daynum'
-            new_url   = reverse('cal:event_new') + f'?date={day.isoformat()}'
-            header += (
-                f'<th class="{th_class}">'
-                f'<div class="wk-th-inner">'
-                f'<div class="wk-dayname">{day_abbr[i]}</div>'
-                f'<span class="{num_class}">{day.day}</span>'
-                f'<a class="day-add-overlay wk-add-overlay" href="{new_url}" title="Add event">+</a>'
-                f'</div>'
-                f'</th>'
-            )
-
-        # Body row: one cell per day containing that day's event list
-        body = ''
-        for i in range(7):
-            day        = start + timedelta(days=i)
-            td_classes = []
-            if day == self.today: td_classes.append('today')
-            if i >= 5:            td_classes.append('weekend')
-            td_cls = ' '.join(td_classes)
-
-            # NOTE: .date() returns the UTC date. Correct while TIME_ZONE='UTC'.
-            # If TIME_ZONE changes, use localtime(ev.start_time).date() here instead.
-            d_events = sorted(
-                [ev for ev in events if ev.start_time.date() == day],
-                key=lambda ev: ev.start_time,
-            )
-
-            items = ''
-            for ev in d_events:
-                items += (
-                    f'<li class="{self._event_classes(ev)}">'
-                    f'{ev.get_html_url}'
-                    f'</li>'
-                )
-
-            add_url  = reverse('cal:event_new') + f'?date={day.isoformat()}'
-            add_link = f'<a class="day-add-overlay wk-body-add-overlay" href="{add_url}" title="Add event">+</a>'
-            body += f'<td class="{td_cls}"><ul class="wk-events">{items}</ul>{add_link}</td>'
-
-        return (
-            f'<div class="calendar week-view">'
-            f'<div class="week-label">{label}</div>'
-            f'<table class="week-table">'
-            f'<thead><tr>{header}</tr></thead>'
-            f'<tbody><tr>{body}</tr></tbody>'
-            f'</table>'
-            f'</div>'
-        )
-
     # ── Day view ───────────────────────────────────────────────────────────
 
     def formatdayview(self, day_date):
         """
-        Render a single-day detail view.
+        Render the day view as a horizontal Gantt timeline.
 
-        Shows each event with its start/end times, computed duration (e.g.
-        '2h 30m'), and the standard event link HTML.  Displays a friendly
-        "No events" message when the day is empty.
+        Rows    = all Track assets (asset_type='track'), ordered by name.
+        Columns = fixed 6:00 AM to 8:00 PM time axis (840 minutes).
+        Events are rendered as proportional blocks: left% = (start - 6am) / 840 * 100,
+        width% = duration / 840 * 100. Events partially outside the range are clamped.
+        Events entirely outside 6am-8pm are skipped (zero-width after clamping).
+        Overlapping events on the same track are stacked in sub-rows.
+        Only track-type assets are shown; vehicle/operator events are not shown.
         """
-        events = self._base_queryset().filter(
-            start_time__year=day_date.year,
-            start_time__month=day_date.month,
-            start_time__day=day_date.day,
-        ).order_by('start_time')
+        GANTT_START = 6    # 6:00 AM
+        GANTT_MINS  = 840  # 14 hours × 60
 
         is_today  = (day_date == self.today)
         today_pfx = 'Today &mdash; ' if is_today else ''
         title     = f'{today_pfx}{day_date.strftime("%A, %B %d, %Y")}'
 
-        if not events.exists():
-            body = (
-                '<div class="day-no-events">'
-                '<i class="fas fa-calendar-times"></i> No events scheduled for this day.'
-                '</div>'
-            )
-        else:
-            rows = ''
-            for ev in events:
-                # Compute human-readable duration from the time delta
-                total_m = int((ev.end_time - ev.start_time).total_seconds()) // 60
-                hrs, mn = divmod(total_m, 60)
-                dur_str = (f'{hrs}h {mn}m' if mn else f'{hrs}h') if hrs else f'{mn}m'
-                rows += (
-                    f'<div class="day-ev-row {self._event_classes(ev)}">'
-                    f'<div class="day-ev-time">'
-                    f'<span class="dev-start">{self._fmt_time(ev.start_time)}</span>'
-                    f'<span class="dev-sep">&rarr;</span>'
-                    f'<span class="dev-end">{self._fmt_time(ev.end_time)}</span>'
-                    f'<span class="dev-dur">{dur_str}</span>'
-                    f'</div>'
-                    f'<div class="day-ev-content">{ev.get_html_url}</div>'
-                    f'</div>'
-                )
-            body = f'<div class="day-event-list">{rows}</div>'
+        tracks = Asset.objects.filter(
+            asset_type=Asset.AssetType.TRACK
+        ).order_by('name')
 
-        return (
-            f'<div class="calendar day-view">'
-            f'<div class="day-view-title">{title}</div>'
-            f'{body}'
+        if not tracks.exists():
+            return (
+                f'<div class="calendar day-view gantt-view">'
+                f'<div class="day-view-title">{title}</div>'
+                f'<div class="gantt-empty">No tracks configured.</div>'
+                f'</div>'
+            )
+
+        # Single query for all track events on this day.
+        all_events = list(
+            Event.objects.filter(
+                assets__asset_type=Asset.AssetType.TRACK,
+                start_time__year=day_date.year,
+                start_time__month=day_date.month,
+                start_time__day=day_date.day,
+            ).prefetch_related('assets').distinct()
+        )
+
+        # ── Time axis ────────────────────────────────────────────────
+        axis_markers = ''
+        for h in range(GANTT_START, GANTT_START + 15):  # 6am through 8pm inclusive
+            pct   = round((h - GANTT_START) * 60 / GANTT_MINS * 100, 4)
+            label = f'{h % 12 or 12}{"am" if h < 12 else "pm"}'
+            axis_markers += (
+                f'<div class="gantt-hour-marker" style="left:{pct}%">'
+                f'<span class="gantt-hour-label">{label}</span>'
+                f'</div>'
+            )
+        axis_row = (
+            f'<div class="gantt-axis-row">'
+            f'<div class="gantt-track-label-spacer"></div>'
+            f'<div class="gantt-axis">{axis_markers}</div>'
             f'</div>'
         )
 
-    # ── Track view ──────────────────────────────────────────────────────
+        # ── Track rows ───────────────────────────────────────────────
+        rows_html = ''
+        for track in tracks:
+            track_events = sorted(
+                [ev for ev in all_events
+                 if any(a.id == track.id for a in ev.assets.all())],
+                key=lambda ev: ev.start_time,
+            )
+            assigned, n_rows = self._assign_rows(track_events)
 
-    def formattrackview(self, start_date):
+            sub_rows = [[] for _ in range(max(n_rows, 1))]
+            for ev, row_idx in assigned:
+                sub_rows[row_idx].append(ev)
+
+            sub_rows_html = ''
+            for sub_row_events in sub_rows:
+                blocks = ''
+                for ev in sub_row_events:
+                    origin    = ev.start_time.replace(hour=GANTT_START, minute=0, second=0, microsecond=0)
+                    start_off = max(0, int((ev.start_time - origin).total_seconds()) // 60)
+                    end_off   = min(GANTT_MINS, int((ev.end_time - origin).total_seconds()) // 60)
+                    width_m   = max(0, end_off - start_off)
+                    if width_m == 0:
+                        continue
+                    left_pct  = round(start_off / GANTT_MINS * 100, 4)
+                    width_pct = round(width_m   / GANTT_MINS * 100, 4)
+                    edit_url  = reverse('cal:event_edit', args=(ev.id,))
+                    css       = self._event_classes(ev)
+                    t_start   = self._fmt_time(ev.start_time)
+                    t_end     = self._fmt_time(ev.end_time)
+                    blocks += (
+                        f'<a class="gantt-block {css}" href="{edit_url}"'
+                        f' style="left:{left_pct}%;width:{width_pct}%"'
+                        f' title="{escape(ev.title)}">'
+                        f'<span class="gantt-block-title">{escape(ev.title)}</span>'
+                        f'<span class="gantt-block-time">{t_start}&ndash;{t_end}</span>'
+                        f'</a>'
+                    )
+                sub_rows_html += f'<div class="gantt-sub-row">{blocks}</div>'
+
+            rows_html += (
+                f'<div class="gantt-row" style="--sub-rows:{max(n_rows,1)}">'
+                f'<div class="gantt-track-label">{escape(track.name)}</div>'
+                f'<div class="gantt-lane">{sub_rows_html}</div>'
+                f'</div>'
+            )
+
+        return (
+            f'<div class="calendar day-view gantt-view">'
+            f'<div class="day-view-title">{title}</div>'
+            f'{axis_row}'
+            f'<div class="gantt-body">{rows_html}</div>'
+            f'</div>'
+        )
+
+    # ── Week view ─────────────────────────────────────────────────────────
+
+    def formatweekview(self, start_date):
         """
         Render a per-track timeline table for the week containing start_date.
 

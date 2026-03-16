@@ -21,16 +21,10 @@
         New Event
       {% endif %}
     </h2>
-    <a class="btn btn-muted" href="{{ next_url|default:'/cal/calendar/' }}">
-      <i class="fas fa-arrow-left"></i> Back
+    <a class="btn btn-muted" href="{% url 'cal:calendar' %}">
+      <i class="fas fa-arrow-left"></i> Calendar
     </a>
   </div>
-
-  {% if event and not can_edit %}
-  <div class="view-only-banner">
-    <i class="fas fa-eye"></i> Viewing <strong>{{ event.created_by.username }}'s</strong> reservation (read-only)
-  </div>
-  {% endif %}
 
   {% if event and event.created_by %}
   <p class="event-meta">
@@ -57,98 +51,48 @@
 
   <form method="post" class="asset-form">
     {% csrf_token %}
-    {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
     <table class="form-table">
       {% for field in form %}
-      {% if field.html_name == 'assets' %}
       <tr>
-        <td><label>Assets <span class="required-mark">*</span></label></td>
+        <td><label for="{{ field.id_for_label }}">{{ field.label }}</label></td>
         <td>
-          {# Hidden original checkboxes — Django uses these for validation and save #}
-          <div style="display:none">{{ field }}</div>
-          {# Custom two-step asset picker #}
-          <div class="asset-picker" id="asset-picker"></div>
-          <small class="field-help">Select at least one track or vehicle for this reservation.</small>
-        </td>
-      </tr>
-      {% else %}
-      <tr>
-        <td><label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="required-mark">*</span>{% endif %}</label></td>
-        <td>
-          {% if field.html_name == 'start_time' %}
-          <div class="start-time-row">
-            {{ field }}
-            <button type="button" class="btn btn-now" id="btn-now" title="Set to current time">
-              <i class="fas fa-clock"></i> Now
-            </button>
-          </div>
-          {% else %}
           {{ field }}
-          {% endif %}
           {% if field.help_text %}
             <small class="field-help">{{ field.help_text }}</small>
           {% endif %}
         </td>
       </tr>
-      {% if field.html_name == 'end_time' %}
-      <tr>
-        <td><label>Duration</label></td>
-        <td>
-          <div class="duration-row" id="duration-row">
-            <button type="button" class="duration-btn" data-minutes="30">30m</button>
-            <button type="button" class="duration-btn" data-minutes="60">1h</button>
-            <button type="button" class="duration-btn" data-minutes="90">1.5h</button>
-            <button type="button" class="duration-btn" data-minutes="120">2h</button>
-            <button type="button" class="duration-btn" data-minutes="180">3h</button>
-            <button type="button" class="duration-btn" data-minutes="240">4h</button>
-            <span class="duration-custom" id="duration-custom"></span>
-          </div>
-        </td>
-      </tr>
-      {% endif %}
-      {% endif %}
       {% endfor %}
     </table>
 
-    {# Hidden submit button — the real Save is in the action bar below #}
-    <button type="submit" id="event-save-hidden" hidden></button>
+    <div class="form-actions">
+      <button type="submit" class="btn">
+        <i class="fas fa-save"></i> Save Event
+      </button>
+
+    </div>
   </form>
 
-  {% if can_edit %}
-  <div class="event-action-bar">
-    <button type="button" class="btn" onclick="document.getElementById('event-save-hidden').click()">
-      <i class="fas fa-save"></i> Save Event
-    </button>
-    {% if is_admin and event %}
-      {% if not event.is_approved %}
-      <form method="post" action="{% url 'cal:event_approve' event.id %}">
-        {% csrf_token %}
-        <input type="hidden" name="next" value="{{ next_url|default:'/cal/calendar/' }}">
-        <button type="submit" class="btn"
-                style="background:linear-gradient(180deg,#10b981,#059669);">
-          <i class="fas fa-check-circle"></i> Approve
-        </button>
-      </form>
-      {% else %}
-      <form method="post" action="{% url 'cal:event_unapprove' event.id %}"
-            onsubmit="return confirmDelete(this, 'Revoke approval for &quot;{{ event.title|escapejs }}&quot;? It will return to pending status.', {confirmLabel:'Revoke', confirmClass:'btn-warning'})">
-        {% csrf_token %}
-        <input type="hidden" name="next" value="{% url 'cal:event_edit' event.id %}{% if next_url %}?next={{ next_url|urlencode }}{% endif %}">
-        <button type="submit" class="btn btn-warning">
-          <i class="fas fa-undo"></i> Revoke Approval
-        </button>
-      </form>
-      {% endif %}
-      <form method="post" action="{% url 'cal:event_delete' event.id %}"
-            onsubmit="return confirmDelete(this, 'Delete &quot;{{ event.title|escapejs }}&quot;? This cannot be undone.')">
-        {% csrf_token %}
-        {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
-        <button type="submit" class="btn btn-danger">
-          <i class="fas fa-trash"></i> Delete
-        </button>
-      </form>
+  {# Approve / Delete forms are OUTSIDE the event form — nested forms are invalid HTML #}
+  {% if is_admin and event %}
+    {% if not event.is_approved %}
+    <form method="post" action="{% url 'cal:event_approve' event.id %}"
+          class="form-actions" style="margin-top:0;display:inline;">
+      {% csrf_token %}
+      <button type="submit" class="btn"
+              style="background:linear-gradient(180deg,#10b981,#059669);">
+        <i class="fas fa-check-circle"></i> Approve
+      </button>
+    </form>
     {% endif %}
-  </div>
+  <form method="post" action="{% url 'cal:event_delete' event.id %}"
+        class="form-actions" style="margin-top:0;"
+        onsubmit="return confirm('Delete this event? This cannot be undone.')">
+    {% csrf_token %}
+    <button type="submit" class="btn" style="background:linear-gradient(180deg,#ef4444,#dc2626);">
+      <i class="fas fa-trash"></i> Delete
+    </button>
+  </form>
   {% endif %}
 
 </div>
@@ -159,210 +103,8 @@
 {% endblock %}
 
 {% block script %}
-{{ asset_data_json|json_script:"asset-data" }}
 <script>
-const ASSET_DATA = JSON.parse(document.getElementById('asset-data').textContent);
-
-const CAN_EDIT = {{ can_edit|yesno:"true,false" }};
-
 document.addEventListener('DOMContentLoaded', function () {
-  // ── Read-only mode: disable all form inputs ─────────────────────────────
-  if (!CAN_EDIT) {
-    document.querySelectorAll('.asset-form input, .asset-form select, .asset-form textarea').forEach(el => {
-      el.disabled = true;
-    });
-    document.querySelectorAll('.duration-btn').forEach(el => { el.disabled = true; });
-    const nowBtn = document.getElementById('btn-now');
-    if (nowBtn) nowBtn.style.display = 'none';
-    document.querySelector('.asset-picker').classList.add('disabled');
-    document.querySelector('.duration-row').classList.add('disabled');
-  }
-
-  // ── Asset picker ───────────────────────────────────────────────────────
-  const picker = document.getElementById('asset-picker');
-
-  function isChecked(id) {
-    const cb = document.querySelector(`input[name="assets"][value="${id}"]`);
-    return cb ? cb.checked : false;
-  }
-  function setChecked(id, val) {
-    const cb = document.querySelector(`input[name="assets"][value="${id}"]`);
-    if (cb) cb.checked = val;
-  }
-
-  // ── Single track group: deselect all tracks EXCEPT the given group ──
-  function deselectOtherTracks(keepGroupId) {
-    ASSET_DATA.tracks.forEach(track => {
-      if (track.id === keepGroupId) return;
-      setChecked(track.id, false);
-      track.subtracks.forEach(s => setChecked(s.id, false));
-    });
-  }
-  function deselectAllTracks() {
-    ASSET_DATA.tracks.forEach(track => {
-      setChecked(track.id, false);
-      track.subtracks.forEach(s => setChecked(s.id, false));
-    });
-  }
-
-  function renderPicker() {
-    picker.innerHTML = '';
-
-    // ── Tracks (one group at a time; multiple subtracks within a group OK) ──
-    if (ASSET_DATA.tracks.length) {
-      const heading = document.createElement('div');
-      heading.className = 'asset-picker-heading';
-      heading.textContent = 'Track';
-      picker.appendChild(heading);
-
-      ASSET_DATA.tracks.forEach(track => {
-        const group = document.createElement('div');
-        group.className = 'track-group';
-
-        // Determine active state: parent checked OR any subtrack checked
-        const subtracksChecked = track.subtracks.filter(s => isChecked(s.id));
-        const parentActive = isChecked(track.id);
-        const groupActive  = parentActive || subtracksChecked.length > 0;
-
-        const pill = document.createElement('button');
-        pill.type = 'button';
-        pill.className = 'track-pill' + (groupActive ? ' active' : '');
-
-        const allSubsSelected = track.subtracks.length > 0
-          && subtracksChecked.length === track.subtracks.length;
-
-        if (track.subtracks.length === 0) {
-          pill.textContent = track.name;
-        } else if (parentActive || allSubsSelected) {
-          pill.innerHTML = `${track.name} <span class="pill-sub-label">whole</span>`;
-        } else if (subtracksChecked.length > 0) {
-          const names = subtracksChecked.map(s => s.name).join(', ');
-          pill.innerHTML = `${track.name} <span class="pill-sub-label">${names}</span>`;
-        } else {
-          pill.textContent = track.name;
-        }
-
-        group.appendChild(pill);
-
-        if (track.subtracks.length === 0) {
-          // No subtracks — radio behavior across groups
-          pill.addEventListener('click', () => {
-            if (!CAN_EDIT) return;
-            const wasChecked = isChecked(track.id);
-            deselectAllTracks();
-            if (!wasChecked) setChecked(track.id, true);
-            renderPicker();
-          });
-        } else {
-          // Has subtracks — multi-select within group, single-select across groups
-          const panel = document.createElement('div');
-          panel.className = 'subtrack-panel' + (groupActive ? ' open' : '');
-
-          track.subtracks.forEach(sub => {
-            const subBtn = document.createElement('button');
-            subBtn.type = 'button';
-            subBtn.className = 'subtrack-option' + (isChecked(sub.id) ? ' active' : '');
-            subBtn.textContent = sub.name;
-            subBtn.addEventListener('click', () => {
-              if (!CAN_EDIT) return;
-              deselectOtherTracks(track.id);
-              setChecked(sub.id, !isChecked(sub.id));
-              if (isChecked(sub.id)) setChecked(track.id, false);
-              renderPicker();
-            });
-            panel.appendChild(subBtn);
-          });
-
-          group.appendChild(panel);
-
-          // Pill click: if group inactive → deselect others, select whole + open panel
-          //             if group active  → deselect everything
-          pill.addEventListener('click', () => {
-            if (!CAN_EDIT) return;
-            if (groupActive) {
-              deselectAllTracks();
-            } else {
-              deselectAllTracks();
-              setChecked(track.id, true);
-              panel.classList.add('open');
-            }
-            renderPicker();
-          });
-        }
-
-        picker.appendChild(group);
-      });
-    }
-
-    // ── Vehicles ────────────────────────────────────────────────────────
-    if (ASSET_DATA.vehicles.length) {
-      const heading = document.createElement('div');
-      heading.className = 'asset-picker-heading';
-      heading.textContent = 'Vehicles';
-      picker.appendChild(heading);
-      ASSET_DATA.vehicles.forEach(v => {
-        picker.appendChild(makeSimplePill(v));
-      });
-    }
-
-    // ── Operators ───────────────────────────────────────────────────────
-    if (ASSET_DATA.operators.length) {
-      const heading = document.createElement('div');
-      heading.className = 'asset-picker-heading';
-      heading.textContent = 'Operators';
-      picker.appendChild(heading);
-      ASSET_DATA.operators.forEach(o => {
-        picker.appendChild(makeSimplePill(o));
-      });
-    }
-  }
-
-  function makeSimplePill(asset) {
-    const pill = document.createElement('button');
-    pill.type = 'button';
-    pill.className = 'track-pill' + (isChecked(asset.id) ? ' active' : '');
-    pill.textContent = asset.name;
-    pill.addEventListener('click', () => {
-      if (!CAN_EDIT) return;
-      setChecked(asset.id, !isChecked(asset.id));
-      renderPicker();
-    });
-    return pill;
-  }
-
-  renderPicker();
-
-  // ── Track pre-selection from ?track= query parameter ────────────────
-  const trackParam = new URLSearchParams(window.location.search).get('track');
-  if (trackParam) {
-    const trackId = parseInt(trackParam, 10);
-    if (!isNaN(trackId)) {
-      // Check if it's a parent track
-      let found = false;
-      for (const track of ASSET_DATA.tracks) {
-        if (track.id === trackId) {
-          deselectAllTracks();
-          setChecked(track.id, true);
-          found = true;
-          break;
-        }
-        // Check if it's a subtrack of this parent
-        for (const sub of (track.subtracks || [])) {
-          if (sub.id === trackId) {
-            deselectAllTracks();
-            setChecked(sub.id, true);
-            found = true;
-            break;
-          }
-        }
-        if (found) break;
-      }
-      if (found) renderPicker();
-    }
-  }
-  // ── End asset picker ───────────────────────────────────────────────────
-
-  // ── Flatpickr date/time pickers ────────────────────────────────────────
   const fpOpts = {
     enableTime:    true,
     dateFormat:    'Y-m-d\\TH:i',      // value submitted to Django
@@ -418,82 +160,10 @@ document.addEventListener('DOMContentLoaded', function () {
   if (fpOpts.defaultDate) fpStart.setDate(fpOpts.defaultDate, true);
   if (endOpts.defaultDate) fpEnd.setDate(endOpts.defaultDate, true);
 
-  // "Now" button — sets start time to current time (rounded to nearest minute)
-  const btnNow = document.getElementById('btn-now');
-  if (btnNow) {
-    btnNow.addEventListener('click', function() {
-      const now = new Date();
-      now.setSeconds(0, 0);
-      fpStart.setDate(now, true);
-    });
-  }
-
   // Auto-set end minimum to match start so you can't pick an earlier end time
   fpStart.config.onChange.push(function(dates) {
     if (dates[0]) fpEnd.set('minDate', dates[0]);
   });
-
-  // ── Duration quick-select buttons ──────────────────────────────────────
-  const durationRow = document.getElementById('duration-row');
-  if (durationRow) {
-    const durationBtns = durationRow.querySelectorAll('.duration-btn');
-
-    // Highlight the button matching the current start/end difference
-    const customSpan = document.getElementById('duration-custom');
-
-    function formatDuration(mins) {
-      const h = Math.floor(mins / 60);
-      const m = mins % 60;
-      if (h === 0) return m + 'm';
-      if (m === 0) return h + 'h';
-      return h + 'h ' + m + 'm';
-    }
-
-    function updateActiveDuration() {
-      const startDates = fpStart.selectedDates;
-      const endDates   = fpEnd.selectedDates;
-      const diffMs     = (startDates.length && endDates.length)
-                       ? endDates[0].getTime() - startDates[0].getTime()
-                       : null;
-      const diffMins   = diffMs !== null ? Math.round(diffMs / 60000) : null;
-
-      let presetMatch = false;
-      durationBtns.forEach(btn => {
-        const mins = parseInt(btn.getAttribute('data-minutes'), 10);
-        const match = diffMins === mins;
-        btn.classList.toggle('active', match);
-        if (match) presetMatch = true;
-      });
-
-      // Show custom duration text when no preset matches
-      if (!presetMatch && diffMins !== null && diffMins > 0) {
-        customSpan.textContent = formatDuration(diffMins);
-        customSpan.style.display = '';
-      } else {
-        customSpan.textContent = '';
-        customSpan.style.display = 'none';
-      }
-    }
-
-    durationBtns.forEach(btn => {
-      btn.addEventListener('click', () => {
-        const minutes    = parseInt(btn.getAttribute('data-minutes'), 10);
-        const startDates = fpStart.selectedDates;
-        if (!startDates.length) return; // no start time set yet
-
-        const newEnd = new Date(startDates[0].getTime() + minutes * 60000);
-        fpEnd.setDate(newEnd, true);
-        updateActiveDuration();
-      });
-    });
-
-    // Update highlight whenever start or end changes
-    fpStart.config.onChange.push(updateActiveDuration);
-    fpEnd.config.onChange.push(updateActiveDuration);
-
-    // Set initial highlight
-    updateActiveDuration();
-  }
 });
 </script>
 {% endblock %}

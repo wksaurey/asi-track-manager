@@ -22,26 +22,16 @@
     </h3>
     <div class="asset-card-group">
       {% for asset in group %}
-      {% if not asset.parent %}
-      <div class="asset-card{% if asset.subtracks.all %} asset-card-has-subtracks{% endif %}">
+      <div class="asset-card">
         {% if request.user.is_staff %}
         <form class="asset-card-delete-form" method="post" action="{% url 'cal:asset_delete' asset.id %}"
-              onsubmit="return confirmDelete(this, 'Delete {{ asset.get_asset_type_display|lower }} &quot;{{ asset.name|escapejs }}&quot;? This cannot be undone.')">
+              onsubmit="return confirm('Delete {{ asset.name|escapejs }}? This cannot be undone.')">
           {% csrf_token %}
           <button type="submit" class="asset-card-delete-btn" title="Delete {{ asset.name|escapejs }}">&times;</button>
         </form>
         {% endif %}
         <div class="asset-card-body">
-          <div style="display:flex;align-items:center;gap:8px;">
-            {% if asset.asset_type == 'track' and asset.color %}<span class="asset-color-dot" style="background:{{ asset.color }};"></span>{% endif %}
-            <strong class="asset-card-name">{{ asset.name }}</strong>
-            {% if asset.subtracks.all %}
-            <button type="button" class="btn btn-sm btn-secondary subtrack-toggle"
-                    data-target="subtracks-{{ asset.id }}">
-              <i class="fas fa-chevron-right"></i> {{ asset.subtracks.all|length }} subtrack{{ asset.subtracks.all|length|pluralize }}
-            </button>
-            {% endif %}
-          </div>
+          <strong class="asset-card-name">{{ asset.name }}</strong>
           {% if asset.description %}
             <p class="asset-card-desc">{{ asset.description }}</p>
           {% endif %}
@@ -57,33 +47,7 @@
           </a>
           {% endif %}
         </div>
-        {% for sub in asset.subtracks.all %}
-        <div class="subtrack-card" data-subtracks="{{ asset.id }}" style="display:none">
-          {% if request.user.is_staff %}
-          <form class="asset-card-delete-form" method="post" action="{% url 'cal:asset_delete' sub.id %}"
-                onsubmit="return confirmDelete(this, 'Delete subtrack &quot;{{ sub.name|escapejs }}&quot;? This cannot be undone.')">
-            {% csrf_token %}
-            <button type="submit" class="asset-card-delete-btn" title="Delete {{ sub.name|escapejs }}">&times;</button>
-          </form>
-          {% endif %}
-          <div class="asset-card-body">
-            <strong class="asset-card-name">{{ sub.name }}</strong>
-            {% if sub.description %}<p class="asset-card-desc">{{ sub.description }}</p>{% endif %}
-          </div>
-          <div class="asset-card-actions">
-            <a class="btn btn-sm" href="{% url 'cal:asset_detail' sub.id %}">
-              <i class="fas fa-calendar-check"></i> Schedule
-            </a>
-            {% if request.user.is_staff %}
-            <a class="btn btn-sm btn-secondary" href="{% url 'cal:asset_edit' sub.id %}">
-              <i class="fas fa-edit"></i> Edit
-            </a>
-            {% endif %}
-          </div>
-        </div>
-        {% endfor %}
       </div>
-      {% endif %}
       {% endfor %}
     </div>
     {% endfor %}
@@ -98,23 +62,4 @@
   {% endif %}
 
 </div>
-{% endblock %}
-
-{% block script %}
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-  document.querySelectorAll('.subtrack-toggle').forEach(btn => {
-    btn.addEventListener('click', function () {
-      const id   = this.dataset.target.replace('subtracks-', '');
-      const cards = document.querySelectorAll(`[data-subtracks="${id}"]`);
-      const icon  = this.querySelector('i');
-      const open  = icon.classList.contains('fa-chevron-down');
-      cards.forEach(c => c.style.display = open ? 'none' : 'flex');
-      icon.classList.toggle('fa-chevron-right', open);
-      icon.classList.toggle('fa-chevron-down',  !open);
-      this.closest('.asset-card').classList.toggle('subtracks-open', !open);
-    });
-  });
-});
-</script>
 {% endblock %}

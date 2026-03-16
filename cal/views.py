@@ -7,27 +7,25 @@ Authentication is handled by Django's built-in auth framework via
 @login_required and request.user.is_staff.
 """
 
-import calendar
 import json
-from collections import defaultdict
 from datetime import datetime, timedelta, date
-
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db.models import Count, Prefetch, Q
-from django.db.models.functions import ExtractHour, TruncDate
-from django.http import HttpResponseRedirect, JsonResponse
+from django.db.models import Count, Q
+from django.db.models.functions import ExtractHour
 from django.shortcuts import render, get_object_or_404, redirect
+from django.http import HttpResponseRedirect, JsonResponse
+from django.views import generic
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
 from django.urls import reverse
 from django.utils import timezone
-from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.safestring import mark_safe
-from django.views import generic
-from django.views.decorators.http import require_POST
+import calendar
 
-from .models import Asset, Event, Feedback
+from .models import Asset, Event
 from .utils import Calendar
-from .forms import EventForm, AssetForm, FeedbackForm, get_asset_tree
+from .forms import EventForm, AssetForm
 
 
 # ── Index ─────────────────────────────────────────────────────────────────────
@@ -64,7 +62,7 @@ class CalendarView(LoginRequiredMixin, generic.ListView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        view     = self.request.GET.get('view', 'day')
+        view     = self.request.GET.get('view', 'month')
         asset_id = self.request.GET.get('asset', None)
 
         # Month view uses ?month=YYYY-M; week/day views use ?date=YYYY-M-D
@@ -101,15 +99,6 @@ class CalendarView(LoginRequiredMixin, generic.ListView):
         context['view']           = view
         context['assets']         = Asset.objects.all()
         context['selected_asset'] = asset_id
-
-        # Day-view legend needs parent tracks with their colors
-        if view == 'day':
-            context['day_tracks'] = Asset.objects.filter(
-                asset_type=Asset.AssetType.TRACK,
-                parent__isnull=True,
-            ).order_by('name')
-            context['is_today'] = (d == timezone.now().date())
-
         return context
 
 
@@ -132,7 +121,7 @@ def get_date(req_str, view='month'):
                 return date(year, month, day)
         except Exception:
             pass
-    return timezone.now().date()
+    return datetime.today().date()
 
 
 def prev_for(d, view):
@@ -166,17 +155,6 @@ def next_for(d, view):
 
 # ── Events ────────────────────────────────────────────────────────────────────
 
-def _safe_next_url(request, default_url):
-    """
-    Return the ``next`` URL from POST or GET params if it passes
-    open-redirect validation, otherwise return *default_url*.
-    """
-    next_url = request.POST.get('next') or request.GET.get('next') or ''
-    if next_url and url_has_allowed_host_and_scheme(url=next_url, allowed_hosts=set()):
-        return next_url
-    return default_url
-
-
 @login_required
 def event(request, event_id=None):
     """
@@ -192,37 +170,26 @@ def event(request, event_id=None):
     """
     if event_id:
         instance = get_object_or_404(Event, pk=event_id)
-        can_edit = request.user.is_staff or instance.created_by == request.user
+        # Regular users can only edit their own events
+        if not request.user.is_staff and instance.created_by != request.user:
+            return HttpResponseRedirect(reverse('cal:calendar'))
     else:
         instance = Event()
-        can_edit = True
 
     form = EventForm(request.POST or None, instance=instance)
-    # Hide radio_channel from non-admin users
-    if not request.user.is_staff:
-        del form.fields['radio_channel']
-    if request.POST:
-        if not can_edit:
-            return HttpResponseRedirect(reverse('cal:calendar'))
-        if form.is_valid():
-            ev = form.save(commit=False)
-            if not event_id:
-                ev.created_by  = request.user
-                ev.is_approved = request.user.is_staff  # admin = auto-approve; user = pending
-            ev.save()
-            form.save_m2m()   # persist ManyToMany (assets) after the instance is saved
-            default = reverse('cal:calendar')
-            return HttpResponseRedirect(_safe_next_url(request, default))
+    if request.POST and form.is_valid():
+        ev = form.save(commit=False)
+        if not event_id:
+            ev.created_by  = request.user
+            ev.is_approved = request.user.is_staff  # admin = auto-approve; user = pending
+        ev.save()
+        form.save_m2m()   # persist ManyToMany (assets) after the instance is saved
+        return HttpResponseRedirect(reverse('cal:calendar'))
 
-    # Carry ?next= through to the template so the hidden field can persist it
-    next_url = request.GET.get('next', '')
     return render(request, 'cal/event.html', {
-        'form':            form,
-        'event':           instance if event_id else None,
-        'is_admin':        request.user.is_staff,
-        'can_edit':        can_edit,
-        'asset_data_json': get_asset_tree(),
-        'next_url':        next_url,
+        'form':     form,
+        'event':    instance if event_id else None,
+        'is_admin': request.user.is_staff,
     })
 
 
@@ -234,8 +201,7 @@ def event_delete(request, event_id):
         return HttpResponseRedirect(reverse('cal:calendar'))
     event_obj = get_object_or_404(Event, pk=event_id)
     event_obj.delete()
-    default = reverse('cal:calendar')
-    return HttpResponseRedirect(_safe_next_url(request, default))
+    return HttpResponseRedirect(reverse('cal:calendar'))
 
 
 @login_required
@@ -247,21 +213,7 @@ def event_approve(request, event_id):
     event_obj = get_object_or_404(Event, pk=event_id)
     event_obj.is_approved = True
     event_obj.save(update_fields=['is_approved'])
-    default = reverse('cal:pending_events')
-    return HttpResponseRedirect(_safe_next_url(request, default))
-
-
-@login_required
-@require_POST
-def event_unapprove(request, event_id):
-    """Admin only — revoke approval, returning an event to pending status."""
-    if not request.user.is_staff:
-        return HttpResponseRedirect(reverse('cal:calendar'))
-    event_obj = get_object_or_404(Event, pk=event_id)
-    event_obj.is_approved = False
-    event_obj.save(update_fields=['is_approved'])
-    default = reverse('cal:event_edit', args=[event_id])
-    return HttpResponseRedirect(_safe_next_url(request, default))
+    return HttpResponseRedirect(reverse('cal:pending_events'))
 
 
 @login_required
@@ -278,7 +230,7 @@ def pending_events(request):
 @login_required
 def asset_list(request):
     """Display all assets grouped by type. Requires login."""
-    assets = Asset.objects.prefetch_related('subtracks').all()
+    assets = Asset.objects.all()
     grouped_assets = []
     for type_value, type_label in Asset.AssetType.choices:
         group = [a for a in assets if a.asset_type == type_value]
@@ -295,15 +247,9 @@ def asset_create(request):
     """Admin only — show a form to create a new asset."""
     if not request.user.is_staff:
         return HttpResponseRedirect(reverse('cal:calendar'))
-    initial = {}
-    parent_id = request.GET.get('parent')
-    if parent_id:
-        initial = {'asset_type': 'track', 'parent': parent_id}
-    form = AssetForm(request.POST or None, initial=initial)
+    form = AssetForm(request.POST or None)
     if request.POST and form.is_valid():
-        saved = form.save()
-        if saved.parent_id:
-            return HttpResponseRedirect(reverse('cal:asset_edit', args=[saved.parent_id]))
+        form.save()
         return HttpResponseRedirect(reverse('cal:asset_list'))
     return render(request, 'cal/asset_form.html', {'form': form, 'page_title': 'New Asset'})
 
@@ -316,16 +262,12 @@ def asset_edit(request, asset_id):
     instance = get_object_or_404(Asset, pk=asset_id)
     form = AssetForm(request.POST or None, instance=instance)
     if request.POST and form.is_valid():
-        saved = form.save()
-        if saved.parent_id:
-            return HttpResponseRedirect(reverse('cal:asset_edit', args=[saved.parent_id]))
+        form.save()
         return HttpResponseRedirect(reverse('cal:asset_list'))
-    subtracks = instance.subtracks.order_by('name') if instance.asset_type == Asset.AssetType.TRACK and not instance.parent_id else None
     return render(request, 'cal/asset_form.html', {
         'form':       form,
         'page_title': f'Edit — {instance.name}',
         'asset':      instance,
-        'subtracks':  subtracks,
     })
 
 
@@ -336,10 +278,7 @@ def asset_delete(request, asset_id):
     if not request.user.is_staff:
         return HttpResponseRedirect(reverse('cal:asset_list'))
     asset = get_object_or_404(Asset, pk=asset_id)
-    parent_id = asset.parent_id
     asset.delete()
-    if parent_id:
-        return HttpResponseRedirect(reverse('cal:asset_edit', args=[parent_id]))
     return HttpResponseRedirect(reverse('cal:asset_list'))
 
 
@@ -355,7 +294,7 @@ def asset_detail(request, asset_id):
     - The 10 most recent past events for historical reference.
     """
     asset   = get_object_or_404(Asset, pk=asset_id)
-    today   = timezone.now().date()
+    today   = datetime.today().date()
     horizon = today + timedelta(days=30)
 
     upcoming = asset.events.prefetch_related('assets').filter(
@@ -425,7 +364,7 @@ def dashboard_events_api(request):
     if not request.user.is_staff:
         return JsonResponse({'error': 'Forbidden'}, status=403)
 
-    today = timezone.now().date()
+    today = datetime.today().date()
     date_param = request.GET.get('date')
     if date_param:
         try:
@@ -435,117 +374,36 @@ def dashboard_events_api(request):
     else:
         target_date = today
 
-    track_events_qs = Event.objects.filter(
-        is_approved=True, start_time__date=target_date
-    ).order_by('start_time')
+    tracks = Asset.objects.filter(asset_type=Asset.AssetType.TRACK)
 
-    all_tracks = Asset.objects.filter(
-        asset_type=Asset.AssetType.TRACK
-    ).prefetch_related(
-        Prefetch('events', queryset=track_events_qs, to_attr='day_events'),
-        'subtracks',
-    ).order_by('name')
-
-    def _serialize_events(track):
-        return [
-            {
-                'id': ev.pk,
-                'title': ev.title,
-                'description': ev.description,
-                'start_time': ev.start_time.isoformat(),
-                'end_time': ev.end_time.isoformat(),
-                'is_approved': ev.is_approved,
-                'actual_start': ev.actual_start.isoformat() if ev.actual_start else None,
-                'actual_end': ev.actual_end.isoformat() if ev.actual_end else None,
-                'radio_channel': ev.radio_channel,
-                'effective_radio_channel': ev.effective_radio_channel,
-            }
-            for ev in track.day_events
-        ]
-
-    # Group: parent tracks with subtracks nested; standalone tracks at top level
     data = {}
-    parent_tracks = [t for t in all_tracks if t.parent_id is None]
-    sub_by_parent = {}
-    for t in all_tracks:
-        if t.parent_id is not None:
-            sub_by_parent.setdefault(t.parent_id, []).append(t)
-
-    for track in parent_tracks:
-        subs = sub_by_parent.get(track.pk, [])
-        track_data = {
+    for track in tracks:
+        events = (
+            track.events
+            .filter(is_approved=True, start_time__date=target_date)
+            .order_by('start_time')
+        )
+        data[track.name] = {
             'id': track.pk,
-            'color': track.color,
-            'radio_channel': track.radio_channel,
-            'events': _serialize_events(track),
-        }
-        if subs:
-            track_data['subtracks'] = {
-                sub.name: {
-                    'id': sub.pk,
-                    'radio_channel': sub.radio_channel,
-                    'events': _serialize_events(sub),
+            'events': [
+                {
+                    'id':           ev.pk,
+                    'title':        ev.title,
+                    'description':  ev.description,
+                    'start_time':   ev.start_time.isoformat(),
+                    'end_time':     ev.end_time.isoformat(),
+                    'is_approved':  ev.is_approved,
+                    'actual_start': ev.actual_start.isoformat() if ev.actual_start else None,
+                    'actual_end':   ev.actual_end.isoformat() if ev.actual_end else None,
                 }
-                for sub in sorted(subs, key=lambda s: s.name)
-            }
-        data[track.name] = track_data
+                for ev in events
+            ],
+        }
 
     return JsonResponse({'date': target_date.isoformat(), 'tracks': data})
 
 
 # ── Analytics ─────────────────────────────────────────────────────────────────
-
-@login_required
-@require_POST
-def set_radio_channel(request, asset_id):
-    """Admin only — set or clear a track's radio channel (11–16)."""
-    if not request.user.is_staff:
-        return JsonResponse({'error': 'Forbidden'}, status=403)
-    track = get_object_or_404(Asset, pk=asset_id, asset_type=Asset.AssetType.TRACK)
-    try:
-        body = json.loads(request.body)
-    except (json.JSONDecodeError, ValueError):
-        return JsonResponse({'error': 'Invalid JSON'}, status=400)
-    channel = body.get('channel')
-    if channel is not None:
-        try:
-            channel = int(channel)
-        except (ValueError, TypeError):
-            return JsonResponse({'error': 'Channel must be an integer (11–16) or null.'}, status=400)
-        if channel < 11 or channel > 16:
-            return JsonResponse({'error': 'Channel must be between 11 and 16.'}, status=400)
-    track.radio_channel = channel
-    track.save(update_fields=['radio_channel'])
-    return JsonResponse({'id': track.pk, 'radio_channel': track.radio_channel})
-
-
-@login_required
-@require_POST
-def set_event_radio_channel(request, event_id):
-    """Admin only — set or clear a per-event radio channel override (11–16)."""
-    if not request.user.is_staff:
-        return JsonResponse({'error': 'Forbidden'}, status=403)
-    event_obj = get_object_or_404(Event, pk=event_id)
-    try:
-        body = json.loads(request.body)
-    except (json.JSONDecodeError, ValueError):
-        return JsonResponse({'error': 'Invalid JSON'}, status=400)
-    channel = body.get('channel')
-    if channel is not None:
-        try:
-            channel = int(channel)
-        except (ValueError, TypeError):
-            return JsonResponse({'error': 'Channel must be an integer (11–16) or null.'}, status=400)
-        if channel < 11 or channel > 16:
-            return JsonResponse({'error': 'Channel must be between 11 and 16.'}, status=400)
-    event_obj.radio_channel = channel
-    event_obj.save(update_fields=['radio_channel'])
-    return JsonResponse({
-        'id': event_obj.pk,
-        'radio_channel': event_obj.radio_channel,
-        'effective_radio_channel': event_obj.effective_radio_channel,
-    })
-
 
 @login_required
 def analytics(request):
@@ -559,7 +417,7 @@ def analytics_api(request):
     if not request.user.is_staff:
         return JsonResponse({'error': 'Forbidden'}, status=403)
 
-    today = timezone.now().date()
+    today = datetime.today().date()
     start_str = request.GET.get('start')
     end_str = request.GET.get('end')
 
@@ -579,21 +437,11 @@ def analytics_api(request):
         is_approved=True,
     )
 
-    # Prefetch all events once to avoid N+1 queries per asset.
-    # SQLite lacks duration math, so we compute in Python from a single queryset.
-    all_events = list(events.prefetch_related('assets'))
-
-    # Build asset_id → [event, ...] mapping for O(1) lookups
-    events_by_asset = defaultdict(list)
-    for ev in all_events:
-        for asset in ev.assets.all():
-            events_by_asset[asset.pk].append(ev)
-
-    # 1. Track utilization
+    # 1. Track utilization — compute in Python since SQLite lacks good duration support
     track_assets = Asset.objects.filter(asset_type=Asset.AssetType.TRACK)
     track_utilization = []
     for track in track_assets:
-        track_events = events_by_asset.get(track.pk, [])
+        track_events = events.filter(assets=track)
         scheduled_secs = sum(
             (e.end_time - e.start_time).total_seconds()
             for e in track_events
@@ -604,29 +452,29 @@ def analytics_api(request):
             if e.actual_start and e.actual_end
         )
         track_utilization.append({
-            'name': track.display_name,
-            'color': track.color or '#10b981',
+            'name': track.name,
             'scheduled_hours': round(scheduled_secs / 3600, 1),
             'actual_hours': round(actual_secs / 3600, 1),
-            'event_count': len(track_events),
+            'event_count': track_events.count(),
         })
 
     # 2. Schedule accuracy — for events with actual times
+    events_with_actuals = events.filter(actual_start__isnull=False, actual_end__isnull=False)
     start_deltas = []
     end_deltas = []
-    for e in all_events:
-        if e.actual_start and e.actual_end:
-            start_deltas.append((e.actual_start - e.start_time).total_seconds() / 60)
-            end_deltas.append((e.actual_end - e.end_time).total_seconds() / 60)
+    for e in events_with_actuals:
+        start_deltas.append((e.actual_start - e.start_time).total_seconds() / 60)
+        end_deltas.append((e.actual_end - e.end_time).total_seconds() / 60)
 
     schedule_accuracy = {
         'avg_start_delta_minutes': round(sum(start_deltas) / len(start_deltas), 1) if start_deltas else 0,
         'avg_end_delta_minutes': round(sum(end_deltas) / len(end_deltas), 1) if end_deltas else 0,
         'events_with_actuals': len(start_deltas),
-        'total_events': len(all_events),
+        'total_events': events.count(),
     }
 
     # 3. Usage trends — events per day
+    from django.db.models.functions import TruncDate
     daily = (
         events
         .annotate(day=TruncDate('start_time'))
@@ -635,6 +483,7 @@ def analytics_api(request):
         .order_by('day')
     )
     # Fill in missing days with 0
+    from datetime import timedelta as td
     day_counts = {str(row['day']): row['count'] for row in daily}
     labels = []
     counts = []
@@ -642,7 +491,7 @@ def analytics_api(request):
     while d <= end_date:
         labels.append(str(d))
         counts.append(day_counts.get(str(d), 0))
-        d += timedelta(days=1)
+        d += td(days=1)
 
     usage_trends = {'labels': labels, 'counts': counts}
 
@@ -685,7 +534,7 @@ def analytics_api(request):
     non_track_assets = Asset.objects.exclude(asset_type=Asset.AssetType.TRACK)
     asset_usage = []
     for asset in non_track_assets:
-        asset_events = events_by_asset.get(asset.pk, [])
+        asset_events = events.filter(assets=asset)
         sched_secs = sum(
             (e.end_time - e.start_time).total_seconds()
             for e in asset_events
@@ -693,7 +542,7 @@ def analytics_api(request):
         asset_usage.append({
             'name': asset.name,
             'type': asset.asset_type,
-            'event_count': len(asset_events),
+            'event_count': asset_events.count(),
             'total_hours': round(sched_secs / 3600, 1),
         })
 
@@ -708,8 +557,8 @@ def analytics_api(request):
     })
 
 
+@csrf_exempt
 @login_required
-@require_POST
 def dashboard_stamp_actual(request, event_id):
     """
     JSON API — admin only.
@@ -729,16 +578,15 @@ def dashboard_stamp_actual(request, event_id):
     """
     if not request.user.is_staff:
         return JsonResponse({'error': 'Forbidden'}, status=403)
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
 
     try:
         event = Event.objects.get(pk=event_id)
     except Event.DoesNotExist:
         return JsonResponse({'error': 'Not found'}, status=404)
 
-    try:
-        body = json.loads(request.body)
-    except (json.JSONDecodeError, ValueError):
-        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+    body = json.loads(request.body)
     action = body.get('action')
     time_str = body.get('time')  # Optional: ISO 8601 string or "HH:MM"
 
@@ -762,27 +610,6 @@ def dashboard_stamp_actual(request, event_id):
             except (ValueError, TypeError):
                 pass
 
-    # ── Validation ──────────────────────────────────────────────
-    if action == 'end':
-        if not event.actual_start:
-            return JsonResponse(
-                {'error': 'Cannot stamp end time before start time is recorded.'},
-                status=400,
-            )
-        if custom_time and custom_time < event.actual_start:
-            return JsonResponse(
-                {'error': 'End time cannot be before start time.'},
-                status=400,
-            )
-    if action == 'start' and custom_time:
-        event_date = event.start_time.date()
-        event_midnight = timezone.make_aware(datetime.combine(event_date, datetime.min.time()))
-        if custom_time < event_midnight - timedelta(hours=24) or custom_time > event_midnight + timedelta(hours=48):
-            return JsonResponse(
-                {'error': 'Custom time must be within 24 hours of the event date.'},
-                status=400,
-            )
-
     if action == 'start':
         event.actual_start = custom_time or timezone.now()
         event.save(update_fields=['actual_start'])
@@ -803,36 +630,3 @@ def dashboard_stamp_actual(request, event_id):
         'actual_start': event.actual_start.isoformat() if event.actual_start else None,
         'actual_end':   event.actual_end.isoformat() if event.actual_end else None,
     })
-
-
-# ── Feedback ─────────────────────────────────────────────────────────────────
-
-@login_required
-@require_POST
-def submit_feedback(request):
-    form = FeedbackForm(request.POST)
-    if form.is_valid():
-        fb = form.save(commit=False)
-        fb.user = request.user
-        fb.save()
-        return JsonResponse({'success': True})
-    return JsonResponse({'success': False, 'errors': form.errors}, status=400)
-
-
-@login_required
-def feedback_list(request):
-    if not request.user.is_developer:
-        return HttpResponseRedirect(reverse('cal:calendar'))
-    items = Feedback.objects.select_related('user').all()
-    return render(request, 'cal/feedback_list.html', {'items': items})
-
-
-@login_required
-@require_POST
-def feedback_resolve(request, feedback_id):
-    if not request.user.is_developer:
-        return HttpResponseRedirect(reverse('cal:calendar'))
-    fb = get_object_or_404(Feedback, pk=feedback_id)
-    fb.is_resolved = not fb.is_resolved
-    fb.save(update_fields=['is_resolved'])
-    return HttpResponseRedirect(reverse('cal:feedback_list'))

@@ -8,17 +8,6 @@
 
 {% block content %}
 
-<!-- ── Day-events modal (month view) ────────────────────────────── -->
-<div id="day-modal" class="day-modal-overlay" hidden>
-  <div class="day-modal-box">
-    <div class="day-modal-header">
-      <span id="day-modal-title" class="day-modal-title"></span>
-      <button class="day-modal-close" id="day-modal-close" aria-label="Close">&times;</button>
-    </div>
-    <ul id="day-modal-list" class="day-modal-list"></ul>
-  </div>
-</div>
-
 <!-- ── Calendar Toolbar ─────────────────────────────────────────── -->
 <div class="cal-toolbar">
 
@@ -29,38 +18,34 @@
     <a class="cal-today-btn" href="{% url 'cal:calendar' %}?view={{ view }}">Today</a>
   </div>
 
-  <!-- Center: filters -->
-  <div class="cal-tb-center">
+  <!-- Center: asset filter -->
+  {% if view == 'month' %}
+  <form method="get" action="{% url 'cal:calendar' %}" class="asset-filter-form">
+    <input type="hidden" name="view" value="{{ view }}">
     {% if view == 'month' %}
-    <form method="get" action="{% url 'cal:calendar' %}" class="asset-filter-form">
-      <input type="hidden" name="view" value="{{ view }}">
       <input type="hidden" name="month" value="{{ request.GET.month }}">
-      <select name="asset" class="asset-filter-select" onchange="this.form.submit()">
-        <option value="">All Assets</option>
-        {% for asset in assets %}
-          <option value="{{ asset.id }}" {% if selected_asset == asset.id|stringformat:"s" %}selected{% endif %}>
-            {{ asset }}
-          </option>
-        {% endfor %}
-      </select>
-    </form>
+    {% else %}
+      <input type="hidden" name="date" value="{{ request.GET.date }}">
     {% endif %}
-
-    <label class="pending-filter" aria-label="Show pending events">
-      <input type="checkbox" id="pending-toggle" checked
-             onchange="togglePending(this)">
-      <span class="pending-filter-label">Show pending</span>
-    </label>
-  </div>
+    <select name="asset" class="asset-filter-select" onchange="this.form.submit()">
+      <option value="">All Assets</option>
+      {% for asset in assets %}
+        <option value="{{ asset.id }}" {% if selected_asset == asset.id|stringformat:"s" %}selected{% endif %}>
+          {{ asset }}
+        </option>
+      {% endfor %}
+    </select>
+  </form>
+  {% endif %}
 
   <!-- Right: view switcher + new event -->
   <div class="cal-tb-right">
     <div class="view-switcher">
-      <a class="vsw {% if view == 'day' %}vsw-active{% endif %}"   href="{% url 'cal:calendar' %}?view=day&{{ current_q }}">Day</a>
-      <a class="vsw {% if view == 'week' %}vsw-active{% endif %}"  href="{% url 'cal:calendar' %}?view=week&{{ current_q }}">Week</a>
       <a class="vsw {% if view == 'month' %}vsw-active{% endif %}" href="{% url 'cal:calendar' %}?view=month&{{ current_q }}">Month</a>
+      <a class="vsw {% if view == 'week' %}vsw-active{% endif %}"  href="{% url 'cal:calendar' %}?view=week&{{ current_q }}">Week</a>
+      <a class="vsw {% if view == 'day' %}vsw-active{% endif %}"   href="{% url 'cal:calendar' %}?view=day&{{ current_q }}">Day</a>
     </div>
-    <a class="btn-new-event" href="{% url 'cal:event_new' %}?next={{ request.get_full_path|urlencode }}"><i class="fas fa-plus"></i> New Event</a>
+    <a class="btn-new-event" href="{% url 'cal:event_new' %}"><i class="fas fa-plus"></i> New Event</a>
   </div>
 
 </div>
@@ -71,116 +56,18 @@
 </div>
 
 <!-- ── Legend ───────────────────────────────────────────────────── -->
-{% if view == 'day' %}
-<div class="cal-legend">
-  <span class="legend-item">
-    <span class="legend-swatch-actual"></span> Scheduled
-  </span>
-  <span class="legend-item">
-    <span class="legend-swatch-dual"><span class="legend-swatch-dual__actual"></span><span class="legend-swatch-dual__ghost"></span></span> Actual <span class="text-muted" style="font-size:0.8em">(scheduled shown below)</span>
-  </span>
-  <span class="legend-item">
-    <span class="legend-dot legend-dot-pending"></span> Pending
-  </span>
-</div>
-{% else %}
 <div class="cal-legend">
   <span class="legend-item"><span class="legend-dot dot-vehicle"></span> Vehicle</span>
   <span class="legend-item"><span class="legend-dot dot-track"></span> Track</span>
   <span class="legend-item"><span class="legend-dot dot-operator"></span> Operator</span>
   <span class="legend-item"><span class="legend-dot dot-pending"></span> Pending Approval</span>
 </div>
-{% endif %}
 
 {% endblock %}
 
 {% block script %}
-<script>
-  // ── Pending filter toggle (client-side, no reload) ────────────────
-  function togglePending(cb) {
-    var body = document.querySelector('.cal-body');
-    if (!body) return;
-    if (cb.checked) {
-      body.classList.remove('cal-hide-pending');
-    } else {
-      body.classList.add('cal-hide-pending');
-    }
-    // Sync URL so refresh preserves state (no navigation)
-    var url = new URL(window.location.href);
-    if (cb.checked) {
-      url.searchParams.delete('hide_pending');
-    } else {
-      url.searchParams.set('hide_pending', '1');
-    }
-    history.replaceState(null, '', url.toString());
-  }
-  // Apply on load if hide_pending=1 is in the URL
-  (function() {
-    if (new URL(window.location.href).searchParams.get('hide_pending') === '1') {
-      var body = document.querySelector('.cal-body');
-      if (body) body.classList.add('cal-hide-pending');
-      var cb = document.getElementById('pending-toggle');
-      if (cb) cb.checked = false;
-    }
-  })();
-</script>
 {% if view == 'month' %}
 <script>
-  // ── Day-events modal ────────────────────────────────────────────
-  (function() {
-    var modal     = document.getElementById('day-modal');
-    var modalTitle = document.getElementById('day-modal-title');
-    var modalList  = document.getElementById('day-modal-list');
-
-    function openModal(btn) {
-      var td = btn.closest('td');
-      var hiddenList = td ? td.querySelector('.day-all-events') : null;
-      modalTitle.textContent = btn.dataset.label || '';
-      modalList.innerHTML = hiddenList ? hiddenList.innerHTML : '';
-
-      // Measure scrollbar width before locking so layout doesn't lurch
-      var scrollW = window.innerWidth - document.documentElement.clientWidth;
-      document.body.style.overflow = 'hidden';
-      document.body.style.paddingRight = scrollW + 'px';
-
-      // Show so the box is measurable
-      modal.hidden = false;
-
-      var box    = modal.querySelector('.day-modal-box');
-      var anchor = td ? td.getBoundingClientRect() : btn.getBoundingClientRect();
-      var gap    = 10;
-      var vw     = window.innerWidth;
-      var vh     = window.innerHeight;
-      var boxW   = box.offsetWidth;
-      var boxH   = box.offsetHeight;
-
-      // Horizontal: prefer right of the day cell, flip left if it would overflow
-      var left = anchor.right + gap;
-      if (left + boxW > vw - gap) { left = anchor.left - gap - boxW; }
-      left = Math.max(gap, left);
-
-      // Vertical: align top with cell top, clamp so it stays on screen
-      var top = anchor.top;
-      top = Math.max(gap, Math.min(top, vh - boxH - gap));
-
-      box.style.top  = top  + 'px';
-      box.style.left = left + 'px';
-    }
-
-    function closeModal() {
-      modal.hidden = true;
-      document.body.style.overflow = '';
-      document.body.style.paddingRight = '';
-    }
-
-    document.querySelectorAll('.day-more-btn').forEach(function(btn) {
-      btn.addEventListener('click', function(e) { e.stopPropagation(); openModal(btn); });
-    });
-    document.getElementById('day-modal-close').addEventListener('click', closeModal);
-    modal.addEventListener('click', function(e) { if (e.target === modal) closeModal(); });
-    document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeModal(); });
-  })();
-
   // Show the day-add-overlay only while the user's mouse is inside that td.
   // Inline styles take priority over any stylesheet, making this robust across browsers.
   document.querySelectorAll('.month-table td, table.calendar td').forEach(function(td) {
@@ -196,71 +83,6 @@
       btn.style.opacity = '0';
       btn.style.visibility = 'hidden';
     });
-  });
-</script>
-{% endif %}
-{% if view == 'day' %}
-<script>
-  document.addEventListener('DOMContentLoaded', function() {
-    var gantt = document.querySelector('.gantt-view');
-    if (!gantt) return;
-    var ganttStart = parseInt(gantt.dataset.ganttStart || '0');
-    var ganttMins = parseInt(gantt.dataset.ganttMins || '1440');
-
-    // ── Now line (only on today's date) ──────────────────────────
-    {% if is_today %}
-    (function() {
-      var nowLines = [];
-
-      function getNowPct() {
-        var d = new Date();
-        var mins = d.getHours() * 60 + d.getMinutes();
-        var offset = mins - (ganttStart * 60);
-        return (offset / ganttMins) * 100;
-      }
-
-      function updateNowLine() {
-        var pct = getNowPct();
-        var visible = pct >= 0 && pct <= 100;
-        nowLines.forEach(function(el) {
-          el.style.left = pct + '%';
-          el.style.display = visible ? '' : 'none';
-        });
-      }
-
-      var axisRow = document.querySelector('.gantt-axis');
-      if (axisRow) {
-        var axisEl = document.createElement('div');
-        axisEl.className = 'gantt-now-line gantt-now-axis';
-        axisEl.innerHTML = '<span class="gantt-now-label">Now</span>';
-        axisRow.appendChild(axisEl);
-        nowLines.push(axisEl);
-      }
-
-      document.querySelectorAll('.gantt-lane').forEach(function(lane) {
-        var lineEl = document.createElement('div');
-        lineEl.className = 'gantt-now-line gantt-now-body';
-        lane.appendChild(lineEl);
-        nowLines.push(lineEl);
-      });
-
-      updateNowLine();
-      setInterval(updateNowLine, 60000);
-    })();
-    {% endif %}
-
-    // ── Auto-scroll: center viewport on current time ──────────────
-    (function() {
-      var container = document.querySelector('.gantt-scroll-container');
-      if (!container) return;
-
-      var now = new Date();
-      var nowMin = now.getHours() * 60 + now.getMinutes();
-      var scrollableWidth = container.scrollWidth;
-      var viewportWidth = container.clientWidth;
-      var nowPx = ((nowMin - ganttStart * 60) / ganttMins) * scrollableWidth;
-      container.scrollLeft = Math.max(0, nowPx - viewportWidth / 2);
-    })();
   });
 </script>
 {% endif %}

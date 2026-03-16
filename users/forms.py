@@ -12,7 +12,3 @@ class UserRegistrationForm(UserCreationForm):
         # Remove all password help text so no requirements are shown to the user.
         self.fields['password1'].help_text = ''
         self.fields['password2'].help_text = ''
-
-    def clean_username(self):
-        """Normalize username to lowercase to prevent case-variant duplicates."""
-        return self.cleaned_data['username'].lower()

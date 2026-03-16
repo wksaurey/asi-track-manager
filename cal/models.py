@@ -10,32 +10,6 @@ from django.conf import settings
 from django.db import models
 from django.urls import reverse
 from django.utils.html import escape
-from django.utils.timezone import localtime
-
-# Predefined palette for track colors.  New tracks auto-pick the first unused
-# color; all 16 are available for manual override via the asset edit form.
-TRACK_COLOR_PALETTE = [
-    # Reds / oranges / yellows  (~0° → 60° hue)
-    '#dc2626',  # red-600
-    '#ea580c',  # orange-600
-    '#d97706',  # amber-600
-    '#ca8a04',  # yellow-600
-    # Greens  (~80° → 175° hue)
-    '#65a30d',  # lime-600
-    '#16a34a',  # green-600
-    '#059669',  # emerald-600
-    '#0d9488',  # teal-600
-    # Blues  (~185° → 240° hue)
-    '#0891b2',  # cyan-600
-    '#0284c7',  # sky-600
-    '#2563eb',  # blue-600
-    '#4f46e5',  # indigo-600
-    # Purples / pinks  (~260° → 340° hue)
-    '#7c3aed',  # violet-600
-    '#9333ea',  # purple-600
-    '#c026d3',  # fuchsia-600
-    '#db2777',  # pink-600
-]
 
 
 class Asset(models.Model):
@@ -44,115 +18,22 @@ class Asset(models.Model):
 
     Each asset belongs to one of three types (vehicle, track, operator) and
     can be linked to many events via a ManyToMany relationship.
-
-    Tracks may optionally have a parent track (subtrack support).  A track
-    with parent=None is a top-level track; a track with parent set is a
-    subtrack of that parent.  Only asset_type='track' assets should use
-    this field.
     """
 
     class AssetType(models.TextChoices):
-        VEHICLE  = 'vehicle',  'Vehicle'
+        VEHICLE  = 'vehicle',  'Heavy Equipment Vehicle'
         TRACK    = 'track',    'Track'
         OPERATOR = 'operator', 'Operator'
 
-    name        = models.CharField(max_length=200)
+    name        = models.CharField(max_length=200, unique=True)
     asset_type  = models.CharField(max_length=20, choices=AssetType.choices)
     description = models.TextField(blank=True)
-    color       = models.CharField(
-        max_length=7,
-        blank=True,
-        default='',
-        help_text='Hex color for this track (e.g. #3b82f6). Auto-assigned if left blank.',
-    )
-    parent      = models.ForeignKey(
-        'self',
-        null=True,
-        blank=True,
-        on_delete=models.CASCADE,
-        related_name='subtracks',
-        help_text='Parent track (only for subtracks)',
-    )
-    RADIO_CHANNEL_CHOICES = [(None, '—')] + [(ch, f'Ch {ch}') for ch in range(11, 17)]
-    radio_channel = models.IntegerField(
-        null=True,
-        blank=True,
-        choices=[(ch, f'Ch {ch}') for ch in range(11, 17)],
-        help_text='Radio channel assigned to this track (11–16).',
-    )
 
     class Meta:
         ordering = ['asset_type', 'name']
-        # Top-level assets (parent=None) must be unique by name.
-        # Subtracks are unique within their parent (handled in clean()).
-        constraints = [
-            models.UniqueConstraint(
-                fields=['name'],
-                condition=models.Q(parent__isnull=True),
-                name='unique_top_level_asset_name',
-            )
-        ]
-
-    @classmethod
-    def next_available_color(cls):
-        """Return the first palette color not yet used by any track, cycling if needed."""
-        used = set(
-            cls.objects.filter(asset_type=cls.AssetType.TRACK)
-            .exclude(color='')
-            .values_list('color', flat=True)
-        )
-        for c in TRACK_COLOR_PALETTE:
-            if c not in used:
-                return c
-        # All colors taken — cycle by count
-        count = cls.objects.filter(asset_type=cls.AssetType.TRACK).exclude(color='').count()
-        return TRACK_COLOR_PALETTE[count % len(TRACK_COLOR_PALETTE)]
-
-    def save(self, *args, **kwargs):
-        if self.asset_type == self.AssetType.TRACK and not self.color:
-            self.color = self.next_available_color()
-        super().save(*args, **kwargs)
-
-    def clean(self):
-        from django.core.exceptions import ValidationError
-        if self.parent_id is not None:
-            siblings = Asset.objects.filter(parent_id=self.parent_id, name=self.name)
-            if self.pk:
-                siblings = siblings.exclude(pk=self.pk)
-            if siblings.exists():
-                raise ValidationError({'name': 'A subtrack with this name already exists under this parent track.'})
 
     def __str__(self):
         return f'{self.get_asset_type_display()} — {self.name}'
-
-    def conflicting_asset_ids(self):
-        """
-        Return the set of asset IDs that conflict with booking this asset.
-
-        - Booking a parent track conflicts with itself AND all its subtracks.
-        - Booking a subtrack conflicts with itself AND its parent track.
-        - Sibling subtracks do NOT conflict with each other.
-        """
-        ids = {self.pk}
-        if self.asset_type == Asset.AssetType.TRACK:
-            if self.parent_id is None:
-                ids.update(self.subtracks.values_list('pk', flat=True))
-            else:
-                ids.add(self.parent_id)
-        return ids
-
-    @property
-    def display_name(self):
-        """
-        Return a user-facing label for this asset.
-
-        - Subtrack: 'Parent Name – Subtrack Name'
-        - Parent track (has subtracks): 'Name (whole)'
-        - Everything else: just 'Name'
-        """
-        if self.parent_id:
-            return f'{self.parent.name} \u2013 {self.name}'
-        return self.name
 
 
 class Event(models.Model):
@@ -168,7 +49,7 @@ class Event(models.Model):
     """
 
     title       = models.CharField(max_length=200)
-    description = models.TextField(blank=True)
+    description = models.TextField()
     start_time   = models.DateTimeField()
     end_time     = models.DateTimeField()
     actual_start = models.DateTimeField(null=True, blank=True)
@@ -177,15 +58,6 @@ class Event(models.Model):
         Asset,
         blank=True,
         related_name='events',
-    )
-    # Per-event radio channel override (None = inherit from track)
-    RADIO_CHANNEL_CHOICES = [(ch, f'Ch {ch}') for ch in range(11, 17)]
-    radio_channel = models.IntegerField(
-        null=True,
-        blank=True,
-        default=None,
-        choices=RADIO_CHANNEL_CHOICES,
-        help_text='Override radio channel for this event (11–16). Leave blank to use the track default.',
     )
     # Auth / approval fields
     created_by  = models.ForeignKey(
@@ -200,22 +72,6 @@ class Event(models.Model):
 
     def __str__(self):
         return self.title
-
-    @property
-    def effective_radio_channel(self):
-        """
-        Return the radio channel in effect for this event.
-
-        - The event's own ``radio_channel`` if explicitly set.
-        - Otherwise, the ``radio_channel`` of the first track-type asset.
-        - Otherwise, ``None``.
-        """
-        if self.radio_channel is not None:
-            return self.radio_channel
-        for asset in self.assets.all():
-            if asset.asset_type == Asset.AssetType.TRACK and asset.radio_channel is not None:
-                return asset.radio_channel
-        return None
 
     # ── Display helpers used by calendar templates ─────────────────────────
 
@@ -241,7 +97,7 @@ class Event(models.Model):
     def asset_badge_html(self):
         """Return inline HTML badge spans for each attached asset, colour-coded by type."""
         return ''.join(
-            f'<span class="asset-badge badge-{a.asset_type}">{escape(a.display_name)}</span>'
+            f'<span class="asset-badge badge-{a.asset_type}">{escape(a.name)}</span>'
             for a in self.assets.all()
         )
 
@@ -254,15 +110,13 @@ class Event(models.Model):
         same period, e.g. '8:30-10:00 AM' instead of '8:30 AM-10:00 AM'.
         Uses an en-dash and non-breaking spaces for clean rendering.
         """
-        local_s = localtime(self.start_time)
-        local_e = localtime(self.end_time)
-        t_s = local_s.strftime('%I:%M').lstrip('0') or '12:00'
-        t_e = local_e.strftime('%I:%M').lstrip('0') or '12:00'
-        if local_s.strftime('%p') == local_e.strftime('%p'):
-            return f'{t_s}\u2013{t_e}\u00a0{local_e.strftime("%p")}'
+        t_s = self.start_time.strftime('%I:%M').lstrip('0') or '12:00'
+        t_e = self.end_time.strftime('%I:%M').lstrip('0') or '12:00'
+        if self.start_time.strftime('%p') == self.end_time.strftime('%p'):
+            return f'{t_s}\u2013{t_e}\u00a0{self.end_time.strftime("%p")}'
         return (
-            f'{t_s}\u00a0{local_s.strftime("%p")}'
-            f'\u2013{t_e}\u00a0{local_e.strftime("%p")}'
+            f'{t_s}\u00a0{self.start_time.strftime("%p")}'
+            f'\u2013{t_e}\u00a0{self.end_time.strftime("%p")}'
         )
 
     @property
@@ -278,42 +132,11 @@ class Event(models.Model):
             '<span class="pending-badge">PENDING</span>'
             if not self.is_approved else ''
         )
-        creator = (
-            f'<span class="event-creator">{escape(self.created_by.username)}</span>'
-            if self.created_by else ''
-        )
         return (
             f'<a class="event-link" href="{url}">'
             f'<span class="event-title">{escape(self.title)}</span>'
             f'<span class="event-time">{self._time_range}</span>'
             f'{pending}'
-            f'{creator}'
             f'{self.asset_badge_html}'
             f'</a>'
         )
-
-
-class Feedback(models.Model):
-    class Category(models.TextChoices):
-        BUG = 'bug', 'Bug Report'
-        FEATURE = 'feature', 'Feature Request'
-        OTHER = 'other', 'Other'
-
-    user = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.SET_NULL,
-        null=True, blank=True,
-        related_name='feedback',
-    )
-    category = models.CharField(max_length=20, choices=Category.choices, default=Category.BUG)
-    subject = models.CharField(max_length=200)
-    message = models.TextField()
-    page_url = models.URLField(blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    is_resolved = models.BooleanField(default=False)
-
-    class Meta:
-        ordering = ['-created_at']
-
-    def __str__(self):
-        return f'[{self.get_category_display()}] {self.subject}'

@@ -5,10 +5,7 @@ A Django-based scheduling and asset management system for ASI Mendon Campus. Res
 ## Features
 
 - **Multi-view calendar** -- month, week, and day views with navigation and asset filtering
-- **Gantt/track view** -- day and week views display a lane-per-asset Gantt layout for at-a-glance scheduling
 - **Asset management** -- track vehicles, testing tracks, and operators with color-coded display
-- **Subtrack support** -- tracks can have parent/child relationships; booking a parent track conflicts with all its subtracks
-- **Two-step asset picker** -- clicking a track in the event form reveals a subtrack selection panel before confirming
 - **Conflict detection** -- prevents double-booking assets during overlapping time slots
 - **Approval workflow** -- user-created events require admin approval; admin events are auto-approved
 - **Dark/light theme** -- toggle with localStorage persistence

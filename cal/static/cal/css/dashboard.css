@@ -1,0 +1,987 @@
+/* ============================================================
+   Design tokens
+   ============================================================ */
+:root {
+  --bg:             #0c1220;
+  --card:           #101828;
+  --cardInner:      #0b1222;
+  --text:           #e2e8f0;
+  --muted:          #8b95a7;
+  --primary:        #60a5fa;
+  --primary-strong: #3b82f6;
+  --accent:         #34d399;
+  --danger:         #ef4444;
+  --outline:        #1e2d42;
+  --chip-bg:        rgba(96, 165, 250, 0.12);
+  --chip:           #93c5fd;
+  --highlight:      #fde68a;
+  --border-r:       16px;
+  --shadow:         0 4px 6px rgba(0,0,0,0.3), 0 12px 32px rgba(0,0,0,0.4);
+  --shadow-hover:   0 8px 16px rgba(0,0,0,0.35), 0 20px 48px rgba(0,0,0,0.45);
+  --card-border:    rgba(255,255,255,0.07);
+  --card-border-hover: rgba(96,165,250,0.25);
+}
+
+
+/* ============================================================
+   Base reset and body
+   ============================================================ */
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  padding: 0;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, "Helvetica Neue", Arial;
+  background:
+    radial-gradient(ellipse 1400px 700px at 75% -20%,  rgba(56,189,248,0.18), transparent 65%),
+    radial-gradient(ellipse 900px  500px at -10% 110%, rgba(52,211,153,0.14), transparent 70%),
+    radial-gradient(ellipse 600px  400px at 50%  60%,  rgba(99,102,241,0.06), transparent 80%),
+    var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+
+
+/* ============================================================
+   App header
+   ============================================================ */
+.app-header {
+  padding: 18px 20px 10px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: linear-gradient(180deg, rgba(12,18,32,0.95) 0%, rgba(12,18,32,0.75) 60%, transparent 100%);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.ASI-logo {
+  height: 56px;
+  opacity: 0.85;
+  margin-right: 4px;
+}
+.title-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+}
+h1 { margin: 0; font-size: 22px; letter-spacing: 0.2px; }
+.header-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+.controls-row {
+  margin-top: 14px;
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+.search-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 240px;
+  max-width: 480px;
+  flex: 1;
+}
+.search-wrap label, .field-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.search-wrap input,
+.add-track-form input,
+.add-track-form--stacked input {
+  padding: 9px 13px;
+  border: 1px solid var(--outline);
+  border-radius: 10px;
+  background: rgba(11,18,34,0.8);
+  color: var(--text);
+  font-size: 14px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  outline: none;
+}
+.search-wrap input:focus,
+.add-track-form input:focus,
+.add-track-form--stacked input:focus {
+  border-color: rgba(96,165,250,0.5);
+  box-shadow: 0 0 0 3px rgba(96,165,250,0.1);
+}
+.add-track-form { display: flex; align-items: flex-end; gap: 8px; }
+.add-track-form input { min-width: 210px; }
+
+
+/* ============================================================
+   Button system
+   ============================================================ */
+.btn {
+  appearance: none;
+  border: 1px solid transparent;
+  background: var(--primary);
+  color: #060f1e;
+  padding: 9px 14px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.2px;
+  transition: background 0.15s, transform 0.1s, box-shadow 0.15s;
+}
+.btn:hover { background: var(--primary-strong); box-shadow: 0 0 12px rgba(96,165,250,0.3); }
+.btn:active { transform: scale(0.97); }
+.btn-outline { background: transparent; border-color: var(--outline); color: var(--muted); }
+.btn-outline:hover { border-color: var(--primary); color: var(--primary); box-shadow: none; }
+.btn-danger { background: var(--danger); color: white; }
+.btn-danger:hover { background: #dc2626; box-shadow: 0 0 10px rgba(239,68,68,0.3); }
+.btn-small { padding: 6px 10px; border-radius: 8px; }
+.btn-xxs { padding: 3px 7px; border-radius: 6px; font-size: 11px; font-weight: 600; letter-spacing: 0.1px; }
+.file-label { display: inline-flex; align-items: center; gap: 8px; }
+
+
+/* ============================================================
+   Track card grid
+   ============================================================ */
+.grid {
+  padding: 20px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  gap: 18px;
+  align-items: start;
+}
+
+
+/* ============================================================
+   Track card
+   ============================================================ */
+.track-card {
+  background: linear-gradient(180deg, rgba(255,255,255,0.03) 0%, transparent 25%), var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: var(--border-r);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+  position: relative;
+}
+.track-card::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--primary), var(--accent));
+  border-radius: var(--border-r) var(--border-r) 0 0;
+  opacity: 0.8;
+}
+.track-card:hover { transform: translateY(-3px); border-color: var(--card-border-hover); box-shadow: var(--shadow-hover); }
+.track-card:hover::before { opacity: 1; }
+.track-card__inner { display: flex; flex-direction: column; min-height: 240px; }
+
+.track-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  position: relative;
+  padding: 13px 50px 11px 58px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  background: linear-gradient(180deg, rgba(16,26,48,0.9) 0%, rgba(12,20,38,0.5) 100%);
+}
+.track-name {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  text-align: center;
+  letter-spacing: 0.3px;
+  color: #dbeafe;
+  flex: 0 1 auto;
+}
+.track-actions {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  gap: 4px;
+}
+.track-logo { position: absolute; left: 8px; top: 50%; transform: translateY(-50%); }
+
+
+/* ============================================================
+   Collapsible forms
+   ============================================================ */
+.track-add-forms {
+  padding: 10px 12px;
+  border-bottom: 1px dashed rgba(255,255,255,0.06);
+  max-height: 260px;
+  overflow-y: auto;
+}
+.track-add-forms label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); }
+.track-add-forms .row { display: flex; flex-direction: column; gap: 5px; margin-bottom: 8px; }
+.track-add-forms input {
+  padding: 8px 10px;
+  border: 1px solid var(--outline);
+  border-radius: 8px;
+  background: rgba(6,12,24,0.7);
+  color: var(--text);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.track-add-forms input:focus { border-color: rgba(96,165,250,0.45); box-shadow: 0 0 0 3px rgba(96,165,250,0.08); }
+.form-actions { display: flex; gap: 8px; padding-top: 2px; }
+.hidden { display: none; }
+
+
+/* ============================================================
+   Scrollable content area
+   ============================================================ */
+.track-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 12px 12px 14px;
+  gap: 10px;
+  overflow: auto;
+}
+
+
+/* ============================================================
+   Event list
+   ============================================================ */
+.events-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+.event-item {
+  border: 1px solid rgba(255,255,255,0.06);
+  border-left: 2px solid rgba(96,165,250,0.35);
+  background: rgba(6,12,26,0.5);
+  border-radius: 10px;
+  padding: 9px 10px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: background 0.15s, border-color 0.15s;
+}
+.event-item:hover { background: rgba(16,28,52,0.65); border-left-color: var(--primary); }
+
+.event-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.time-chip {
+  background: var(--chip-bg);
+  color: var(--chip);
+  border: 1px solid rgba(96,165,250,0.2);
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.code-chip {
+  margin-left: auto;
+  background: #0b2a1e;
+  color: #9ef2c4;
+  border: 1px solid #175e3f;
+  padding: 3px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+}
+.event-text { flex: 1; font-size: 13.5px; line-height: 1.45; white-space: pre-wrap; color: var(--text); }
+.event-actions { display: flex; gap: 5px; flex-wrap: wrap; }
+.event-empty {
+  list-style: none;
+  text-align: center;
+  padding: 22px 12px;
+  color: rgba(139,149,167,0.4);
+  font-size: 12px;
+  font-style: italic;
+  letter-spacing: 0.2px;
+  user-select: none;
+}
+
+
+/* ============================================================
+   Per-event channel badge
+   ============================================================ */
+.event-channel-badge {
+  appearance: none;
+  margin-left: auto;
+  flex-shrink: 0;
+  background: rgba(52,211,153,0.08);
+  color: var(--accent);
+  border: 1px solid rgba(52,211,153,0.25);
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  cursor: pointer;
+  white-space: nowrap;
+  line-height: 1.6;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.event-channel-badge:hover { border-color: var(--accent); background: rgba(52,211,153,0.18); }
+.event-channel-badge[data-empty="true"] {
+  color: rgba(139,149,167,0.25);
+  border-color: rgba(255,255,255,0.04);
+  background: transparent;
+  font-size: 13px;
+  letter-spacing: 0;
+}
+.event-channel-badge[data-empty="true"]:hover {
+  color: var(--accent);
+  border-color: rgba(52,211,153,0.3);
+  background: rgba(52,211,153,0.07);
+  font-size: 10px;
+  letter-spacing: 0.3px;
+}
+
+
+/* ============================================================
+   Sub-notes
+   ============================================================ */
+.subnotes-list {
+  list-style: none;
+  margin: 2px 0 0 10px;
+  padding: 0;
+  color: var(--muted);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  border-left: 1px dashed rgba(255,255,255,0.1);
+  padding-left: 10px;
+}
+.subnote-item { display: flex; align-items: center; gap: 5px; }
+.subnote-item::before { content: "◦"; flex-shrink: 0; color: var(--muted); font-size: 12px; }
+.subnote-text { flex: 1; font-size: 12.5px; line-height: 1.4; }
+.subnote-edit, .subnote-delete { opacity: 0; transition: opacity 0.12s; flex-shrink: 0; }
+.subnote-item:hover .subnote-edit,
+.subnote-item:hover .subnote-delete { opacity: 1; }
+
+
+/* ============================================================
+   Track-level notes section
+   ============================================================ */
+.notes-section { margin-top: 4px; }
+.notes-section h3 { margin: 0 0 7px 0; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: var(--muted); }
+.notes-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+.note-item {
+  border: 1px dashed rgba(255,255,255,0.07);
+  background: rgba(52,211,153,0.03);
+  padding: 6px 9px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: space-between;
+  font-size: 13px;
+  transition: background 0.15s;
+}
+.note-item:hover { background: rgba(52,211,153,0.06); }
+.note-item .note-text { flex: 1; color: var(--muted); }
+
+
+/* ============================================================
+   Search highlight
+   ============================================================ */
+.highlight { background: var(--highlight); color: #111827; padding: 0 2px; border-radius: 3px; }
+
+
+/* ============================================================
+   Footer
+   ============================================================ */
+.app-footer { padding: 14px 20px; color: var(--muted); font-size: 12px; opacity: 0.7; }
+
+
+/* ============================================================
+   Per-card kebab menu
+   ============================================================ */
+.menu-wrap { position: relative; }
+.menu-btn {
+  background: transparent; border: none; color: var(--muted);
+  font-size: 20px; cursor: pointer; padding: 2px 6px; border-radius: 6px;
+  transition: color 0.15s, background 0.15s; line-height: 1;
+}
+.menu-btn:hover { color: var(--text); background: rgba(255,255,255,0.07); }
+.menu {
+  position: absolute; top: 28px; right: 0;
+  background: #0d1830; border: 1px solid var(--outline); border-radius: 10px;
+  display: none; flex-direction: column; min-width: 140px;
+  z-index: 20; box-shadow: 0 8px 24px rgba(0,0,0,0.5); overflow: hidden;
+}
+.menu-item {
+  background: transparent; color: var(--text); padding: 9px 13px;
+  border: none; text-align: left; cursor: pointer; font-size: 13px; transition: background 0.12s;
+}
+.menu-item:hover { background: rgba(255,255,255,0.08); }
+.menu-wrap.open .menu { display: flex; }
+
+
+/* ============================================================
+   Header hamburger menu
+   ============================================================ */
+.hamburger-wrap { position: relative; }
+.hamburger-btn {
+  background: rgba(255,255,255,0.04); border: 1px solid var(--outline);
+  color: var(--text); font-size: 17px; cursor: pointer; padding: 7px 10px;
+  border-radius: 10px; line-height: 1; transition: border-color 0.15s, background 0.15s;
+}
+.hamburger-btn:hover { border-color: var(--primary); color: var(--primary); background: rgba(96,165,250,0.07); }
+.hamburger-menu {
+  position: absolute; top: 42px; right: 0;
+  background: #0d1830; border: 1px solid var(--outline); border-radius: 12px;
+  min-width: 200px; display: none; flex-direction: column;
+  overflow: hidden; box-shadow: 0 12px 40px rgba(0,0,0,0.6); z-index: 30;
+}
+.hamburger-wrap.open .hamburger-menu { display: flex; }
+.hamburger-menu .menu-item {
+  appearance: none; background: transparent; border: none; color: var(--text);
+  text-align: left; padding: 10px 16px; cursor: pointer; font: inherit; font-size: 13px; transition: background 0.12s;
+}
+.hamburger-menu .menu-item:hover,
+.hamburger-menu label.menu-item:hover { background: rgba(255,255,255,0.07); }
+.hamburger-menu .menu-item.danger { color: #fca5a5; }
+.hamburger-menu .menu-sep { border: none; height: 1px; background: rgba(255,255,255,0.07); margin: 4px 0; }
+.hamburger-menu label.menu-item { display: block; }
+
+
+/* ============================================================
+   Scrollbar styling
+   ============================================================ */
+*::-webkit-scrollbar { height: 6px; width: 6px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb { background: rgba(96,165,250,0.2); border-radius: 10px; }
+*::-webkit-scrollbar-thumb:hover { background: rgba(96,165,250,0.4); }
+
+
+/* ============================================================
+   Brand title
+   ============================================================ */
+.brand-title {
+  margin: 0;
+  font-size: clamp(20px, 3vw, 32px);
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  line-height: 1.1;
+  position: relative;
+  background: linear-gradient(135deg, #93c5fd 0%, #60a5fa 50%, #34d399 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 4px 14px rgba(59,130,246,0.2));
+}
+.brand-title::after {
+  content: "";
+  position: absolute;
+  left: 0; bottom: -5px;
+  width: 100%; height: 2px;
+  background: linear-gradient(90deg, var(--primary), var(--accent), transparent);
+  border-radius: 999px;
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+
+/* ============================================================
+   Add Track form — stacked variant
+   ============================================================ */
+.add-track-form--stacked { align-items: flex-end; }
+.add-track-form--stacked .form-field { display: flex; flex-direction: column; gap: 5px; min-width: 210px; }
+
+
+/* ============================================================
+   Back to Calendar link
+   ============================================================ */
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 7px 12px;
+  border: 1px solid var(--outline);
+  border-radius: 10px;
+  background: rgba(255,255,255,0.03);
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+  white-space: nowrap;
+}
+.back-link:hover {
+  color: var(--primary);
+  border-color: var(--primary);
+  background: rgba(96,165,250,0.07);
+  text-decoration: none;
+}
+
+
+/* ============================================================
+   Responsive
+   ============================================================ */
+@media (max-width: 560px) {
+  .grid { padding: 12px; gap: 12px; }
+  .track-card__header { padding-right: 42px; padding-left: 52px; }
+  .track-actions { right: 6px; }
+  .brand-title::after { width: 55%; }
+}
+
+
+/* ============================================================
+   Accessibility helper
+   ============================================================ */
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0;
+  margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+}
+
+
+/* ============================================================
+   Channel badge (track-level, card header)
+   ============================================================ */
+.channel-badge {
+  position: absolute; left: 9px; top: 50%; transform: translateY(-50%);
+  appearance: none; background: rgba(52,211,153,0.1); color: var(--accent);
+  border: 1px solid rgba(52,211,153,0.3); padding: 2px 8px; border-radius: 999px;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.3px; cursor: pointer;
+  white-space: nowrap; line-height: 1.6; transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.channel-badge:hover { border-color: var(--accent); background: rgba(52,211,153,0.18); }
+.channel-badge[data-empty="true"] { color: rgba(139,149,167,0.3); border-color: rgba(255,255,255,0.05); background: transparent; font-size: 13px; letter-spacing: 0; }
+.channel-badge[data-empty="true"]:hover { color: var(--accent); border-color: rgba(52,211,153,0.3); background: rgba(52,211,153,0.07); font-size: 10px; letter-spacing: 0.3px; }
+
+
+/* ============================================================
+   Small icon button (+ in card header)
+   ============================================================ */
+.icon-btn {
+  appearance: none; background: rgba(96,165,250,0.08); border: 1px solid rgba(96,165,250,0.2);
+  color: var(--primary); padding: 4px 8px; border-radius: 8px; line-height: 1;
+  cursor: pointer; font-size: 16px; font-weight: 400; transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+.icon-btn:hover { background: rgba(96,165,250,0.15); border-color: var(--primary); box-shadow: 0 0 8px rgba(96,165,250,0.2); }
+
+
+/* ============================================================
+   View tabs (Tracks / Timeline)
+   ============================================================ */
+.view-tabs { display: flex; gap: 4px; margin-top: 14px; }
+.view-tab {
+  appearance: none; background: transparent; border: 1px solid var(--outline);
+  color: var(--muted); padding: 6px 18px; border-radius: 8px; cursor: pointer;
+  font-size: 13px; font-weight: 600; letter-spacing: 0.3px;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.view-tab:hover { border-color: var(--primary); color: var(--primary); background: rgba(96,165,250,0.07); }
+.view-tab.active { background: rgba(96,165,250,0.12); border-color: var(--primary); color: var(--primary); }
+
+
+/* ============================================================
+   Timeline wrapper
+   ============================================================ */
+#timelineView { padding: 20px; }
+.tl-wrap {
+  background: linear-gradient(180deg, rgba(255,255,255,0.02) 0%, transparent 20%), var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: var(--border-r);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  position: relative;
+}
+
+
+/* ============================================================
+   Timeline header axis
+   ============================================================ */
+.tl-header-row {
+  display: flex;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  background: linear-gradient(180deg, rgba(16,26,48,0.9) 0%, rgba(12,20,38,0.5) 100%);
+  position: sticky;
+  top: 0;
+  z-index: 4;
+}
+.tl-header-label {
+  width: 130px; min-width: 130px;
+  border-right: 1px solid rgba(255,255,255,0.06);
+  padding: 0 12px;
+  display: flex; align-items: center;
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.7px; color: var(--muted);
+}
+.tl-header-axis { flex: 1; position: relative; height: 36px; }
+.tl-tick {
+  position: absolute; top: 50%; transform: translate(-50%, -50%);
+  font-size: 11px; font-weight: 600; color: var(--muted);
+  white-space: nowrap; pointer-events: none; user-select: none;
+}
+
+
+/* ============================================================
+   Track rows
+   ============================================================ */
+.tl-body { overflow-y: auto; }
+.tl-row {
+  display: flex;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  transition: background 0.15s;
+}
+.tl-row:last-child { border-bottom: none; }
+.tl-row:hover { background: rgba(96,165,250,0.03); }
+
+.tl-row-label {
+  width: 130px; min-width: 130px;
+  padding: 0 12px;
+  display: flex; flex-direction: column; justify-content: center; gap: 3px;
+  border-right: 1px solid rgba(255,255,255,0.06);
+  background: rgba(6,12,26,0.3);
+}
+.tl-row-name { font-size: 12px; font-weight: 700; color: #dbeafe; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tl-row-ch   { font-size: 10px; font-weight: 700; color: var(--accent); letter-spacing: 0.3px; }
+
+.tl-row-lane {
+  flex: 1;
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 6px 0;
+}
+
+
+/* ============================================================
+   Grid lines and now indicator
+   ============================================================ */
+.tl-gridline { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(255,255,255,0.04); pointer-events: none; }
+.tl-now-line { position: absolute; top: 0; bottom: 0; width: 2px; background: #ef4444; z-index: 3; pointer-events: none; }
+.tl-now-label { position: absolute; top: 2px; left: 4px; font-size: 9px; font-weight: 700; color: #ef4444; text-transform: uppercase; letter-spacing: 0.4px; white-space: nowrap; }
+
+
+/* ============================================================
+   Event blocks
+   ============================================================ */
+.tl-block {
+  position: absolute;
+  border: 1.5px solid;
+  border-radius: 7px;
+  cursor: pointer;
+  display: flex; flex-direction: column; justify-content: center;
+  padding: 0 8px;
+  overflow: hidden;
+  z-index: 2;
+  transition: filter 0.15s, transform 0.1s, box-shadow 0.15s;
+  min-width: 4px;
+}
+.tl-block:hover { filter: brightness(1.2); transform: scaleY(1.06); box-shadow: 0 2px 12px rgba(0,0,0,0.4); z-index: 3; }
+.tl-block--open { border-right-style: dashed; }
+.tl-block-desc { font-size: 11px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.2; }
+.tl-block-meta { font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.2; }
+
+
+/* ============================================================
+   Tooltip
+   ============================================================ */
+.tl-tooltip {
+  position: absolute;
+  z-index: 100;
+  width: 250px;
+  background: #0d1830;
+  border: 1px solid var(--outline);
+  border-radius: 12px;
+  padding: 12px 14px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.7);
+  pointer-events: none;
+}
+.tl-tooltip-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.tl-tooltip-desc { font-size: 13px; font-weight: 700; color: var(--text); flex: 1; }
+.tl-tooltip-ch {
+  font-size: 10px; font-weight: 700; color: var(--accent);
+  background: rgba(52,211,153,0.1); border: 1px solid rgba(52,211,153,0.25);
+  padding: 2px 7px; border-radius: 999px; white-space: nowrap;
+}
+.tl-tooltip-time  { font-size: 11px; color: var(--chip); margin-bottom: 3px; }
+.tl-tooltip-time em { color: #ef4444; font-style: normal; }
+.tl-tooltip-track { font-size: 11px; color: var(--muted); margin-bottom: 8px; }
+.tl-tooltip-notes {
+  list-style: none; margin: 0; padding: 0;
+  border-top: 1px solid rgba(255,255,255,0.06); padding-top: 8px;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.tl-tooltip-notes li { font-size: 11.5px; color: var(--muted); padding-left: 10px; position: relative; }
+.tl-tooltip-notes li::before { content: "◦"; position: absolute; left: 0; color: var(--muted); }
+.tl-tooltip-nonotes { margin: 6px 0 0; font-size: 11px; color: rgba(139,149,167,0.4); font-style: italic; }
+
+
+/* ============================================================
+   Legend
+   ============================================================ */
+.tl-legend {
+  display: flex; gap: 16px; flex-wrap: wrap; align-items: center;
+  padding: 10px 14px;
+  border-top: 1px solid rgba(255,255,255,0.05);
+  background: rgba(6,12,26,0.3);
+}
+.tl-legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); }
+.tl-legend-swatch { width: 14px; height: 14px; border-radius: 4px; border: 1.5px solid; flex-shrink: 0; }
+.tl-legend-now { width: 3px; height: 14px; background: #ef4444; border-radius: 2px; flex-shrink: 0; }
+.tl-legend-open { width: 14px; height: 14px; border-radius: 4px; border: 1.5px dashed rgba(96,165,250,0.6); background: rgba(96,165,250,0.1); flex-shrink: 0; }
+
+
+/* ============================================================
+   Actual time row (event cards)
+   ============================================================ */
+.actual-time-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px 6px;
+  flex-wrap: wrap;
+}
+
+.time-label {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.time-label--scheduled {
+  opacity: 0.7;
+}
+
+.time-label--actual {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.time-label--active {
+  color: #34d399;
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+.time-label--complete {
+  color: #60a5fa;
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.6; }
+}
+
+.btn-start {
+  background: rgba(52, 211, 153, 0.15) !important;
+  border-color: #34d399 !important;
+  color: #34d399 !important;
+}
+.btn-start:hover {
+  background: rgba(52, 211, 153, 0.3) !important;
+}
+
+.btn-end {
+  background: rgba(239, 68, 68, 0.15) !important;
+  border-color: #ef4444 !important;
+  color: #ef4444 !important;
+}
+.btn-end:hover {
+  background: rgba(239, 68, 68, 0.3) !important;
+}
+
+
+/* ============================================================
+   Timeline: ghost (scheduled) bar overlay
+   ============================================================ */
+.tl-block--ghost {
+  opacity: 0.35;
+  border-style: dashed !important;
+}
+
+/* ============================================================
+   Timeline: actual bar overlay
+   ============================================================ */
+.tl-block--actual {
+  opacity: 1;
+  border-width: 2px !important;
+  z-index: 2;
+}
+
+/* ============================================================
+   Timeline legend: scheduled / actual swatches
+   ============================================================ */
+.tl-legend-ghost {
+  width: 14px; height: 14px;
+  border: 1.5px dashed var(--muted);
+  border-radius: 3px;
+  opacity: 0.5;
+  flex-shrink: 0;
+}
+
+.tl-legend-actual {
+  width: 14px; height: 14px;
+  border: 2px solid #60a5fa;
+  border-radius: 3px;
+  background: rgba(96, 165, 250, 0.25);
+  flex-shrink: 0;
+}
+
+
+/* ============================================================
+   Empty state
+   ============================================================ */
+.tl-empty { padding: 60px 20px; text-align: center; color: rgba(139,149,167,0.5); font-size: 15px; line-height: 1.8; }
+.tl-empty span { font-size: 13px; display: block; }
+
+
+/* ============================================================
+   Responsive
+   ============================================================ */
+@media (max-width: 560px) {
+  .tl-row-label, .tl-header-label { width: 80px; min-width: 80px; padding: 0 8px; }
+  .tl-row-name { font-size: 11px; }
+}
+
+
+/* ============================================================
+   Date navigation bar
+   ============================================================ */
+#dateNav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 10px 20px;
+  background: linear-gradient(180deg, rgba(16,26,48,0.7) 0%, rgba(11,18,34,0.5) 100%);
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  flex-wrap: wrap;
+}
+
+.date-nav-center {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 1 auto;
+}
+
+.date-display {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+  min-width: 200px;
+  text-align: center;
+}
+
+.date-nav-arrow {
+  appearance: none;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border, var(--outline));
+  color: var(--muted);
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s;
+  line-height: 1;
+  padding: 0;
+}
+.date-nav-arrow:hover {
+  background: rgba(96,165,250,0.1);
+  border-color: var(--primary);
+  color: var(--primary);
+  box-shadow: 0 0 8px rgba(96,165,250,0.2);
+}
+.date-nav-arrow:active {
+  transform: scale(0.93);
+}
+
+.date-today-btn {
+  appearance: none;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border, var(--outline));
+  color: var(--muted);
+  padding: 6px 16px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  flex-shrink: 0;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s;
+}
+.date-today-btn:hover {
+  background: rgba(96,165,250,0.1);
+  border-color: var(--primary);
+  color: var(--primary);
+  box-shadow: 0 0 8px rgba(96,165,250,0.2);
+}
+.date-today-btn--active {
+  background: rgba(96,165,250,0.14);
+  border-color: var(--primary);
+  color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(96,165,250,0.18);
+}
+.date-today-btn--active:hover {
+  background: rgba(96,165,250,0.22);
+}
+
+.date-input {
+  appearance: none;
+  background: rgba(11,18,34,0.8);
+  border: 1px solid var(--border, var(--outline));
+  color: var(--text);
+  border-radius: 8px;
+  padding: 5px 9px;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  color-scheme: dark;
+}
+.date-input:focus,
+.date-input:hover {
+  border-color: rgba(96,165,250,0.5);
+  box-shadow: 0 0 0 3px rgba(96,165,250,0.1);
+}
+
+@media (max-width: 560px) {
+  #dateNav {
+    padding: 8px 12px;
+    gap: 8px;
+  }
+  .date-display {
+    font-size: 13px;
+    min-width: 0;
+  }
+  .date-nav-center {
+    gap: 6px;
+  }
+  .date-input {
+    font-size: 11px;
+    padding: 4px 7px;
+  }
+}
+
+
+/* ============================================================
+   Editable actual times
+   ============================================================ */
+.editable-time {
+  cursor: pointer;
+  border-bottom: 1px dashed currentColor;
+  padding-bottom: 1px;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.editable-time:hover {
+  color: var(--primary);
+  border-color: var(--primary);
+}

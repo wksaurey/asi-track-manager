@@ -1,0 +1,177 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>ASI Control Center</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="csrf-token" content="{{ csrf_token }}" />
+    <link rel="icon" type="image/x-icon" href="{% static 'cal/img/ASI_Logo.svg' %}" />
+    <link rel="stylesheet" href="{% static 'cal/css/dashboard.css' %}" />
+  </head>
+  <body>
+
+    <header class="app-header">
+      <div class="title-row">
+        <img src="{% static 'cal/img/ASI_Logo.svg' %}" class="ASI-logo" alt="ASI Logo" />
+        <h1 class="brand-title">ASI Control Center</h1>
+
+        <div class="header-actions">
+          <a href="/cal/calendar/" class="back-link" title="Back to Calendar">&#8592; Calendar</a>
+
+          <div class="hamburger-wrap" id="headerHamburger">
+            <button class="hamburger-btn" aria-label="Open menu" aria-haspopup="true" aria-expanded="false">&#9776;</button>
+            <div class="hamburger-menu" role="menu" aria-hidden="true">
+              <button id="exportBtn" class="menu-item" role="menuitem">Export JSON</button>
+              <label for="importInput" class="menu-item" role="menuitem" tabindex="0">
+                Import JSON
+                <input id="importInput" type="file" accept="application/json" hidden />
+              </label>
+              <hr class="menu-sep" />
+              <button id="reloadBtn" class="menu-item" role="menuitem">Reload from Server</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- View tabs -->
+      <div class="view-tabs">
+        <button class="view-tab active" data-view="tracks">Tracks</button>
+        <button class="view-tab" data-view="timeline">Timeline</button>
+      </div>
+
+      <!-- Controls row (Tracks view) -->
+      <div class="controls-row" id="tracksControls">
+        <div class="search-wrap">
+          <label for="searchInput">Filter by person / text</label>
+          <input id="searchInput" type="text" placeholder="e.g., Hollis, Cody, Dozer, Water Truck..." />
+        </div>
+        <form id="addTrackForm" class="add-track-form add-track-form--stacked" autocomplete="off">
+          <div class="form-field">
+            <label for="newTrackName" class="field-label">Add Track</label>
+            <input id="newTrackName" type="text" placeholder="Track name (e.g., East Loop)" required />
+          </div>
+          <button type="submit" class="btn">Add</button>
+        </form>
+      </div>
+
+      <!-- Timeline controls (empty placeholder, reserved for future use) -->
+      <div class="hidden" id="timelineControls"></div>
+    </header>
+
+    <!-- Date navigation bar -->
+    <div id="dateNav">
+      <button id="datePrevBtn" class="date-nav-arrow" aria-label="Previous day">&#9664;</button>
+      <div class="date-nav-center">
+        <span id="dateDisplay" class="date-display"></span>
+        <input id="dateInput" type="date" class="date-input" aria-label="Pick a date" />
+      </div>
+      <button id="dateNextBtn" class="date-nav-arrow" aria-label="Next day">&#9654;</button>
+      <button id="dateTodayBtn" class="date-today-btn">Today</button>
+    </div>
+
+    <main>
+      <div id="tracksView">
+        <div id="tracksGrid" class="grid"></div>
+      </div>
+      <div id="timelineView" class="hidden">
+        <div id="timelineContainer"></div>
+      </div>
+    </main>
+
+    <footer class="app-footer">
+      <small>Track data is loaded from the server. Use Export JSON to back up or move the day's log between devices.</small>
+    </footer>
+
+
+    <!-- ================================================================
+         TEMPLATES
+         ================================================================ -->
+
+    <template id="trackCardTemplate">
+      <section class="track-card">
+        <div class="track-card__inner">
+          <header class="track-card__header">
+            <button class="channel-badge" title="Click to set channel">&#8212;</button>
+            <h2 class="track-name"></h2>
+            <div class="track-actions">
+              <button class="icon-btn add-event-btn" title="Add event">&#xff0b;</button>
+              <div class="menu-wrap">
+                <button class="menu-btn">&#8942;</button>
+                <div class="menu">
+                  <button class="menu-item add-note-toggle">Add Note</button>
+                  <button class="menu-item delete-track">Delete Track</button>
+                </div>
+              </div>
+            </div>
+          </header>
+
+          <div class="track-add-forms">
+            <form class="event-form hidden" autocomplete="off">
+              <div class="row">
+                <label>Time</label>
+                <input name="time" type="text" placeholder="e.g., 9:01-~11:30 or 10:21" required />
+              </div>
+              <div class="row">
+                <label>Description</label>
+                <input name="desc" type="text" placeholder="What is happening?" required />
+              </div>
+              <div class="row form-actions">
+                <button type="submit" class="btn">Add Event</button>
+                <button type="button" class="btn btn-outline cancel-event">Cancel</button>
+              </div>
+            </form>
+
+            <form class="note-form hidden" autocomplete="off">
+              <div class="row">
+                <label>Note</label>
+                <input name="note" type="text" placeholder="Quick note for this track..." required />
+              </div>
+              <div class="row form-actions">
+                <button type="submit" class="btn">Add Note</button>
+                <button type="button" class="btn btn-outline cancel-note">Cancel</button>
+              </div>
+            </form>
+          </div>
+
+          <div class="track-content">
+            <ol class="events-list"></ol>
+            <div class="notes-section">
+              <h3>Notes</h3>
+              <ul class="notes-list"></ul>
+            </div>
+          </div>
+        </div>
+      </section>
+    </template>
+
+    <!-- Channel badge added to event-main -->
+    <template id="eventItemTemplate">
+      <li class="event-item">
+        <div class="event-main">
+          <span class="time-chip"></span>
+          <div class="event-text"></div>
+          <button class="event-channel-badge" title="Click to set channel">&#8212;</button>
+        </div>
+        <div class="event-actions">
+          <button class="btn btn-xxs add-subnote">+ Sub-note</button>
+          <button class="btn btn-xxs btn-outline edit-event">Edit</button>
+          <button class="btn btn-xxs btn-danger delete-event">Delete</button>
+        </div>
+        <ul class="subnotes-list"></ul>
+      </li>
+    </template>
+
+    <template id="noteItemTemplate">
+      <li class="note-item">
+        <span class="note-text"></span>
+        <div class="note-actions">
+          <button class="btn btn-xxs btn-outline edit-note">Edit</button>
+          <button class="btn btn-xxs btn-danger delete-note">Delete</button>
+        </div>
+      </li>
+    </template>
+
+    <script src="{% static 'cal/js/dashboard.js' %}"></script>
+  </body>
+</html>

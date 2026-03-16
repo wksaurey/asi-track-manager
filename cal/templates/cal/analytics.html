@@ -1,0 +1,97 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'cal/css/analytics.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="analytics-page">
+  <!-- Toolbar with date range -->
+  <div class="analytics-toolbar">
+    <h2 class="analytics-title"><i class="fas fa-chart-bar"></i> Track Analytics</h2>
+    <div class="range-controls">
+      <div class="range-presets">
+        <button class="range-btn active" data-range="week">This Week</button>
+        <button class="range-btn" data-range="month">This Month</button>
+        <button class="range-btn" data-range="quarter">This Quarter</button>
+        <button class="range-btn" data-range="year">This Year</button>
+        <button class="range-btn" data-range="custom">Custom</button>
+      </div>
+      <div class="custom-range hidden" id="customRange">
+        <input type="date" id="rangeStart" class="range-input">
+        <span class="range-sep">to</span>
+        <input type="date" id="rangeEnd" class="range-input">
+        <button id="applyRange" class="btn btn-sm btn-primary">Apply</button>
+      </div>
+    </div>
+    <div class="range-display" id="rangeDisplay"></div>
+  </div>
+
+  <!-- Summary stat cards -->
+  <div class="stats-row">
+    <div class="stat-card">
+      <div class="stat-icon"><i class="fas fa-calendar-check"></i></div>
+      <div class="stat-body">
+        <div class="stat-value" id="totalEvents">--</div>
+        <div class="stat-label">Total Events</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon"><i class="fas fa-clock"></i></div>
+      <div class="stat-body">
+        <div class="stat-value" id="totalHours">--</div>
+        <div class="stat-label">Scheduled Hours</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon"><i class="fas fa-stopwatch"></i></div>
+      <div class="stat-body">
+        <div class="stat-value" id="avgAccuracy">--</div>
+        <div class="stat-label">Avg Start Delta</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon"><i class="fas fa-check-circle"></i></div>
+      <div class="stat-body">
+        <div class="stat-value" id="trackedRate">--</div>
+        <div class="stat-label">Tracked Rate</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Charts grid -->
+  <div class="charts-grid">
+    <div class="chart-card">
+      <h3>Track Utilization</h3>
+      <p class="chart-subtitle">Scheduled vs Actual Hours</p>
+      <canvas id="trackUtilChart"></canvas>
+    </div>
+    <div class="chart-card">
+      <h3>Booking Volume</h3>
+      <p class="chart-subtitle">Events per Day</p>
+      <canvas id="trendChart"></canvas>
+    </div>
+    <div class="chart-card">
+      <h3>Peak Hours</h3>
+      <p class="chart-subtitle">Event Start Times Distribution</p>
+      <canvas id="peakHoursChart"></canvas>
+    </div>
+    <div class="chart-card">
+      <h3>User Activity</h3>
+      <p class="chart-subtitle">Bookings by User</p>
+      <canvas id="userChart"></canvas>
+    </div>
+    <div class="chart-card chart-card--wide">
+      <h3>Asset Usage</h3>
+      <p class="chart-subtitle">Vehicles &amp; Operators</p>
+      <canvas id="assetChart"></canvas>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script src="{% static 'cal/js/analytics.js' %}"></script>
+{% endblock %}

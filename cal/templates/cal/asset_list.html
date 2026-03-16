@@ -1,0 +1,65 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Assets{% endblock %}
+
+{% block content %}
+<div class="page-container">
+
+  <div class="page-header">
+    <h2 class="page-heading">Asset Registry</h2>
+    {% if request.user.is_staff %}
+    <a class="btn" href="{% url 'cal:asset_create' %}">
+      <i class="fas fa-plus"></i> New Asset
+    </a>
+    {% endif %}
+  </div>
+
+  {% if grouped_assets %}
+    {% for type_label, type_value, group in grouped_assets %}
+    <h3 class="section-heading asset-section-heading asset-section-{{ type_value }}">
+      {{ type_label }}
+    </h3>
+    <div class="asset-card-group">
+      {% for asset in group %}
+      <div class="asset-card">
+        {% if request.user.is_staff %}
+        <form class="asset-card-delete-form" method="post" action="{% url 'cal:asset_delete' asset.id %}"
+              onsubmit="return confirm('Delete {{ asset.name|escapejs }}? This cannot be undone.')">
+          {% csrf_token %}
+          <button type="submit" class="asset-card-delete-btn" title="Delete {{ asset.name|escapejs }}">&times;</button>
+        </form>
+        {% endif %}
+        <div class="asset-card-body">
+          <strong class="asset-card-name">{{ asset.name }}</strong>
+          {% if asset.description %}
+            <p class="asset-card-desc">{{ asset.description }}</p>
+          {% endif %}
+        </div>
+        <div class="asset-card-actions">
+          <span class="type-badge badge-{{ asset.asset_type }}">{{ asset.get_asset_type_display }}</span>
+          <a class="btn btn-sm" href="{% url 'cal:asset_detail' asset.id %}">
+            <i class="fas fa-calendar-check"></i> Schedule
+          </a>
+          {% if request.user.is_staff %}
+          <a class="btn btn-sm btn-secondary" href="{% url 'cal:asset_edit' asset.id %}">
+            <i class="fas fa-edit"></i> Edit
+          </a>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endfor %}
+  {% else %}
+  <div class="empty-state">
+    <p>No assets yet.
+      {% if request.user.is_staff %}
+        <a href="{% url 'cal:asset_create' %}">Add your first asset.</a>
+      {% endif %}
+    </p>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

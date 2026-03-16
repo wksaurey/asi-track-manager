@@ -93,8 +93,10 @@ class Event(models.Model):
 
     title       = models.CharField(max_length=200)
     description = models.TextField()
-    start_time  = models.DateTimeField()
-    end_time    = models.DateTimeField()
+    start_time   = models.DateTimeField()
+    end_time     = models.DateTimeField()
+    actual_start = models.DateTimeField(null=True, blank=True)
+    actual_end   = models.DateTimeField(null=True, blank=True)
     assets      = models.ManyToManyField(
         Asset,
         blank=True,

@@ -7,14 +7,19 @@ Authentication is handled by Django's built-in auth framework via
 @login_required and request.user.is_staff.
 """
 
+import json
 from datetime import datetime, timedelta, date
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.shortcuts import render
-from django.http import HttpResponseRedirect
+from django.db.models import Count, Q
+from django.db.models.functions import ExtractHour
+from django.shortcuts import render, get_object_or_404, redirect
+from django.http import HttpResponseRedirect, JsonResponse
 from django.views import generic
+from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from django.urls import reverse
+from django.utils import timezone
 from django.utils.safestring import mark_safe
 from django.contrib.auth import authenticate, login, logout
 import calendar
@@ -400,4 +405,321 @@ def asset_detail(request, asset_id):
         'past':     past,
         'today':    today,
         'horizon':  horizon,
+    })
+
+
+# ── Dashboard ─────────────────────────────────────────────────────────────────
+
+@login_required
+def dashboard(request):
+    """
+    Control Center Dashboard — admin only.
+
+    Renders ``cal/dashboard.html`` with all track-type assets passed in context.
+    """
+    if not request.user.is_staff:
+        return HttpResponseRedirect(reverse('cal:calendar'))
+    tracks = Asset.objects.filter(asset_type=Asset.AssetType.TRACK)
+    return render(request, 'cal/dashboard.html', {'tracks': tracks})
+
+
+@login_required
+def dashboard_events_api(request):
+    """
+    JSON API — admin only.
+
+    Returns approved events for a specific day grouped by track asset name.
+    Accepts an optional ``?date=YYYY-MM-DD`` query parameter; defaults to today.
+
+    Response shape::
+
+        {
+            "date": "YYYY-MM-DD",
+            "tracks": {
+                "<track name>": {
+                    "id": <asset pk>,
+                    "events": [
+                        {
+                            "id": <event pk>,
+                            "title": "...",
+                            "description": "...",
+                            "start_time": "<ISO 8601>",
+                            "end_time": "<ISO 8601>",
+                            "is_approved": true
+                        },
+                        ...
+                    ]
+                },
+                ...
+            }
+        }
+    """
+    if not request.user.is_staff:
+        return JsonResponse({'error': 'Forbidden'}, status=403)
+
+    today = datetime.today().date()
+    date_param = request.GET.get('date')
+    if date_param:
+        try:
+            target_date = datetime.strptime(date_param, '%Y-%m-%d').date()
+        except ValueError:
+            target_date = today
+    else:
+        target_date = today
+
+    tracks = Asset.objects.filter(asset_type=Asset.AssetType.TRACK)
+
+    data = {}
+    for track in tracks:
+        events = (
+            track.events
+            .filter(is_approved=True, start_time__date=target_date)
+            .order_by('start_time')
+        )
+        data[track.name] = {
+            'id': track.pk,
+            'events': [
+                {
+                    'id':           ev.pk,
+                    'title':        ev.title,
+                    'description':  ev.description,
+                    'start_time':   ev.start_time.isoformat(),
+                    'end_time':     ev.end_time.isoformat(),
+                    'is_approved':  ev.is_approved,
+                    'actual_start': ev.actual_start.isoformat() if ev.actual_start else None,
+                    'actual_end':   ev.actual_end.isoformat() if ev.actual_end else None,
+                }
+                for ev in events
+            ],
+        }
+
+    return JsonResponse({'date': target_date.isoformat(), 'tracks': data})
+
+
+# ── Analytics ─────────────────────────────────────────────────────────────────
+
+@login_required
+def analytics(request):
+    if not request.user.is_staff:
+        return redirect('cal:calendar')
+    return render(request, 'cal/analytics.html')
+
+
+@login_required
+def analytics_api(request):
+    if not request.user.is_staff:
+        return JsonResponse({'error': 'Forbidden'}, status=403)
+
+    today = datetime.today().date()
+    start_str = request.GET.get('start')
+    end_str = request.GET.get('end')
+
+    try:
+        start_date = datetime.strptime(start_str, '%Y-%m-%d').date() if start_str else today - timedelta(days=today.weekday())
+    except ValueError:
+        start_date = today - timedelta(days=today.weekday())
+    try:
+        end_date = datetime.strptime(end_str, '%Y-%m-%d').date() if end_str else start_date + timedelta(days=6)
+    except ValueError:
+        end_date = start_date + timedelta(days=6)
+
+    # Base queryset — all events in range
+    events = Event.objects.filter(
+        start_time__date__gte=start_date,
+        start_time__date__lte=end_date,
+        is_approved=True,
+    )
+
+    # 1. Track utilization — compute in Python since SQLite lacks good duration support
+    track_assets = Asset.objects.filter(asset_type=Asset.AssetType.TRACK)
+    track_utilization = []
+    for track in track_assets:
+        track_events = events.filter(assets=track)
+        scheduled_secs = sum(
+            (e.end_time - e.start_time).total_seconds()
+            for e in track_events
+        )
+        actual_secs = sum(
+            (e.actual_end - e.actual_start).total_seconds()
+            for e in track_events
+            if e.actual_start and e.actual_end
+        )
+        track_utilization.append({
+            'name': track.name,
+            'scheduled_hours': round(scheduled_secs / 3600, 1),
+            'actual_hours': round(actual_secs / 3600, 1),
+            'event_count': track_events.count(),
+        })
+
+    # 2. Schedule accuracy — for events with actual times
+    events_with_actuals = events.filter(actual_start__isnull=False, actual_end__isnull=False)
+    start_deltas = []
+    end_deltas = []
+    for e in events_with_actuals:
+        start_deltas.append((e.actual_start - e.start_time).total_seconds() / 60)
+        end_deltas.append((e.actual_end - e.end_time).total_seconds() / 60)
+
+    schedule_accuracy = {
+        'avg_start_delta_minutes': round(sum(start_deltas) / len(start_deltas), 1) if start_deltas else 0,
+        'avg_end_delta_minutes': round(sum(end_deltas) / len(end_deltas), 1) if end_deltas else 0,
+        'events_with_actuals': len(start_deltas),
+        'total_events': events.count(),
+    }
+
+    # 3. Usage trends — events per day
+    from django.db.models.functions import TruncDate
+    daily = (
+        events
+        .annotate(day=TruncDate('start_time'))
+        .values('day')
+        .annotate(count=Count('id'))
+        .order_by('day')
+    )
+    # Fill in missing days with 0
+    from datetime import timedelta as td
+    day_counts = {str(row['day']): row['count'] for row in daily}
+    labels = []
+    counts = []
+    d = start_date
+    while d <= end_date:
+        labels.append(str(d))
+        counts.append(day_counts.get(str(d), 0))
+        d += td(days=1)
+
+    usage_trends = {'labels': labels, 'counts': counts}
+
+    # 4. Peak hours
+    peak = (
+        events
+        .annotate(hour=ExtractHour('start_time'))
+        .values('hour')
+        .annotate(count=Count('id'))
+        .order_by('hour')
+    )
+    peak_hours = [{'hour': r['hour'], 'count': r['count']} for r in peak]
+
+    # 5. User activity
+    all_events_in_range = Event.objects.filter(
+        start_time__date__gte=start_date,
+        start_time__date__lte=end_date,
+    )
+    user_data = (
+        all_events_in_range
+        .filter(created_by__isnull=False)
+        .values('created_by__username')
+        .annotate(
+            total=Count('id'),
+            approved=Count('id', filter=Q(is_approved=True)),
+        )
+        .order_by('-total')
+    )
+    user_activity = [
+        {
+            'username': r['created_by__username'],
+            'total': r['total'],
+            'approved': r['approved'],
+            'pending': r['total'] - r['approved'],
+        }
+        for r in user_data
+    ]
+
+    # 6. Asset usage (vehicles and operators)
+    non_track_assets = Asset.objects.exclude(asset_type=Asset.AssetType.TRACK)
+    asset_usage = []
+    for asset in non_track_assets:
+        asset_events = events.filter(assets=asset)
+        sched_secs = sum(
+            (e.end_time - e.start_time).total_seconds()
+            for e in asset_events
+        )
+        asset_usage.append({
+            'name': asset.name,
+            'type': asset.asset_type,
+            'event_count': asset_events.count(),
+            'total_hours': round(sched_secs / 3600, 1),
+        })
+
+    return JsonResponse({
+        'range': {'start': str(start_date), 'end': str(end_date)},
+        'track_utilization': track_utilization,
+        'schedule_accuracy': schedule_accuracy,
+        'usage_trends': usage_trends,
+        'peak_hours': peak_hours,
+        'user_activity': user_activity,
+        'asset_usage': asset_usage,
+    })
+
+
+@csrf_exempt
+@login_required
+def dashboard_stamp_actual(request, event_id):
+    """
+    JSON API — admin only.
+
+    Stamps actual start or end times on an event.
+    Accepts POST with a JSON body containing an ``action`` field:
+
+    - ``"start"``       — sets ``actual_start`` to now (or ``time`` if provided).
+    - ``"end"``         — sets ``actual_end`` to now (or ``time`` if provided).
+    - ``"clear_start"`` — clears ``actual_start``.
+    - ``"clear_end"``   — clears ``actual_end``.
+
+    Optional ``time`` field: an ISO 8601 string or ``"HH:MM"`` (combined with
+    the event's date).  When omitted, the current time is used.
+
+    URL: /cal/api/event/<event_id>/stamp/
+    """
+    if not request.user.is_staff:
+        return JsonResponse({'error': 'Forbidden'}, status=403)
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+
+    try:
+        event = Event.objects.get(pk=event_id)
+    except Event.DoesNotExist:
+        return JsonResponse({'error': 'Not found'}, status=404)
+
+    body = json.loads(request.body)
+    action = body.get('action')
+    time_str = body.get('time')  # Optional: ISO 8601 string or "HH:MM"
+
+    # Parse the custom time if provided
+    custom_time = None
+    if time_str:
+        try:
+            # Try full ISO format first
+            custom_time = datetime.fromisoformat(time_str.replace('Z', '+00:00'))
+            if timezone.is_naive(custom_time):
+                custom_time = timezone.make_aware(custom_time)
+        except (ValueError, TypeError):
+            try:
+                # Try HH:MM format — combine with event's date
+                parts = time_str.strip().split(':')
+                if len(parts) == 2:
+                    h, m = int(parts[0]), int(parts[1])
+                    event_date = event.start_time.date()
+                    naive = datetime.combine(event_date, datetime.min.time().replace(hour=h, minute=m))
+                    custom_time = timezone.make_aware(naive)
+            except (ValueError, TypeError):
+                pass
+
+    if action == 'start':
+        event.actual_start = custom_time or timezone.now()
+        event.save(update_fields=['actual_start'])
+    elif action == 'end':
+        event.actual_end = custom_time or timezone.now()
+        event.save(update_fields=['actual_end'])
+    elif action == 'clear_start':
+        event.actual_start = None
+        event.save(update_fields=['actual_start'])
+    elif action == 'clear_end':
+        event.actual_end = None
+        event.save(update_fields=['actual_end'])
+    else:
+        return JsonResponse({'error': 'Invalid action'}, status=400)
+
+    return JsonResponse({
+        'id': event.pk,
+        'actual_start': event.actual_start.isoformat() if event.actual_start else None,
+        'actual_end':   event.actual_end.isoformat() if event.actual_end else None,
     })

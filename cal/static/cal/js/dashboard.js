@@ -28,7 +28,7 @@
 // Configuration
 // ============================================================
 
-const CURRENT_USER_NAME = "Hollis";
+const CURRENT_USER_NAME = (document.getElementById("currentUserName") || {}).value || "";
 const API_URL = "/cal/api/dashboard-events/";
 
 
@@ -136,6 +136,15 @@ function isoToLocalHHMM(isoStr) {
   } catch {
     return null;
   }
+}
+
+/**
+ * Escape HTML special characters to prevent XSS when using innerHTML.
+ */
+function escapeHTML(str) {
+  const div = document.createElement("div");
+  div.textContent = str;
+  return div.innerHTML;
 }
 
 
@@ -294,9 +303,10 @@ const STAMP_API_URL = "/cal/api/event/{id}/stamp/";
 async function stampActualTime(eventId, action, time) {
   try {
     const url  = STAMP_API_URL.replace("{id}", eventId);
+    const csrf = document.querySelector('meta[name="csrf-token"]')?.content || "";
     const resp = await fetch(url, {
       method:  "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-CSRFToken": csrf },
       body:    JSON.stringify(time ? { action, time } : { action }),
     });
     if (!resp.ok) {
@@ -357,13 +367,14 @@ async function importFile(file) {
 // ============================================================
 
 function highlightTerm(text, term) {
-  if (!term) return text;
+  if (!term) return escapeHTML(text);
+  const safe = escapeHTML(text);
   const esc = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return text.replace(new RegExp(`(${esc})`, "ig"), "<span class='highlight'>$1</span>");
+  return safe.replace(new RegExp(`(${esc})`, "ig"), "<span class='highlight'>$1</span>");
 }
 
 function smartHighlight(text) {
-  return CURRENT_USER_NAME ? highlightTerm(text, CURRENT_USER_NAME) : text;
+  return CURRENT_USER_NAME ? highlightTerm(text, CURRENT_USER_NAME) : escapeHTML(text);
 }
 
 
@@ -1060,9 +1071,14 @@ function renderTimeline() {
     });
   });
 
-  document.addEventListener("click", () => {
+  // Remove previous listener to prevent leaks on re-render
+  if (renderTimeline._docClickHandler) {
+    document.removeEventListener("click", renderTimeline._docClickHandler);
+  }
+  renderTimeline._docClickHandler = () => {
     if (activeTooltip) { activeTooltip.classList.add("hidden"); activeTooltip = null; }
-  });
+  };
+  document.addEventListener("click", renderTimeline._docClickHandler);
 }
 
 

@@ -12,6 +12,16 @@
   --radius:     10px;
 }
 
+/* ── Scrollbar ──────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 7px; height: 7px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(46,168,229,0.28); border-radius: 999px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(46,168,229,0.50); }
+
+html.dark-theme ::-webkit-scrollbar-track { background: rgba(255,255,255,0.03); }
+html.dark-theme ::-webkit-scrollbar-thumb { background: rgba(46,168,229,0.38); }
+html.dark-theme ::-webkit-scrollbar-thumb:hover { background: rgba(46,168,229,0.65); }
+
 /* ── Base ───────────────────────────────────────────────────── */
 body {
   font-family: "Lato", "Helvetica Neue", Helvetica, Arial, sans-serif;
@@ -196,6 +206,33 @@ table.calendar {
   border-collapse: collapse;
 }
 
+/* Month view: fill available height so the grid never grows with event count */
+.month-table,
+table.calendar {
+  table-layout: fixed;
+  height: 100%;
+}
+
+/* When the month table is present, stretch the page to fill the viewport */
+body:has(.month-table) {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+body:has(.month-table) .cal-body {
+  flex: 1;
+  min-height: 0;
+  padding-bottom: 0;
+  display: flex;
+  flex-direction: column;
+}
+body:has(.month-table) .month-table,
+body:has(.month-table) table.calendar {
+  flex: 1;
+  min-height: 0;
+}
+
 /* Month month name header (e.g. "March 2026") */
 .month-table .month,
 table.calendar .month {
@@ -203,7 +240,7 @@ table.calendar .month {
   font-weight: 700;
   color: #023447;
   text-align: center;
-  padding: 16px 0 14px;
+  padding: 12px 0;
   background: linear-gradient(180deg, rgba(46,168,229,0.10), rgba(46,168,229,0.03));
   letter-spacing: 0.01em;
 }
@@ -211,7 +248,7 @@ table.calendar .month {
 /* Day-of-week header row */
 .month-table th,
 table.calendar th {
-  padding: 10px 6px;
+  padding: 8px 6px;
   text-align: center;
   font-size: 12px;
   font-weight: 700;
@@ -222,16 +259,37 @@ table.calendar th {
   border-bottom: 2px solid var(--border);
 }
 
-/* Day cells */
+/* Day cells — position:relative so inner div can be absolute */
 .month-table td,
 table.calendar td {
   width: 14.28%;
-  min-height: 130px;
-  height: 130px;
+  height: 1px;      /* in a fixed-layout table this becomes "share available height" */
   vertical-align: top;
-  padding: 10px 10px 14px;
+  padding: 0;
   border-right: 1px solid rgba(46,168,229,0.10);
   border-bottom: 1px solid rgba(46,168,229,0.10);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Absolutely-positioned inner div fills the cell without affecting row height */
+.day-cell-inner {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  padding: 6px 8px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Event list fills remaining space and scrolls when it overflows */
+.month-table td ul,
+table.calendar td ul {
+  flex: 1;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0;
+  min-height: 0;
 }
 .month-table tr:last-child td,
 table.calendar tr:last-child td { border-bottom: none; }
@@ -993,6 +1051,45 @@ html.dark-theme .legend-item { color: #7090a0; }
 .trk-td.today   { background: rgba(46,168,229,0.05); }
 .trk-td.weekend { background: rgba(99,102,241,0.025); }
 
+/* Subtrack label cells in the week view */
+.trk-sublabel-cell {
+  width: 80px;
+  min-width: 60px;
+  position: sticky;
+  left: 120px;
+  background: var(--card);
+  z-index: 1;
+  border-right: 1px solid var(--border);
+  padding: 6px 6px;
+  vertical-align: top;
+}
+
+.trk-subname {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+  word-break: break-word;
+  font-style: italic;
+}
+
+/* Parent label cell when it has subtracks */
+.trk-label-has-sub {
+  border-right: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+/* Cell that spans all subtrack rows for a full-track event */
+.trk-td-fulltrack {
+  background: rgba(16,185,129,0.04);
+}
+
+/* Subtrack row cells (smaller) */
+.trk-td.trk-td-sub {
+  min-height: 50px;
+  padding: 5px 6px;
+  font-size: 12px;
+}
+
 .trk-events {
   display: flex;
   flex-direction: column;
@@ -1025,6 +1122,9 @@ html.dark-theme .trk-td                 { border-color: rgba(46,168,229,0.10); }
 html.dark-theme .trk-td.today           { background: rgba(46,168,229,0.07); }
 html.dark-theme .trk-td.weekend         { background: rgba(99,102,241,0.04); }
 html.dark-theme .trk-gap                { color: rgba(46,168,229,0.20); }
+html.dark-theme .trk-sublabel-cell      { background: #1a2b38; border-color: rgba(46,168,229,0.14); }
+html.dark-theme .trk-subname            { color: #5a8090; }
+html.dark-theme .trk-td-fulltrack       { background: rgba(16,185,129,0.07); }
 
 html.dark-theme .wk-dayname       { color: #6090a0; }
 html.dark-theme .wk-daynum        { color: #c0d8e4; }
@@ -1034,7 +1134,9 @@ html.dark-theme .wk-today-num    { background: var(--primary); color: #fff; }
 
 /* ── Responsive ─────────────────────────────────────────────── */
 @media (max-width: 900px) {
-  .month-table td, table.calendar td { min-height: 90px; height: auto; padding: 8px; }
+
+  .month-table td, table.calendar td { padding: 4px 5px; }
+  .month-table td ul, table.calendar td ul { max-height: 60px; }
   .cal-toolbar                       { top: 0; }
 }
 
@@ -1051,7 +1153,7 @@ html.dark-theme .wk-today-num    { background: var(--primary); color: #fff; }
 /* ── Gantt day view ─────────────────────────────────────────── */
 
 .calendar.gantt-view {
-  overflow-x: auto;
+  overflow-x: hidden;
 }
 
 .gantt-axis-row {
@@ -1065,15 +1167,14 @@ html.dark-theme .wk-today-num    { background: var(--primary); color: #fff; }
   flex-shrink: 0;
 }
 .gantt-axis {
-  position: relative;
   flex: 1;
   height: 24px;
-  min-width: 600px;
+  min-width: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
 }
 .gantt-hour-marker {
-  position: absolute;
-  top: 0;
-  transform: translateX(-50%);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1110,11 +1211,37 @@ html.dark-theme .wk-today-num    { background: var(--primary); color: #fff; }
   border-right: 1px solid var(--border);
   background: rgba(46,168,229,0.03);
 }
+.gantt-sublabel-spacer {
+  width: 100px;
+  flex-shrink: 0;
+}
+.gantt-sublabel-col {
+  width: 100px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border);
+  background: rgba(46,168,229,0.015);
+}
+.gantt-subtrack-name {
+  height: 36px;
+  display: flex;
+  align-items: center;
+  padding: 0 8px 0 10px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+  font-style: italic;
+  border-bottom: 1px solid rgba(46,168,229,0.07);
+}
+.gantt-subtrack-name:last-child {
+  border-bottom: none;
+}
 
 .gantt-lane {
   flex: 1;
   position: relative;
-  min-width: 600px;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   padding: 0;
@@ -1132,6 +1259,52 @@ html.dark-theme .wk-today-num    { background: var(--primary); color: #fff; }
   height: 36px;
   flex-shrink: 0;
 }
+
+/* ── Subtrack-specific Gantt rows ────────────────────────────── */
+
+/* Lane container for a track that has subtracks */
+.gantt-lane-subtracks {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Each subtrack within a track row — now just a lane, no inline label */
+.gantt-subtrack-row {
+  position: relative;
+  height: 36px;
+  flex-shrink: 0;
+  border-bottom: 1px solid rgba(46,168,229,0.07);
+}
+.gantt-subtrack-row:last-child {
+  border-bottom: none;
+}
+
+/* Overlay for full-track (parent) events — spans all subtrack rows */
+.gantt-fulltrack-overlay {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  pointer-events: none;   /* subtrack events behind it remain clickable */
+}
+.gantt-fulltrack-overlay .gantt-block {
+  pointer-events: auto;
+}
+
+/* Full-track blocks span the full height of the overlay (both subtrack rows) */
+.gantt-block.gantt-fulltrack-block {
+  top: 4px;
+  height: calc(100% - 8px);
+  opacity: 0.88;
+  border-top: 2px solid rgba(255,255,255,0.25);
+}
+
+html.dark-theme .gantt-sublabel-col  { background: rgba(46,168,229,0.025); border-color: rgba(46,168,229,0.12); }
+html.dark-theme .gantt-subtrack-name { color: #5a8090; border-color: rgba(46,168,229,0.08); }
+html.dark-theme .gantt-subtrack-row  { border-color: rgba(46,168,229,0.08); }
 
 .gantt-block {
   position: absolute;

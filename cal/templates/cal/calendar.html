@@ -68,6 +68,34 @@
 {% block script %}
 {% if view == 'month' %}
 <script>
+  // Equalize week row heights so all rows are the same regardless of event count.
+  // Clone the table with height:auto to measure natural header heights, unaffected
+  // by the browser's proportional table-height distribution algorithm.
+  (function() {
+    function equalizeRows() {
+      var table = document.querySelector('table.calendar');
+      if (!table) return;
+      var rows = Array.from(table.querySelectorAll('tr'));
+      var weekRows = rows.slice(2);
+      if (!weekRows.length) return;
+
+      // Measure natural header heights via an off-screen auto-height clone
+      var clone = table.cloneNode(true);
+      clone.style.cssText = 'position:absolute;visibility:hidden;height:auto;top:-9999px;width:' + table.offsetWidth + 'px';
+      document.body.appendChild(clone);
+      var cloneRows = clone.querySelectorAll('tr');
+      var headerH = cloneRows[0].offsetHeight + cloneRows[1].offsetHeight;
+      document.body.removeChild(clone);
+
+      var tableH = table.getBoundingClientRect().height;
+      var rowH   = Math.floor((tableH - headerH) / weekRows.length);
+      if (rowH < 20) return;
+      weekRows.forEach(function(r) { r.style.height = rowH + 'px'; });
+    }
+    equalizeRows();
+    window.addEventListener('resize', equalizeRows);
+  })();
+
   // Show the day-add-overlay only while the user's mouse is inside that td.
   // Inline styles take priority over any stylesheet, making this robust across browsers.
   document.querySelectorAll('.month-table td, table.calendar td').forEach(function(td) {

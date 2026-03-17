@@ -110,7 +110,14 @@ class Calendar(HTMLCalendar):
                 f'<span class="date">{day}</span>'
             )
             add_link = f'<a class="day-add-overlay" href="{new_url}" title="Add event">+</a>'
-            return f'<td{td_cls}><div class="day-cell-header">{date_num}{add_link}</div><ul>{d}</ul></td>'
+            return (
+                f'<td{td_cls}>'
+                f'<div class="day-cell-inner">'
+                f'<div class="day-cell-header">{date_num}{add_link}</div>'
+                f'<ul>{d}</ul>'
+                f'</div>'
+                f'</td>'
+            )
         return '<td class="noday"></td>'
 
     def formatweek(self, theweek, events):
@@ -147,10 +154,17 @@ class Calendar(HTMLCalendar):
 
         Rows    = all Track assets (asset_type='track'), ordered by name.
         Columns = fixed 6:00 AM to 8:00 PM time axis (840 minutes).
+
+        Subtrack support:
+        - Tracks with subtracks render one Gantt row per subtrack.
+        - Full-track events (booked on the parent asset) span ALL subtrack
+          rows using a CSS variable (--subtrack-span) and absolute positioning.
+        - Tracks without subtracks render as a single row (unchanged).
+
         Events are rendered as proportional blocks: left% = (start - 6am) / 840 * 100,
         width% = duration / 840 * 100. Events partially outside the range are clamped.
         Events entirely outside 6am-8pm are skipped (zero-width after clamping).
-        Overlapping events on the same track are stacked in sub-rows.
+        Overlapping events on the same sub-row are stacked further via _assign_rows.
         Only track-type assets are shown; vehicle/operator events are not shown.
         """
         GANTT_START = 6    # 6:00 AM
@@ -160,11 +174,16 @@ class Calendar(HTMLCalendar):
         today_pfx = 'Today &mdash; ' if is_today else ''
         title     = f'{today_pfx}{day_date.strftime("%A, %B %d, %Y")}'
 
-        tracks = Asset.objects.filter(
-            asset_type=Asset.AssetType.TRACK
-        ).order_by('name')
+        # Fetch only top-level tracks (parent=None), ordered by name.
+        # Each track's subtracks are prefetched via 'subtracks'.
+        parent_tracks = list(
+            Asset.objects.filter(
+                asset_type=Asset.AssetType.TRACK,
+                parent__isnull=True,
+            ).prefetch_related('subtracks').order_by('name')
+        )
 
-        if not tracks.exists():
+        if not parent_tracks:
             return (
                 f'<div class="calendar day-view gantt-view">'
                 f'<div class="day-view-title">{title}</div>'
@@ -172,7 +191,7 @@ class Calendar(HTMLCalendar):
                 f'</div>'
             )
 
-        # Single query for all track events on this day.
+        # Single query for all track events on this day (both parent + subtrack assets).
         all_events = list(
             Event.objects.filter(
                 assets__asset_type=Asset.AssetType.TRACK,
@@ -182,69 +201,135 @@ class Calendar(HTMLCalendar):
             ).prefetch_related('assets').distinct()
         )
 
+        # Build a helper: event_asset_ids[ev.pk] = set of asset PKs for fast lookup
+        event_asset_ids = {
+            ev.pk: {a.pk for a in ev.assets.all()}
+            for ev in all_events
+        }
+
         # ── Time axis ────────────────────────────────────────────────
         axis_markers = ''
         for h in range(GANTT_START, GANTT_START + 15):  # 6am through 8pm inclusive
             pct   = round((h - GANTT_START) * 60 / GANTT_MINS * 100, 4)
             label = f'{h % 12 or 12}{"am" if h < 12 else "pm"}'
             axis_markers += (
-                f'<div class="gantt-hour-marker" style="left:{pct}%">'
+                f'<div class="gantt-hour-marker">'
                 f'<span class="gantt-hour-label">{label}</span>'
                 f'</div>'
             )
         axis_row = (
             f'<div class="gantt-axis-row">'
             f'<div class="gantt-track-label-spacer"></div>'
+            f'<div class="gantt-sublabel-spacer"></div>'
             f'<div class="gantt-axis">{axis_markers}</div>'
             f'</div>'
         )
 
+        def _make_block(ev, extra_css=''):
+            """Build the HTML for a single Gantt event block."""
+            origin    = ev.start_time.replace(hour=GANTT_START, minute=0, second=0, microsecond=0)
+            start_off = max(0, int((ev.start_time - origin).total_seconds()) // 60)
+            end_off   = min(GANTT_MINS, int((ev.end_time - origin).total_seconds()) // 60)
+            width_m   = max(0, end_off - start_off)
+            if width_m == 0:
+                return ''
+            left_pct  = round(start_off / GANTT_MINS * 100, 4)
+            width_pct = round(width_m   / GANTT_MINS * 100, 4)
+            edit_url  = reverse('cal:event_edit', args=(ev.id,))
+            css       = self._event_classes(ev) + (f' {extra_css}' if extra_css else '')
+            t_start   = self._fmt_time(ev.start_time)
+            t_end     = self._fmt_time(ev.end_time)
+            return (
+                f'<a class="gantt-block {css}" href="{edit_url}"'
+                f' style="left:{left_pct}%;width:{width_pct}%"'
+                f' title="{escape(ev.title)}">'
+                f'<span class="gantt-block-title">{escape(ev.title)}</span>'
+                f'<span class="gantt-block-time">{t_start}&ndash;{t_end}</span>'
+                f'</a>'
+            )
+
         # ── Track rows ───────────────────────────────────────────────
         rows_html = ''
-        for track in tracks:
-            track_events = sorted(
-                [ev for ev in all_events
-                 if any(a.id == track.id for a in ev.assets.all())],
-                key=lambda ev: ev.start_time,
-            )
-            assigned, n_rows = self._assign_rows(track_events)
+        for track in parent_tracks:
+            subtracks = list(track.subtracks.order_by('name'))
 
-            sub_rows = [[] for _ in range(max(n_rows, 1))]
-            for ev, row_idx in assigned:
-                sub_rows[row_idx].append(ev)
+            if subtracks:
+                # ── Track with subtracks ─────────────────────────────
+                # Parent-booked events span all subtrack rows.
+                # Subtrack-booked events appear only in their own row.
 
-            sub_rows_html = ''
-            for sub_row_events in sub_rows:
-                blocks = ''
-                for ev in sub_row_events:
-                    origin    = ev.start_time.replace(hour=GANTT_START, minute=0, second=0, microsecond=0)
-                    start_off = max(0, int((ev.start_time - origin).total_seconds()) // 60)
-                    end_off   = min(GANTT_MINS, int((ev.end_time - origin).total_seconds()) // 60)
-                    width_m   = max(0, end_off - start_off)
-                    if width_m == 0:
-                        continue
-                    left_pct  = round(start_off / GANTT_MINS * 100, 4)
-                    width_pct = round(width_m   / GANTT_MINS * 100, 4)
-                    edit_url  = reverse('cal:event_edit', args=(ev.id,))
-                    css       = self._event_classes(ev)
-                    t_start   = self._fmt_time(ev.start_time)
-                    t_end     = self._fmt_time(ev.end_time)
-                    blocks += (
-                        f'<a class="gantt-block {css}" href="{edit_url}"'
-                        f' style="left:{left_pct}%;width:{width_pct}%"'
-                        f' title="{escape(ev.title)}">'
-                        f'<span class="gantt-block-title">{escape(ev.title)}</span>'
-                        f'<span class="gantt-block-time">{t_start}&ndash;{t_end}</span>'
-                        f'</a>'
+                # Events booked directly on the parent (full-track)
+                parent_events = sorted(
+                    [ev for ev in all_events if track.pk in event_asset_ids[ev.pk]],
+                    key=lambda ev: ev.start_time,
+                )
+                n_sub = len(subtracks)
+
+                # Build one sub-row per subtrack (label lives in the track-label column)
+                sub_rows_html = ''
+                subtrack_names_html = ''
+                for sub in subtracks:
+                    sub_events = sorted(
+                        [ev for ev in all_events if sub.pk in event_asset_ids[ev.pk]],
+                        key=lambda ev: ev.start_time,
                     )
-                sub_rows_html += f'<div class="gantt-sub-row">{blocks}</div>'
+                    assigned, n_rows = self._assign_rows(sub_events)
+                    row_buckets = [[] for _ in range(max(n_rows, 1))]
+                    for ev, row_idx in assigned:
+                        row_buckets[row_idx].append(ev)
 
-            rows_html += (
-                f'<div class="gantt-row" style="--sub-rows:{max(n_rows,1)}">'
-                f'<div class="gantt-track-label">{escape(track.name)}</div>'
-                f'<div class="gantt-lane">{sub_rows_html}</div>'
-                f'</div>'
-            )
+                    inner_rows = ''
+                    for bucket in row_buckets:
+                        blocks = ''.join(_make_block(ev) for ev in bucket)
+                        inner_rows += f'<div class="gantt-sub-row">{blocks}</div>'
+
+                    sub_rows_html += f'<div class="gantt-subtrack-row">{inner_rows}</div>'
+                    subtrack_names_html += (
+                        f'<span class="gantt-subtrack-name">{escape(sub.name)}</span>'
+                    )
+
+                # Full-track (parent) events rendered as an overlay spanning all sub-rows.
+                parent_blocks = ''.join(_make_block(ev, 'gantt-fulltrack-block') for ev in parent_events)
+                parent_overlay = (
+                    f'<div class="gantt-fulltrack-overlay" style="--subtrack-count:{n_sub}">'
+                    f'{parent_blocks}'
+                    f'</div>'
+                ) if parent_blocks else ''
+
+                rows_html += (
+                    f'<div class="gantt-row gantt-row-has-subtracks" style="--sub-rows:{n_sub}">'
+                    f'<div class="gantt-track-label">{escape(track.name)}</div>'
+                    f'<div class="gantt-sublabel-col">{subtrack_names_html}</div>'
+                    f'<div class="gantt-lane gantt-lane-subtracks">'
+                    f'{parent_overlay}'
+                    f'{sub_rows_html}'
+                    f'</div>'
+                    f'</div>'
+                )
+            else:
+                # ── Track without subtracks (original behaviour) ──────
+                track_events = sorted(
+                    [ev for ev in all_events if track.pk in event_asset_ids[ev.pk]],
+                    key=lambda ev: ev.start_time,
+                )
+                assigned, n_rows = self._assign_rows(track_events)
+
+                sub_rows = [[] for _ in range(max(n_rows, 1))]
+                for ev, row_idx in assigned:
+                    sub_rows[row_idx].append(ev)
+
+                sub_rows_html = ''
+                for sub_row_events in sub_rows:
+                    blocks = ''.join(_make_block(ev) for ev in sub_row_events)
+                    sub_rows_html += f'<div class="gantt-sub-row">{blocks}</div>'
+
+                rows_html += (
+                    f'<div class="gantt-row" style="--sub-rows:{max(n_rows,1)}">'
+                    f'<div class="gantt-track-label">{escape(track.name)}</div>'
+                    f'<div class="gantt-sublabel-col"></div>'
+                    f'<div class="gantt-lane">{sub_rows_html}</div>'
+                    f'</div>'
+                )
 
         return (
             f'<div class="calendar day-view gantt-view">'
@@ -265,19 +350,28 @@ class Calendar(HTMLCalendar):
         Each cell shows events booked for that track on that day, or a gap
         indicator ('—') if empty.
 
+        Subtrack support:
+        - Tracks with subtracks render as TWO rows (one per subtrack), with
+          the track name cell spanning both rows (rowspan=2).
+        - Full-track events (booked on the parent) appear in a merged cell
+          that spans both subtrack rows.
+        - Tracks with no subtracks remain as single rows (unchanged).
+
         NOTE: Intentionally ignores self.asset_id — the track view shows all
         tracks regardless of the asset filter. Documented here for future maintainers.
         """
         start = start_date - timedelta(days=start_date.weekday())  # snap to Monday
         end   = start + timedelta(days=6)
 
-        tracks = Asset.objects.filter(
-            asset_type=Asset.AssetType.TRACK
-        ).order_by('name')
+        # Fetch only top-level tracks; prefetch their subtracks.
+        parent_tracks = list(
+            Asset.objects.filter(
+                asset_type=Asset.AssetType.TRACK,
+                parent__isnull=True,
+            ).prefetch_related('subtracks').order_by('name')
+        )
 
         # Single query for all track-related events this week.
-        # .distinct() prevents duplicates from the M2M join when an event
-        # has multiple track assets.
         events = list(
             Event.objects.filter(
                 assets__asset_type=Asset.AssetType.TRACK,
@@ -286,7 +380,13 @@ class Calendar(HTMLCalendar):
             ).prefetch_related('assets').distinct()
         )
 
-        # Week range label — same format as formatweekview
+        # Build a lookup: event_asset_ids[ev.pk] = set of asset PKs
+        event_asset_ids = {
+            ev.pk: {a.pk for a in ev.assets.all()}
+            for ev in events
+        }
+
+        # Week range label
         if start.month == end.month:
             label = f'{start.strftime("%B %d")} &ndash; {end.strftime("%d, %Y")}'
         else:
@@ -310,9 +410,33 @@ class Calendar(HTMLCalendar):
                 f'</th>'
             )
 
+        def _day_events_for_asset(asset_pk, day):
+            """Return sorted events for a given asset PK on a given day."""
+            return sorted(
+                [
+                    ev for ev in events
+                    if ev.start_time.date() == day
+                    and asset_pk in event_asset_ids[ev.pk]
+                ],
+                key=lambda ev: ev.start_time,
+            )
+
+        def _cell_html(day_evs, td_cls):
+            """Render a <td> cell with a list of events or a gap marker."""
+            if day_evs:
+                items = ''.join(
+                    f'<li class="{self._event_classes(ev)}">{ev.get_html_url}</li>'
+                    for ev in day_evs
+                )
+                content = f'<ul class="trk-events">{items}</ul>'
+            else:
+                content = '<span class="trk-gap">&#8212;</span>'
+            return f'<td class="{td_cls}">{content}</td>'
+
         # ── Body rows — one per track ────────────────────────────────────────
         body_rows = ''
-        for track in tracks:
+        for track in parent_tracks:
+            subtracks = list(track.subtracks.order_by('name'))
             row = (
                 f'<td class="trk-label-cell">'
                 f'<span class="trk-name">{escape(track.name)}</span>'
@@ -322,30 +446,14 @@ class Calendar(HTMLCalendar):
                 td_classes = ['trk-td']
                 if day == self.today: td_classes.append('today')
                 if i >= 5:            td_classes.append('weekend')
-                td_cls = ' '.join(td_classes)
-
-                # Filter events for this track on this day.
-                # ev.assets.all() uses the prefetch cache — no extra queries.
-                day_events = sorted(
-                    [
-                        ev for ev in events
-                        if ev.start_time.date() == day
-                        and any(a.id == track.id for a in ev.assets.all())
-                    ],
+                td_cls  = ' '.join(td_classes)
+                # Collect events for the parent track and all its subtracks.
+                all_pks = [track.pk] + [s.pk for s in subtracks]
+                day_evs = sorted(
+                    {ev for pk in all_pks for ev in _day_events_for_asset(pk, day)},
                     key=lambda ev: ev.start_time,
                 )
-
-                if day_events:
-                    items = ''.join(
-                        f'<li class="{self._event_classes(ev)}">{ev.get_html_url}</li>'
-                        for ev in day_events
-                    )
-                    cell_content = f'<ul class="trk-events">{items}</ul>'
-                else:
-                    cell_content = '<span class="trk-gap">&#8212;</span>'
-
-                row += f'<td class="{td_cls}">{cell_content}</td>'
-
+                row += _cell_html(day_evs, td_cls)
             body_rows += f'<tr>{row}</tr>'
 
         if not body_rows:

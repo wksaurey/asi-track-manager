@@ -18,6 +18,11 @@ class Asset(models.Model):
 
     Each asset belongs to one of three types (vehicle, track, operator) and
     can be linked to many events via a ManyToMany relationship.
+
+    Tracks may optionally have a parent track (subtrack support).  A track
+    with parent=None is a top-level track; a track with parent set is a
+    subtrack of that parent.  Only asset_type='track' assets should use
+    this field.
     """
 
     class AssetType(models.TextChoices):
@@ -28,12 +33,35 @@ class Asset(models.Model):
     name        = models.CharField(max_length=200, unique=True)
     asset_type  = models.CharField(max_length=20, choices=AssetType.choices)
     description = models.TextField(blank=True)
+    parent      = models.ForeignKey(
+        'self',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='subtracks',
+        help_text='Parent track (only for subtracks)',
+    )
 
     class Meta:
         ordering = ['asset_type', 'name']
 
     def __str__(self):
         return f'{self.get_asset_type_display()} — {self.name}'
+
+    @property
+    def display_name(self):
+        """
+        Return a user-facing label for this asset.
+
+        - Subtrack: 'Parent Name – Subtrack Name'
+        - Parent track (has subtracks): 'Name (whole)'
+        - Everything else: just 'Name'
+        """
+        if self.parent_id:
+            return f'{self.parent.name} \u2013 {self.name}'
+        if self.asset_type == self.AssetType.TRACK and self.subtracks.exists():
+            return f'{self.name} (whole)'
+        return self.name
 
 
 class Event(models.Model):

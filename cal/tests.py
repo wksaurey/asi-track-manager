@@ -1063,12 +1063,13 @@ class SubtrackWeekViewTest(TestCase):
             name='South', asset_type=Asset.AssetType.TRACK, parent=self.parent
         )
 
-    def test_week_view_shows_subtrack_names(self):
-        """Week view must show the subtrack names."""
+    def test_week_view_shows_parent_track_name(self):
+        """Week view shows the parent track name (subtracks collapsed into one row)."""
         response = self.client.get(reverse('cal:calendar') + '?view=week&date=2026-3-30')
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'North')
-        self.assertContains(response, 'South')
+        self.assertContains(response, 'Main Track')
+        # Subtrack names are not shown in the simplified single-row week view.
+        self.assertNotContains(response, 'trk-subtrack-row')
 
     def test_week_view_subtrack_event_appears(self):
         """An event booked on a subtrack must appear in the week view."""
@@ -1082,8 +1083,8 @@ class SubtrackWeekViewTest(TestCase):
         response = self.client.get(reverse('cal:calendar') + '?view=week&date=2026-3-30')
         self.assertContains(response, 'North Week Test')
 
-    def test_week_view_full_track_event_uses_rowspan(self):
-        """A full-track (parent) event must render with rowspan for the subtrack rows."""
+    def test_week_view_full_track_event_appears(self):
+        """A full-track (parent) event must appear in the single parent-track row."""
         start = datetime(2026, 3, 30, 9, 0, tzinfo=dt_timezone.utc)
         end   = datetime(2026, 3, 30, 11, 0, tzinfo=dt_timezone.utc)
         ev = Event.objects.create(
@@ -1093,13 +1094,13 @@ class SubtrackWeekViewTest(TestCase):
         ev.assets.add(self.parent)
         response = self.client.get(reverse('cal:calendar') + '?view=week&date=2026-3-30')
         self.assertContains(response, 'Full Track Week Event')
-        self.assertContains(response, 'rowspan=')
 
-    def test_week_view_parent_label_cell_has_rowspan(self):
-        """The parent track label cell must use rowspan=n_subtracks."""
+    def test_week_view_single_row_per_track(self):
+        """The simplified week view renders exactly one row per parent track (no rowspans)."""
         response = self.client.get(reverse('cal:calendar') + '?view=week&date=2026-3-30')
         content = response.content.decode()
-        self.assertIn('rowspan="2"', content)
+        # No rowspan attributes — each track is a single row.
+        self.assertNotIn('rowspan=', content)
 
     def test_week_view_sibling_events_both_appear(self):
         """Two events on sibling subtracks on the same day must both appear."""

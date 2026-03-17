@@ -8,6 +8,17 @@
 
 {% block content %}
 
+<!-- ── Day-events modal (month view) ────────────────────────────── -->
+<div id="day-modal" class="day-modal-overlay" hidden>
+  <div class="day-modal-box">
+    <div class="day-modal-header">
+      <span id="day-modal-title" class="day-modal-title"></span>
+      <button class="day-modal-close" id="day-modal-close" aria-label="Close">&times;</button>
+    </div>
+    <ul id="day-modal-list" class="day-modal-list"></ul>
+  </div>
+</div>
+
 <!-- ── Calendar Toolbar ─────────────────────────────────────────── -->
 <div class="cal-toolbar">
 
@@ -68,32 +79,59 @@
 {% block script %}
 {% if view == 'month' %}
 <script>
-  // Equalize week row heights so all rows are the same regardless of event count.
-  // Clone the table with height:auto to measure natural header heights, unaffected
-  // by the browser's proportional table-height distribution algorithm.
+  // ── Day-events modal ────────────────────────────────────────────
   (function() {
-    function equalizeRows() {
-      var table = document.querySelector('table.calendar');
-      if (!table) return;
-      var rows = Array.from(table.querySelectorAll('tr'));
-      var weekRows = rows.slice(2);
-      if (!weekRows.length) return;
+    var modal     = document.getElementById('day-modal');
+    var modalTitle = document.getElementById('day-modal-title');
+    var modalList  = document.getElementById('day-modal-list');
 
-      // Measure natural header heights via an off-screen auto-height clone
-      var clone = table.cloneNode(true);
-      clone.style.cssText = 'position:absolute;visibility:hidden;height:auto;top:-9999px;width:' + table.offsetWidth + 'px';
-      document.body.appendChild(clone);
-      var cloneRows = clone.querySelectorAll('tr');
-      var headerH = cloneRows[0].offsetHeight + cloneRows[1].offsetHeight;
-      document.body.removeChild(clone);
+    function openModal(btn) {
+      var td = btn.closest('td');
+      var hiddenList = td ? td.querySelector('.day-all-events') : null;
+      modalTitle.textContent = btn.dataset.label || '';
+      modalList.innerHTML = hiddenList ? hiddenList.innerHTML : '';
 
-      var tableH = table.getBoundingClientRect().height;
-      var rowH   = Math.floor((tableH - headerH) / weekRows.length);
-      if (rowH < 20) return;
-      weekRows.forEach(function(r) { r.style.height = rowH + 'px'; });
+      // Measure scrollbar width before locking so layout doesn't lurch
+      var scrollW = window.innerWidth - document.documentElement.clientWidth;
+      document.body.style.overflow = 'hidden';
+      document.body.style.paddingRight = scrollW + 'px';
+
+      // Show so the box is measurable
+      modal.hidden = false;
+
+      var box    = modal.querySelector('.day-modal-box');
+      var anchor = td ? td.getBoundingClientRect() : btn.getBoundingClientRect();
+      var gap    = 10;
+      var vw     = window.innerWidth;
+      var vh     = window.innerHeight;
+      var boxW   = box.offsetWidth;
+      var boxH   = box.offsetHeight;
+
+      // Horizontal: prefer right of the day cell, flip left if it would overflow
+      var left = anchor.right + gap;
+      if (left + boxW > vw - gap) { left = anchor.left - gap - boxW; }
+      left = Math.max(gap, left);
+
+      // Vertical: align top with cell top, clamp so it stays on screen
+      var top = anchor.top;
+      top = Math.max(gap, Math.min(top, vh - boxH - gap));
+
+      box.style.top  = top  + 'px';
+      box.style.left = left + 'px';
     }
-    equalizeRows();
-    window.addEventListener('resize', equalizeRows);
+
+    function closeModal() {
+      modal.hidden = true;
+      document.body.style.overflow = '';
+      document.body.style.paddingRight = '';
+    }
+
+    document.querySelectorAll('.day-more-btn').forEach(function(btn) {
+      btn.addEventListener('click', function(e) { e.stopPropagation(); openModal(btn); });
+    });
+    document.getElementById('day-modal-close').addEventListener('click', closeModal);
+    modal.addEventListener('click', function(e) { if (e.target === modal) closeModal(); });
+    document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeModal(); });
   })();
 
   // Show the day-add-overlay only while the user's mouse is inside that td.

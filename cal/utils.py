@@ -78,17 +78,22 @@ class Calendar(HTMLCalendar):
 
     # ── Month view ─────────────────────────────────────────────────────────
 
+    # Maximum events shown inline in a month cell before a "more" button appears.
+    # Sized to fit within the 180px cell height (date header ~30px + 2 event tiles ~90px each).
+    MONTH_VISIBLE_LIMIT = 2
+
     def formatday(self, day, events):
         """
         Render a single day cell for the month table.
 
         ``day=0`` represents a filler cell outside the current month.
         Real days receive 'today' and/or 'weekend' CSS classes as needed.
+
+        Up to MONTH_VISIBLE_LIMIT events are shown inline.  If there are more,
+        a "+N more" button is rendered; clicking it opens a modal (driven by JS
+        in calendar.html) that lists all events for the day with times.
         """
-        events_per_day = events.filter(start_time__day=day).order_by('start_time')
-        d = ''
-        for event in events_per_day:
-            d += f'<li class="{self._event_classes(event)}">{event.get_html_url}</li>'
+        events_list = list(events.filter(start_time__day=day).order_by('start_time'))
 
         if day != 0:
             is_today = (
@@ -110,11 +115,40 @@ class Calendar(HTMLCalendar):
                 f'<span class="date">{day}</span>'
             )
             add_link = f'<a class="day-add-overlay" href="{new_url}" title="Add event">+</a>'
+
+            # Visible event tiles (capped at MONTH_VISIBLE_LIMIT)
+            visible = events_list[:self.MONTH_VISIBLE_LIMIT]
+            d = ''.join(
+                f'<li class="{self._event_classes(ev)}">{ev.get_html_url}</li>'
+                for ev in visible
+            )
+
+            # "+N more" button + hidden full list for the modal
+            more_html = ''
+            n_extra = len(events_list) - self.MONTH_VISIBLE_LIMIT
+            if n_extra > 0:
+                day_label = day_date.strftime('%A, %B %-d, %Y')
+                all_items = ''.join(
+                    f'<li class="{self._event_classes(ev)} event-modal-item">'
+                    f'{ev.get_html_url}'
+                    f'</li>'
+                    for ev in events_list
+                )
+                more_html = (
+                    f'<button class="day-more-btn"'
+                    f' data-date="{day_date.isoformat()}"'
+                    f' data-label="{escape(day_label)}">'
+                    f'+{n_extra} more'
+                    f'</button>'
+                    f'<ul class="day-all-events" hidden>{all_items}</ul>'
+                )
+
             return (
                 f'<td{td_cls}>'
                 f'<div class="day-cell-inner">'
                 f'<div class="day-cell-header">{date_num}{add_link}</div>'
                 f'<ul>{d}</ul>'
+                f'{more_html}'
                 f'</div>'
                 f'</td>'
             )

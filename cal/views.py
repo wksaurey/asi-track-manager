@@ -16,7 +16,6 @@ from django.db.models.functions import ExtractHour
 from django.shortcuts import render, get_object_or_404, redirect
 from django.http import HttpResponseRedirect, JsonResponse
 from django.views import generic
-from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from django.urls import reverse
 from django.utils import timezone
@@ -204,7 +203,7 @@ def get_date(req_str, view='month'):
                 return date(year, month, day)
         except Exception:
             pass
-    return datetime.today().date()
+    return timezone.now().date()
 
 
 def prev_for(d, view):
@@ -387,7 +386,7 @@ def asset_detail(request, asset_id):
     if not is_logged_in(request):
         return HttpResponseRedirect(reverse('cal:login'))
     asset   = get_object_or_404(Asset, pk=asset_id)
-    today   = datetime.today().date()
+    today   = timezone.now().date()
     horizon = today + timedelta(days=30)
 
     upcoming = asset.events.prefetch_related('assets').filter(
@@ -457,7 +456,7 @@ def dashboard_events_api(request):
     if not request.user.is_staff:
         return JsonResponse({'error': 'Forbidden'}, status=403)
 
-    today = datetime.today().date()
+    today = timezone.now().date()
     date_param = request.GET.get('date')
     if date_param:
         try:
@@ -467,15 +466,20 @@ def dashboard_events_api(request):
     else:
         target_date = today
 
-    tracks = Asset.objects.filter(asset_type=Asset.AssetType.TRACK)
+    from django.db.models import Prefetch
+
+    track_events_qs = Event.objects.filter(
+        is_approved=True, start_time__date=target_date
+    ).order_by('start_time')
+
+    tracks = Asset.objects.filter(
+        asset_type=Asset.AssetType.TRACK
+    ).prefetch_related(
+        Prefetch('events', queryset=track_events_qs, to_attr='day_events')
+    )
 
     data = {}
     for track in tracks:
-        events = (
-            track.events
-            .filter(is_approved=True, start_time__date=target_date)
-            .order_by('start_time')
-        )
         data[track.name] = {
             'id': track.pk,
             'events': [
@@ -489,7 +493,7 @@ def dashboard_events_api(request):
                     'actual_start': ev.actual_start.isoformat() if ev.actual_start else None,
                     'actual_end':   ev.actual_end.isoformat() if ev.actual_end else None,
                 }
-                for ev in events
+                for ev in track.day_events
             ],
         }
 
@@ -510,7 +514,7 @@ def analytics_api(request):
     if not request.user.is_staff:
         return JsonResponse({'error': 'Forbidden'}, status=403)
 
-    today = datetime.today().date()
+    today = timezone.now().date()
     start_str = request.GET.get('start')
     end_str = request.GET.get('end')
 
@@ -650,8 +654,8 @@ def analytics_api(request):
     })
 
 
-@csrf_exempt
 @login_required
+@require_POST
 def dashboard_stamp_actual(request, event_id):
     """
     JSON API — admin only.
@@ -671,15 +675,16 @@ def dashboard_stamp_actual(request, event_id):
     """
     if not request.user.is_staff:
         return JsonResponse({'error': 'Forbidden'}, status=403)
-    if request.method != 'POST':
-        return JsonResponse({'error': 'Method not allowed'}, status=405)
 
     try:
         event = Event.objects.get(pk=event_id)
     except Event.DoesNotExist:
         return JsonResponse({'error': 'Not found'}, status=404)
 
-    body = json.loads(request.body)
+    try:
+        body = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
     action = body.get('action')
     time_str = body.get('time')  # Optional: ISO 8601 string or "HH:MM"
 

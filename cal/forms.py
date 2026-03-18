@@ -28,6 +28,8 @@ class AssetForm(ModelForm):
             parent__isnull=True,
         )
         self.fields['parent'].required = False
+        self.fields['parent'].label = 'Subtrack of'
+        self.fields['parent'].help_text = 'Select a parent track if this is a subtrack.'
         # Apply Bootstrap form-control class to every field widget
         for name, field in self.fields.items():
             existing = field.widget.attrs.get('class', '')
@@ -106,25 +108,6 @@ def _build_grouped_asset_choices():
     return choices
 
 
-def _get_conflicting_asset_ids(asset):
-    """
-    Return the set of asset IDs that conflict with booking ``asset``.
-
-    Rules:
-    - Booking a parent track conflicts with itself AND all its subtracks.
-    - Booking a subtrack conflicts with itself AND its parent track.
-    - Sibling subtracks do NOT conflict with each other.
-    """
-    ids = {asset.pk}
-    if asset.asset_type == Asset.AssetType.TRACK:
-        if asset.parent_id is None:
-            # This is a parent track — conflicts with all its subtracks too
-            ids.update(asset.subtracks.values_list('pk', flat=True))
-        else:
-            # This is a subtrack — conflicts with its parent track too
-            ids.add(asset.parent_id)
-    return ids
-
 
 class EventForm(ModelForm):
     """
@@ -189,25 +172,21 @@ class EventForm(ModelForm):
         if start_time and end_time and (end_time - start_time) < timedelta(hours=1):
             raise ValidationError('Reservations must be at least 1 hour long.')
 
-        # Conflict check — for each selected asset, check against the set of
-        # asset IDs that would conflict (including parent/subtrack relationships).
+        # Conflict check — delegates to Asset.conflicting_asset_ids() for
+        # parent/subtrack rules.
         if assets and start_time and end_time:
             for asset in assets:
-                conflict_ids = _get_conflicting_asset_ids(asset)
+                conflict_ids = asset.conflicting_asset_ids()
                 conflicts = Event.objects.filter(
                     assets__in=conflict_ids,
                     start_time__lt=end_time,
                     end_time__gt=start_time,
                 ).distinct()
-                # When editing an existing event, exclude itself from the query
                 if self.instance and self.instance.pk:
                     conflicts = conflicts.exclude(pk=self.instance.pk)
-
                 if conflicts.exists():
                     conflict = conflicts.first()
-                    # Find which conflicting asset triggered the error
                     conflict_asset = conflict.assets.filter(pk__in=conflict_ids).first()
-                    asset_label = asset.display_name
                     raise ValidationError(
                         f'Scheduling conflict: "{conflict.title}" already has '
                         f'{conflict_asset or asset} booked from '

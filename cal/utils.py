@@ -82,7 +82,7 @@ class Calendar(HTMLCalendar):
     # Sized to fit within the 180px cell height (date header ~30px + 2 event tiles ~90px each).
     MONTH_VISIBLE_LIMIT = 2
 
-    def formatday(self, day, events):
+    def formatday(self, day, events_by_day):
         """
         Render a single day cell for the month table.
 
@@ -92,8 +92,11 @@ class Calendar(HTMLCalendar):
         Up to MONTH_VISIBLE_LIMIT events are shown inline.  If there are more,
         a "+N more" button is rendered; clicking it opens a modal (driven by JS
         in calendar.html) that lists all events for the day with times.
+
+        ``events_by_day`` is a pre-bucketed dict (day → sorted list) built by
+        ``formatmonth`` to avoid one SQL query per day cell.
         """
-        events_list = list(events.filter(start_time__day=day).order_by('start_time'))
+        events_list = events_by_day.get(day, [])
 
         if day != 0:
             is_today = (
@@ -154,29 +157,34 @@ class Calendar(HTMLCalendar):
             )
         return '<td class="noday"></td>'
 
-    def formatweek(self, theweek, events):
+    def formatweek(self, theweek, events_by_day):
         """Render one week row (7 day cells) for the month table."""
         week = ''
         for d, _ in theweek:
-            week += self.formatday(d, events)
+            week += self.formatday(d, events_by_day)
         return f'<tr>{week}</tr>'
 
     def formatmonth(self, withyear=True):
         """
         Render the full month view as an HTML table.
 
-        Queries events once for the entire month, then passes the queryset
-        into each day cell to avoid N+1 queries.
+        Fetches all events for the month in one query, buckets them by day,
+        then passes the dict into each cell — no per-cell SQL queries.
         """
         events = self._base_queryset().filter(
             start_time__year=self.year,
             start_time__month=self.month,
-        )
+        ).order_by('start_time')
+
+        events_by_day = {}
+        for ev in events:
+            events_by_day.setdefault(ev.start_time.day, []).append(ev)
+
         cal  = '<table class="calendar month-table">\n'
         cal += f'{self.formatmonthname(self.year, self.month, withyear=withyear)}\n'
         cal += f'{self.formatweekheader()}\n'
         for week in self.monthdays2calendar(self.year, self.month):
-            cal += f'{self.formatweek(week, events)}\n'
+            cal += f'{self.formatweek(week, events_by_day)}\n'
         cal += '</table>'
         return cal
 

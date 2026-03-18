@@ -13,6 +13,7 @@
     crossorigin="anonymous">
   <link rel="stylesheet" type="text/css" href="{% static 'cal/css/styles.css' %}">
   {% block extra_css %}{% endblock %}
+  {% block extra_head %}{% endblock %}
   <title>{% block title %}ASI Asset Scheduler{% endblock %}</title>
   <!-- Apply saved theme before render to prevent flash -->
   <script>if(localStorage.getItem('asi-theme')==='dark')document.documentElement.classList.add('dark-theme');</script>
@@ -21,7 +22,8 @@
 
   <nav class="site-nav">
     <a class="site-nav-brand" href="{% url 'cal:calendar' %}">
-      <i class="fas fa-hard-hat"></i> ASI Track Manager
+      <img src="{% static 'cal/img/ASI_Logo.svg' %}" class="nav-logo" alt="" />
+      ASI Track Manager
     </a>
     <div class="site-nav-links">
       {% if request.user.is_authenticated %}

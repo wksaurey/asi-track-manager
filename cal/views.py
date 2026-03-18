@@ -402,7 +402,7 @@ def dashboard_events_api(request):
 
     data = {}
     for track in tracks:
-        data[track.name] = {
+        data[track.display_name] = {
             'id': track.pk,
             'events': [
                 {

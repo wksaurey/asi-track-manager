@@ -402,6 +402,85 @@ const noteItemTpl  = document.getElementById("noteItemTemplate");
 
 
 // ============================================================
+// Event popup
+// ============================================================
+
+let modalTrackName = null;
+let modalEditEntry = null;
+
+const eventPopup        = document.getElementById("eventPopup");
+const eventPopupBox     = document.getElementById("eventPopupBox");
+const eventModalForm    = document.getElementById("eventModalForm");
+const eventModalTitle   = document.getElementById("eventModalTitle");
+const eventModalTrackEl = document.getElementById("eventModalTrackName");
+const modalTimeInput    = document.getElementById("modalTime");
+const modalDescInput    = document.getElementById("modalDesc");
+
+function openEventModal(trackName, entry, anchorEl) {
+  modalTrackName = trackName;
+  modalEditEntry = entry || null;
+  eventModalTitle.textContent   = entry ? "Edit Event" : "Add Event";
+  eventModalTrackEl.textContent = trackName;
+  modalTimeInput.value = entry ? (entry.time || "") : nowHHMM();
+  modalDescInput.value = entry ? (entry.desc || "") : "";
+
+  // Show so the box is measurable
+  eventPopup.hidden = false;
+
+  // Position near the triggering track card
+  const card   = anchorEl ? anchorEl.closest(".track-card") : null;
+  const anchor = (card || anchorEl) ? (card || anchorEl).getBoundingClientRect() : null;
+  if (anchor) {
+    const gap  = 12;
+    const vw   = window.innerWidth;
+    const vh   = window.innerHeight;
+    const boxW = eventPopupBox.offsetWidth;
+    const boxH = eventPopupBox.offsetHeight;
+
+    // Prefer right of card, flip left if it would overflow
+    let left = anchor.right + gap;
+    if (left + boxW > vw - gap) left = anchor.left - boxW - gap;
+    left = Math.max(gap, left);
+
+    // Align top with card top, clamp to stay on screen
+    let top = anchor.top;
+    top = Math.max(gap, Math.min(top, vh - boxH - gap));
+
+    eventPopupBox.style.top  = top  + "px";
+    eventPopupBox.style.left = left + "px";
+  }
+
+  modalDescInput.focus();
+}
+
+function closeEventModal() {
+  eventPopup.hidden = true;
+  modalTrackName = null;
+  modalEditEntry = null;
+}
+
+eventPopup.querySelector(".event-popup__close").addEventListener("click", closeEventModal);
+document.getElementById("eventModalCancel").addEventListener("click", closeEventModal);
+eventPopup.addEventListener("click", (e) => { if (e.target === eventPopup) closeEventModal(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !eventPopup.hidden) closeEventModal(); });
+
+eventModalForm.addEventListener("submit", (e) => {
+  e.preventDefault();
+  const time = modalTimeInput.value.trim();
+  const desc = modalDescInput.value.trim();
+  if (!time || !desc) return;
+  if (modalEditEntry) {
+    modalEditEntry.time = time;
+    modalEditEntry.desc = desc;
+  } else {
+    data[modalTrackName].push({ time, desc, notes: [] });
+  }
+  closeEventModal();
+  render();
+});
+
+
+// ============================================================
 // Rendering
 // ============================================================
 
@@ -430,35 +509,17 @@ function render() {
     });
 
     // Form and button refs
-    const addEventToggle = card.querySelector(".add-event-toggle");
     const addNoteToggle  = card.querySelector(".add-note-toggle");
     const delTrackBtn    = card.querySelector(".delete-track");
-    const eventForm      = card.querySelector(".event-form");
     const noteForm       = card.querySelector(".note-form");
-    const cancelEventBtn = card.querySelector(".cancel-event");
     const cancelNoteBtn  = card.querySelector(".cancel-note");
     const quickAddBtn    = card.querySelector(".add-event-btn");
     const eventsListEl   = card.querySelector(".events-list");
     const notesListEl    = card.querySelector(".notes-list");
 
-    // Add Event form
-    const openEventForm = () => {
-      if (!eventForm) return;
-      const wasHidden = eventForm.classList.contains("hidden");
-      eventForm.classList.remove("hidden");
-      if (wasHidden) {
-        const timeInp = eventForm.querySelector('input[name="time"]');
-        if (timeInp && !timeInp.value) timeInp.value = nowHHMM();
-        const descInp = eventForm.querySelector('input[name="desc"]');
-        if (descInp) descInp.focus();
-      }
-    };
-
-    on(addEventToggle, "click", openEventForm);
-    on(quickAddBtn,    "click", openEventForm);
-    on(cancelEventBtn, "click", () => eventForm?.classList.add("hidden"));
-    on(addNoteToggle,  "click", () => noteForm?.classList.toggle("hidden"));
-    on(cancelNoteBtn,  "click", () => noteForm?.classList.add("hidden"));
+    on(quickAddBtn,   "click", () => openEventModal(trackName, null, quickAddBtn));
+    on(addNoteToggle, "click", () => noteForm?.classList.toggle("hidden"));
+    on(cancelNoteBtn, "click", () => noteForm?.classList.add("hidden"));
 
     // Card kebab menu
     const menuWrap = card.querySelector(".menu-wrap");
@@ -638,15 +699,7 @@ function render() {
         }
       });
 
-      item.querySelector(".edit-event").addEventListener("click", () => {
-        const newTime = prompt("Edit time:", ev.time || "");
-        if (newTime === null) return;
-        const newDesc = prompt("Edit description:", ev.desc || "");
-        if (newDesc === null) return;
-        ev.time = (newTime || "").trim();
-        ev.desc = (newDesc || "").trim();
-        render();
-      });
+      item.querySelector(".edit-event").addEventListener("click", (e) => openEventModal(trackName, ev, e.currentTarget));
 
       item.querySelector(".delete-event").addEventListener("click", () => {
         if (!confirm("Delete this event?")) return;
@@ -704,19 +757,6 @@ function render() {
         if (idxInData > -1) { data[trackName].splice(idxInData, 1); render(); }
       });
       notesListEl.appendChild(note);
-    });
-
-    // New event form submission
-    eventForm.addEventListener("submit", (e) => {
-      e.preventDefault();
-      const fd   = new FormData(eventForm);
-      const time = (fd.get("time") || "").toString().trim();
-      const desc = (fd.get("desc") || "").toString().trim();
-      if (!time || !desc) return;
-      data[trackName].push({ time, desc, notes: [] });
-      eventForm.reset();
-      eventForm.classList.add("hidden");
-      render();
     });
 
     // New track-level note form submission

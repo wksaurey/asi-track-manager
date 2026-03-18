@@ -93,8 +93,6 @@ class Asset(models.Model):
         """
         if self.parent_id:
             return f'{self.parent.name} \u2013 {self.name}'
-        if self.asset_type == self.AssetType.TRACK and self.subtracks.exists():
-            return f'{self.name} (whole)'
         return self.name
 
 

@@ -13,6 +13,7 @@
 }
 
 /* ── Scrollbar ──────────────────────────────────────────────── */
+html { overflow-y: scroll; }  /* always reserve scrollbar gutter — prevents layout shift between pages */
 ::-webkit-scrollbar { width: 7px; height: 7px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(46,168,229,0.28); border-radius: 999px; }
@@ -79,6 +80,7 @@ ul { list-style: none; padding: 0; margin: 0; }
   align-items: center;
   gap: 7px;
 }
+.nav-logo { height: 26px; width: auto; opacity: 0.9; }
 .site-nav-links { display: flex; gap: 22px; }
 .site-nav-links a {
   color: rgba(255,255,255,0.78);

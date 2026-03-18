@@ -115,7 +115,7 @@ def get_date(req_str, view='month'):
             else:
                 year, month, day = parts[0], parts[1], parts[2]
                 return date(year, month, day)
-        except (ValueError, IndexError):
+        except Exception:
             pass
     return datetime.today().date()
 

@@ -899,15 +899,14 @@ class SubtrackModelTest(TestCase):
         track = Asset.objects.create(name='Standalone', asset_type=Asset.AssetType.TRACK)
         self.assertEqual(track.display_name, 'Standalone')
 
-    def test_subtrack_set_null_on_parent_delete(self):
-        """Deleting a parent track sets parent=NULL on its subtracks (SET_NULL)."""
+    def test_subtrack_deleted_on_parent_delete(self):
+        """Deleting a parent track also deletes its subtracks (CASCADE)."""
         parent = Asset.objects.create(name='Parent Track', asset_type=Asset.AssetType.TRACK)
         sub = Asset.objects.create(
             name='Sub Track', asset_type=Asset.AssetType.TRACK, parent=parent
         )
         parent.delete()
-        sub.refresh_from_db()
-        self.assertIsNone(sub.parent)
+        self.assertFalse(Asset.objects.filter(pk=sub.pk).exists())
 
 
 class SubtrackConflictDetectionTest(TestCase):

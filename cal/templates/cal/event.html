@@ -53,6 +53,17 @@
     {% csrf_token %}
     <table class="form-table">
       {% for field in form %}
+      {% if field.html_name == 'assets' %}
+      <tr>
+        <td><label>Assets</label></td>
+        <td>
+          {# Hidden original checkboxes — Django uses these for validation and save #}
+          <div style="display:none">{{ field }}</div>
+          {# Custom two-step asset picker #}
+          <div class="asset-picker" id="asset-picker"></div>
+        </td>
+      </tr>
+      {% else %}
       <tr>
         <td><label for="{{ field.id_for_label }}">{{ field.label }}</label></td>
         <td>
@@ -62,6 +73,7 @@
           {% endif %}
         </td>
       </tr>
+      {% endif %}
       {% endfor %}
     </table>
 
@@ -104,7 +116,142 @@
 
 {% block script %}
 <script>
+const ASSET_DATA = {{ asset_data_json }};
+
 document.addEventListener('DOMContentLoaded', function () {
+  // ── Asset picker ───────────────────────────────────────────────────────
+  const picker = document.getElementById('asset-picker');
+
+  function isChecked(id) {
+    const cb = document.querySelector(`input[name="assets"][value="${id}"]`);
+    return cb ? cb.checked : false;
+  }
+  function setChecked(id, val) {
+    const cb = document.querySelector(`input[name="assets"][value="${id}"]`);
+    if (cb) cb.checked = val;
+  }
+
+  function renderPicker() {
+    picker.innerHTML = '';
+
+    // ── Tracks ──────────────────────────────────────────────────────────
+    if (ASSET_DATA.tracks.length) {
+      const heading = document.createElement('div');
+      heading.className = 'asset-picker-heading';
+      heading.textContent = 'Tracks';
+      picker.appendChild(heading);
+
+      ASSET_DATA.tracks.forEach(track => {
+        const group = document.createElement('div');
+        group.className = 'track-group';
+
+        // Determine active state: parent checked OR any subtrack checked
+        const subtracksChecked = track.subtracks.filter(s => isChecked(s.id));
+        const parentActive = isChecked(track.id);
+        const groupActive  = parentActive || subtracksChecked.length > 0;
+
+        const pill = document.createElement('button');
+        pill.type = 'button';
+        pill.className = 'track-pill' + (groupActive ? ' active' : '');
+
+        if (track.subtracks.length === 0) {
+          pill.textContent = track.name;
+        } else if (parentActive) {
+          pill.innerHTML = `${track.name} <span class="pill-sub-label">whole</span>`;
+        } else if (subtracksChecked.length > 0) {
+          const names = subtracksChecked.map(s => s.name).join(', ');
+          pill.innerHTML = `${track.name} <span class="pill-sub-label">${names}</span>`;
+        } else {
+          pill.textContent = track.name;
+        }
+
+        group.appendChild(pill);
+
+        if (track.subtracks.length === 0) {
+          // No subtracks — pill directly toggles the parent
+          pill.addEventListener('click', () => {
+            setChecked(track.id, !isChecked(track.id));
+            renderPicker();
+          });
+        } else {
+          // Has subtracks — pill selects whole track and opens panel
+          const panel = document.createElement('div');
+          panel.className = 'subtrack-panel' + (groupActive ? ' open' : '');
+
+          // Individual subtrack options only (no "Whole track" button)
+          track.subtracks.forEach(sub => {
+            const subBtn = document.createElement('button');
+            subBtn.type = 'button';
+            subBtn.className = 'subtrack-option' + (isChecked(sub.id) ? ' active' : '');
+            subBtn.textContent = sub.name;
+            subBtn.addEventListener('click', () => {
+              const next = !isChecked(sub.id);
+              setChecked(sub.id, next);
+              if (next) setChecked(track.id, false); // selecting a subtrack deselects whole
+              renderPicker();
+            });
+            panel.appendChild(subBtn);
+          });
+
+          group.appendChild(panel);
+
+          // Pill click: if group inactive → select whole + open panel
+          //             if group active  → deselect everything + close panel
+          pill.addEventListener('click', () => {
+            if (groupActive) {
+              setChecked(track.id, false);
+              track.subtracks.forEach(s => setChecked(s.id, false));
+            } else {
+              setChecked(track.id, true);
+              panel.classList.add('open');
+            }
+            renderPicker();
+          });
+        }
+
+        picker.appendChild(group);
+      });
+    }
+
+    // ── Vehicles ────────────────────────────────────────────────────────
+    if (ASSET_DATA.vehicles.length) {
+      const heading = document.createElement('div');
+      heading.className = 'asset-picker-heading';
+      heading.textContent = 'Vehicles';
+      picker.appendChild(heading);
+      ASSET_DATA.vehicles.forEach(v => {
+        picker.appendChild(makeSimplePill(v));
+      });
+    }
+
+    // ── Operators ───────────────────────────────────────────────────────
+    if (ASSET_DATA.operators.length) {
+      const heading = document.createElement('div');
+      heading.className = 'asset-picker-heading';
+      heading.textContent = 'Operators';
+      picker.appendChild(heading);
+      ASSET_DATA.operators.forEach(o => {
+        picker.appendChild(makeSimplePill(o));
+      });
+    }
+  }
+
+  function makeSimplePill(asset) {
+    const pill = document.createElement('button');
+    pill.type = 'button';
+    pill.className = 'track-pill' + (isChecked(asset.id) ? ' active' : '');
+    pill.textContent = asset.name;
+    pill.addEventListener('click', () => {
+      setChecked(asset.id, !isChecked(asset.id));
+      renderPicker();
+    });
+    return pill;
+  }
+
+  renderPicker();
+  // ── End asset picker ───────────────────────────────────────────────────
+
+  // ── Flatpickr date/time pickers ────────────────────────────────────────
   const fpOpts = {
     enableTime:    true,
     dateFormat:    'Y-m-d\\TH:i',      // value submitted to Django

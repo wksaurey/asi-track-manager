@@ -3,6 +3,22 @@
 
 {% block title %}{{ page_title }}{% endblock %}
 
+{% block script %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const typeSelect  = document.getElementById('id_asset_type');
+  const parentRow   = document.getElementById('id_parent').closest('tr');
+
+  function updateParentVisibility() {
+    parentRow.style.display = typeSelect.value === 'track' ? '' : 'none';
+  }
+
+  typeSelect.addEventListener('change', updateParentVisibility);
+  updateParentVisibility();
+});
+</script>
+{% endblock %}
+
 {% block content %}
 <div class="page-container form-page">
 
@@ -49,6 +65,44 @@
       {% endif %}
     </div>
   </form>
+
+  {% if subtracks is not None %}
+  <div class="subtracks-section">
+    <div class="subtracks-section-header">
+      <h3 class="section-heading" style="margin:0;">Subtracks</h3>
+      <a class="btn btn-sm" href="{% url 'cal:asset_create' %}?parent={{ asset.id }}">
+        <i class="fas fa-plus"></i> Add Subtrack
+      </a>
+    </div>
+    {% if subtracks %}
+    <div class="asset-card-group">
+      {% for sub in subtracks %}
+      <div class="asset-card">
+        <form class="asset-card-delete-form" method="post" action="{% url 'cal:asset_delete' sub.id %}"
+              onsubmit="return confirm('Delete {{ sub.name|escapejs }}? This cannot be undone.')">
+          {% csrf_token %}
+          <button type="submit" class="asset-card-delete-btn" title="Delete {{ sub.name|escapejs }}">&times;</button>
+        </form>
+        <div class="asset-card-body">
+          <strong class="asset-card-name">{{ sub.name }}</strong>
+          {% if sub.description %}<p class="asset-card-desc">{{ sub.description }}</p>{% endif %}
+        </div>
+        <div class="asset-card-actions">
+          <a class="btn btn-sm" href="{% url 'cal:asset_detail' sub.id %}">
+            <i class="fas fa-calendar-check"></i> Schedule
+          </a>
+          <a class="btn btn-sm btn-secondary" href="{% url 'cal:asset_edit' sub.id %}">
+            <i class="fas fa-edit"></i> Edit
+          </a>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="field-help">No subtracks yet.</p>
+    {% endif %}
+  </div>
+  {% endif %}
 
 </div>
 {% endblock %}

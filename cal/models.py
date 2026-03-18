@@ -36,7 +36,7 @@ class Asset(models.Model):
         'self',
         null=True,
         blank=True,
-        on_delete=models.SET_NULL,
+        on_delete=models.CASCADE,
         related_name='subtracks',
         help_text='Parent track (only for subtracks)',
     )
@@ -46,6 +46,22 @@ class Asset(models.Model):
 
     def __str__(self):
         return f'{self.get_asset_type_display()} — {self.name}'
+
+    def conflicting_asset_ids(self):
+        """
+        Return the set of asset IDs that conflict with booking this asset.
+
+        - Booking a parent track conflicts with itself AND all its subtracks.
+        - Booking a subtrack conflicts with itself AND its parent track.
+        - Sibling subtracks do NOT conflict with each other.
+        """
+        ids = {self.pk}
+        if self.asset_type == Asset.AssetType.TRACK:
+            if self.parent_id is None:
+                ids.update(self.subtracks.values_list('pk', flat=True))
+            else:
+                ids.add(self.parent_id)
+        return ids
 
     @property
     def display_name(self):

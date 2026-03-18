@@ -18,6 +18,7 @@ from django.urls import reverse
 from django.utils.safestring import mark_safe
 from django.contrib.auth import authenticate, login, logout
 import calendar
+import json
 
 from .models import Asset, Event
 from .utils import Calendar
@@ -264,10 +265,28 @@ def event(request, event_id=None):
         form.save_m2m()   # persist ManyToMany (assets) after the instance is saved
         return HttpResponseRedirect(reverse('cal:calendar'))
 
+    tracks = (
+        Asset.objects.filter(asset_type=Asset.AssetType.TRACK, parent__isnull=True)
+        .prefetch_related('subtracks')
+        .order_by('name')
+    )
+    asset_data = {
+        'tracks': [
+            {
+                'id': t.pk,
+                'name': t.name,
+                'subtracks': [{'id': s.pk, 'name': s.name} for s in t.subtracks.order_by('name')],
+            }
+            for t in tracks
+        ],
+        'vehicles':  [{'id': a.pk, 'name': a.name} for a in Asset.objects.filter(asset_type=Asset.AssetType.VEHICLE).order_by('name')],
+        'operators': [{'id': a.pk, 'name': a.name} for a in Asset.objects.filter(asset_type=Asset.AssetType.OPERATOR).order_by('name')],
+    }
     return render(request, 'cal/event.html', {
-        'form':     form,
-        'event':    instance if event_id else None,
-        'is_admin': is_admin(request),
+        'form':           form,
+        'event':          instance if event_id else None,
+        'is_admin':       request.user.is_staff,
+        'asset_data_json': mark_safe(json.dumps(asset_data)),
     })
 
 
@@ -321,9 +340,15 @@ def asset_create(request):
     """Admin only — show a form to create a new asset."""
     if not is_admin(request):
         return HttpResponseRedirect(reverse('cal:calendar'))
-    form = AssetForm(request.POST or None)
+    initial = {}
+    parent_id = request.GET.get('parent')
+    if parent_id:
+        initial = {'asset_type': 'track', 'parent': parent_id}
+    form = AssetForm(request.POST or None, initial=initial)
     if request.POST and form.is_valid():
-        form.save()
+        saved = form.save()
+        if saved.parent_id:
+            return HttpResponseRedirect(reverse('cal:asset_edit', args=[saved.parent_id]))
         return HttpResponseRedirect(reverse('cal:asset_list'))
     return render(request, 'cal/asset_form.html', {'form': form, 'page_title': 'New Asset'})
 
@@ -337,10 +362,12 @@ def asset_edit(request, asset_id):
     if request.POST and form.is_valid():
         form.save()
         return HttpResponseRedirect(reverse('cal:asset_list'))
+    subtracks = instance.subtracks.order_by('name') if instance.asset_type == Asset.AssetType.TRACK and not instance.parent_id else None
     return render(request, 'cal/asset_form.html', {
         'form':       form,
         'page_title': f'Edit — {instance.name}',
         'asset':      instance,
+        'subtracks':  subtracks,
     })
 
 
@@ -350,7 +377,10 @@ def asset_delete(request, asset_id):
     if not request.user.is_staff:
         return HttpResponseRedirect(reverse('cal:asset_list'))
     asset = get_object_or_404(Asset, pk=asset_id)
+    parent_id = asset.parent_id
     asset.delete()
+    if parent_id:
+        return HttpResponseRedirect(reverse('cal:asset_edit', args=[parent_id]))
     return HttpResponseRedirect(reverse('cal:asset_list'))
 
 

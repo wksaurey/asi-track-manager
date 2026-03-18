@@ -22,7 +22,7 @@ import json
 
 from .models import Asset, Event
 from .utils import Calendar
-from .forms import EventForm, AssetForm
+from .forms import EventForm, AssetForm, get_asset_tree
 
 
 # ── Auth helpers ──────────────────────────────────────────────────────────────
@@ -265,28 +265,11 @@ def event(request, event_id=None):
         form.save_m2m()   # persist ManyToMany (assets) after the instance is saved
         return HttpResponseRedirect(reverse('cal:calendar'))
 
-    tracks = (
-        Asset.objects.filter(asset_type=Asset.AssetType.TRACK, parent__isnull=True)
-        .prefetch_related('subtracks')
-        .order_by('name')
-    )
-    asset_data = {
-        'tracks': [
-            {
-                'id': t.pk,
-                'name': t.name,
-                'subtracks': [{'id': s.pk, 'name': s.name} for s in t.subtracks.order_by('name')],
-            }
-            for t in tracks
-        ],
-        'vehicles':  [{'id': a.pk, 'name': a.name} for a in Asset.objects.filter(asset_type=Asset.AssetType.VEHICLE).order_by('name')],
-        'operators': [{'id': a.pk, 'name': a.name} for a in Asset.objects.filter(asset_type=Asset.AssetType.OPERATOR).order_by('name')],
-    }
     return render(request, 'cal/event.html', {
-        'form':           form,
-        'event':          instance if event_id else None,
-        'is_admin':       request.user.is_staff,
-        'asset_data_json': mark_safe(json.dumps(asset_data)),
+        'form':            form,
+        'event':           instance if event_id else None,
+        'is_admin':        request.user.is_staff,
+        'asset_data_json': mark_safe(json.dumps(get_asset_tree())),
     })
 
 
@@ -324,7 +307,7 @@ def pending_events(request):
 
 def asset_list(request):
     """Display all assets grouped by type. Requires login."""
-    assets = Asset.objects.all()
+    assets = Asset.objects.prefetch_related('subtracks').all()
     grouped_assets = []
     for type_value, type_label in Asset.AssetType.choices:
         group = [a for a in assets if a.asset_type == type_value]
@@ -360,7 +343,9 @@ def asset_edit(request, asset_id):
     instance = get_object_or_404(Asset, pk=asset_id)
     form = AssetForm(request.POST or None, instance=instance)
     if request.POST and form.is_valid():
-        form.save()
+        saved = form.save()
+        if saved.parent_id:
+            return HttpResponseRedirect(reverse('cal:asset_edit', args=[saved.parent_id]))
         return HttpResponseRedirect(reverse('cal:asset_list'))
     subtracks = instance.subtracks.order_by('name') if instance.asset_type == Asset.AssetType.TRACK and not instance.parent_id else None
     return render(request, 'cal/asset_form.html', {

@@ -32,8 +32,7 @@ class EventAdmin(admin.ModelAdmin):
     form          = EventForm
     list_display  = ('title', 'asset_names', 'start_time', 'end_time', 'created_by', 'is_approved')
     list_filter   = ('is_approved', 'assets__asset_type')
-    search_fields = ('title', 'created_by')
-    filter_horizontal = ('assets',)
+    search_fields = ('title',)
     actions       = ['approve_events']
 
     def asset_names(self, obj):

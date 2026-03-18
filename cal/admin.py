@@ -33,7 +33,6 @@ class EventAdmin(admin.ModelAdmin):
     list_display  = ('title', 'asset_names', 'start_time', 'end_time', 'created_by', 'is_approved')
     list_filter   = ('is_approved', 'assets__asset_type')
     search_fields = ('title',)
-    filter_horizontal = ('assets',)
     actions       = ['approve_events']
 
     def asset_names(self, obj):

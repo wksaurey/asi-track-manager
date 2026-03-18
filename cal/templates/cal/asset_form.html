@@ -7,7 +7,9 @@
 <script>
 document.addEventListener('DOMContentLoaded', function () {
   const typeSelect  = document.getElementById('id_asset_type');
-  const parentRow   = document.getElementById('id_parent').closest('tr');
+  const parentField = document.getElementById('id_parent');
+  if (!typeSelect || !parentField) return;
+  const parentRow   = parentField.closest('tr');
 
   function updateParentVisibility() {
     parentRow.style.display = typeSelect.value === 'track' ? '' : 'none';

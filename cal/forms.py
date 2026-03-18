@@ -36,74 +36,67 @@ class AssetForm(ModelForm):
             field.widget.attrs['class'] = (existing + ' form-control').strip()
 
 
-class GroupedAssetCheckboxSelectMultiple(forms.CheckboxSelectMultiple):
+def get_asset_tree():
     """
-    A CheckboxSelectMultiple subclass that renders assets grouped by type,
-    with subtracks nested under their parent track.
+    Return a dict with all assets organised by type, queried in three hits.
 
-    Usage: pass ``grouped_choices`` to __init__ as a list of
-    (group_label, [(value, label), ...]) tuples.
+    Structure::
+
+        {
+            'tracks':    [{'id': pk, 'name': str, 'subtracks': [{'id': pk, 'name': str}, ...]}, ...],
+            'vehicles':  [{'id': pk, 'name': str}, ...],
+            'operators': [{'id': pk, 'name': str}, ...],
+        }
+
+    Parent tracks come first (no parent), subtracks ordered by name beneath
+    each parent.  Used both by ``_build_grouped_asset_choices()`` (for the
+    hidden checkbox widget) and the event view (for the JS asset picker JSON).
     """
-
-    def optgroups(self, name, value, attrs=None):
-        # Delegate to the standard implementation; grouping is achieved via
-        # the choices structure (list of (group, [(val, label), ...]) tuples).
-        return super().optgroups(name, value, attrs)
+    parent_tracks = (
+        Asset.objects.filter(asset_type=Asset.AssetType.TRACK, parent__isnull=True)
+        .prefetch_related('subtracks')
+        .order_by('name')
+    )
+    return {
+        'tracks': [
+            {
+                'id':       t.pk,
+                'name':     t.name,
+                'subtracks': [{'id': s.pk, 'name': s.name} for s in t.subtracks.order_by('name')],
+            }
+            for t in parent_tracks
+        ],
+        'vehicles':  [{'id': a.pk, 'name': a.name} for a in Asset.objects.filter(asset_type=Asset.AssetType.VEHICLE).order_by('name')],
+        'operators': [{'id': a.pk, 'name': a.name} for a in Asset.objects.filter(asset_type=Asset.AssetType.OPERATOR).order_by('name')],
+    }
 
 
 def _build_grouped_asset_choices():
     """
-    Return a grouped choices list for assets, suitable for a grouped checkbox widget.
+    Return a grouped choices list for the assets checkbox widget.
 
-    Structure:
-      [
-        ('Tracks', [(pk, display_name), ...]),
-        ('Vehicles', [(pk, display_name), ...]),
-        ('Operators', [(pk, display_name), ...]),
-      ]
-
-    Within Tracks:
-      - Parent tracks (no parent) come first, labeled "Name (whole)" if they have subtracks.
-      - Their subtracks follow immediately, labeled "Parent – Subtrack".
-      - Tracks with no subtracks appear as plain "Name".
+    Derives from ``get_asset_tree()``.  Tracks are grouped with subtracks
+    nested immediately after their parent; parent tracks with subtracks are
+    labelled "Name (whole)".
     """
+    tree = get_asset_tree()
     choices = []
 
-    # ── Tracks (with subtrack grouping) ───────────────────────────────────
     track_choices = []
-    parent_tracks = list(
-        Asset.objects.filter(
-            asset_type=Asset.AssetType.TRACK,
-            parent__isnull=True,
-        ).prefetch_related('subtracks').order_by('name')
-    )
-    for track in parent_tracks:
-        subtracks = list(track.subtracks.order_by('name'))
-        if subtracks:
-            track_choices.append((track.pk, f'{track.name} (whole)'))
-            for sub in subtracks:
-                track_choices.append((sub.pk, f'{track.name} \u2013 {sub.name}'))
+    for t in tree['tracks']:
+        if t['subtracks']:
+            track_choices.append((t['id'], f"{t['name']} (whole)"))
+            for s in t['subtracks']:
+                track_choices.append((s['id'], f"{t['name']} \u2013 {s['name']}"))
         else:
-            track_choices.append((track.pk, track.name))
-
+            track_choices.append((t['id'], t['name']))
     if track_choices:
         choices.append(('Tracks', track_choices))
 
-    # ── Vehicles ───────────────────────────────────────────────────────────
-    vehicle_choices = [
-        (a.pk, a.name)
-        for a in Asset.objects.filter(asset_type=Asset.AssetType.VEHICLE).order_by('name')
-    ]
-    if vehicle_choices:
-        choices.append(('Vehicles', vehicle_choices))
-
-    # ── Operators ──────────────────────────────────────────────────────────
-    operator_choices = [
-        (a.pk, a.name)
-        for a in Asset.objects.filter(asset_type=Asset.AssetType.OPERATOR).order_by('name')
-    ]
-    if operator_choices:
-        choices.append(('Operators', operator_choices))
+    if tree['vehicles']:
+        choices.append(('Vehicles', [(a['id'], a['name']) for a in tree['vehicles']]))
+    if tree['operators']:
+        choices.append(('Operators', [(a['id'], a['name']) for a in tree['operators']]))
 
     return choices
 
@@ -130,12 +123,12 @@ class EventForm(ModelForm):
         widgets = {
             'start_time': TextInput(attrs={'autocomplete': 'off', 'placeholder': 'Pick date & time…'}),
             'end_time':   TextInput(attrs={'autocomplete': 'off', 'placeholder': 'Pick date & time…'}),
-            'assets':     GroupedAssetCheckboxSelectMultiple(attrs={'class': 'asset-checklist'}),
+            'assets':     CheckboxSelectMultiple(attrs={'class': 'asset-checklist'}),
         }
         fields = ['title', 'description', 'start_time', 'end_time', 'assets']
 
     def __init__(self, *args, **kwargs):
-        super(EventForm, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         # Flatpickr submits dates in ISO-like format (e.g. '2026-03-12T14:30')
         self.fields['start_time'].input_formats = ('%Y-%m-%dT%H:%M',)
         self.fields['end_time'].input_formats   = ('%Y-%m-%dT%H:%M',)

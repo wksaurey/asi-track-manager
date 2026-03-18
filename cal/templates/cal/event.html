@@ -87,24 +87,23 @@
 
   {# Approve / Delete forms are OUTSIDE the event form — nested forms are invalid HTML #}
   {% if is_admin and event %}
+  <div class="form-actions">
     {% if not event.is_approved %}
-    <form method="post" action="{% url 'cal:event_approve' event.id %}"
-          class="form-actions" style="margin-top:0;display:inline;">
+    <form method="post" action="{% url 'cal:event_approve' event.id %}">
       {% csrf_token %}
-      <button type="submit" class="btn"
-              style="background:linear-gradient(180deg,#10b981,#059669);">
+      <button type="submit" class="btn btn-approve">
         <i class="fas fa-check-circle"></i> Approve
       </button>
     </form>
     {% endif %}
-  <form method="post" action="{% url 'cal:event_delete' event.id %}"
-        class="form-actions" style="margin-top:0;"
-        onsubmit="return confirm('Delete this event? This cannot be undone.')">
-    {% csrf_token %}
-    <button type="submit" class="btn" style="background:linear-gradient(180deg,#ef4444,#dc2626);">
-      <i class="fas fa-trash"></i> Delete
-    </button>
-  </form>
+    <form method="post" action="{% url 'cal:event_delete' event.id %}"
+          onsubmit="return confirm('Delete this event? This cannot be undone.')">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-danger">
+        <i class="fas fa-trash"></i> Delete
+      </button>
+    </form>
+  </div>
   {% endif %}
 
 </div>

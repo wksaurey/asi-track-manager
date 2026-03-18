@@ -1,24 +1,29 @@
+{% extends 'base.html' %}
 {% load static %}
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <title>ASI Control Center</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="csrf-token" content="{{ csrf_token }}" />
-    <link rel="icon" type="image/x-icon" href="{% static 'cal/img/ASI_Logo.svg' %}" />
-    <link rel="stylesheet" href="{% static 'cal/css/dashboard.css' %}" />
-  </head>
-  <body>
+
+{% block title %}ASI Control Center{% endblock %}
+
+{% block extra_css %}
+  <link rel="stylesheet" href="{% static 'cal/css/dashboard.css' %}" />
+{% endblock %}
+
+{% block extra_head %}
+  <meta name="csrf-token" content="{{ csrf_token }}" />
+  <link rel="icon" type="image/x-icon" href="{% static 'cal/img/ASI_Logo.svg' %}" />
+{% endblock %}
+
+{% block content %}
 
     <header class="app-header">
       <div class="title-row">
-        <img src="{% static 'cal/img/ASI_Logo.svg' %}" class="ASI-logo" alt="ASI Logo" />
         <h1 class="brand-title">ASI Control Center</h1>
 
-        <div class="header-actions">
-          <a href="/cal/calendar/" class="back-link" title="Back to Calendar">&#8592; Calendar</a>
+        <div class="view-tabs">
+          <button class="view-tab active" data-view="tracks">Tracks</button>
+          <button class="view-tab" data-view="timeline">Timeline</button>
+        </div>
 
+        <div class="header-actions">
           <div class="hamburger-wrap" id="headerHamburger">
             <button class="hamburger-btn" aria-label="Open menu" aria-haspopup="true" aria-expanded="false">&#9776;</button>
             <div class="hamburger-menu" role="menu" aria-hidden="true">
@@ -34,23 +39,14 @@
         </div>
       </div>
 
-      <!-- View tabs -->
-      <div class="view-tabs">
-        <button class="view-tab active" data-view="tracks">Tracks</button>
-        <button class="view-tab" data-view="timeline">Timeline</button>
-      </div>
-
       <!-- Controls row (Tracks view) -->
       <div class="controls-row" id="tracksControls">
         <div class="search-wrap">
           <label for="searchInput">Filter by person / text</label>
           <input id="searchInput" type="text" placeholder="e.g., Hollis, Cody, Dozer, Water Truck..." />
         </div>
-        <form id="addTrackForm" class="add-track-form add-track-form--stacked" autocomplete="off">
-          <div class="form-field">
-            <label for="newTrackName" class="field-label">Add Track</label>
-            <input id="newTrackName" type="text" placeholder="Track name (e.g., East Loop)" required />
-          </div>
+        <form id="addTrackForm" class="add-track-form" autocomplete="off">
+          <input id="newTrackName" type="text" placeholder="Add track (e.g., East Loop)" required />
           <button type="submit" class="btn">Add</button>
         </form>
       </div>
@@ -107,21 +103,6 @@
           </header>
 
           <div class="track-add-forms">
-            <form class="event-form hidden" autocomplete="off">
-              <div class="row">
-                <label>Time</label>
-                <input name="time" type="text" placeholder="e.g., 9:01-~11:30 or 10:21" required />
-              </div>
-              <div class="row">
-                <label>Description</label>
-                <input name="desc" type="text" placeholder="What is happening?" required />
-              </div>
-              <div class="row form-actions">
-                <button type="submit" class="btn">Add Event</button>
-                <button type="button" class="btn btn-outline cancel-event">Cancel</button>
-              </div>
-            </form>
-
             <form class="note-form hidden" autocomplete="off">
               <div class="row">
                 <label>Note</label>
@@ -173,6 +154,36 @@
     </template>
 
     <input type="hidden" id="currentUserName" value="{{ request.user.username }}" />
-    <script src="{% static 'cal/js/dashboard.js' %}"></script>
-  </body>
-</html>
+
+    <!-- Event add / edit popup -->
+    <div id="eventPopup" class="event-popup-overlay" hidden>
+      <div class="event-popup-box" id="eventPopupBox">
+        <div class="event-popup__header">
+          <div>
+            <h2 class="event-popup__title" id="eventModalTitle">Add Event</h2>
+            <div class="event-popup__track" id="eventModalTrackName"></div>
+          </div>
+          <button type="button" class="event-popup__close" aria-label="Close">&times;</button>
+        </div>
+        <form id="eventModalForm" autocomplete="off">
+          <div class="modal-field">
+            <label for="modalTime">Time</label>
+            <input id="modalTime" name="time" type="text" placeholder="e.g., 9:01-~11:30 or 10:21" required />
+          </div>
+          <div class="modal-field">
+            <label for="modalDesc">Description</label>
+            <input id="modalDesc" name="desc" type="text" placeholder="What is happening?" required />
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-outline" id="eventModalCancel">Cancel</button>
+            <button type="submit" class="btn">Save Event</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+{% endblock %}
+
+{% block script %}
+  <script src="{% static 'cal/js/dashboard.js' %}"></script>
+{% endblock %}

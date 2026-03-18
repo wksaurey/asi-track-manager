@@ -29,7 +29,7 @@ class Asset(models.Model):
         TRACK    = 'track',    'Track'
         OPERATOR = 'operator', 'Operator'
 
-    name        = models.CharField(max_length=200, unique=True)
+    name        = models.CharField(max_length=200)
     asset_type  = models.CharField(max_length=20, choices=AssetType.choices)
     description = models.TextField(blank=True)
     parent      = models.ForeignKey(
@@ -43,6 +43,24 @@ class Asset(models.Model):
 
     class Meta:
         ordering = ['asset_type', 'name']
+        # Top-level assets (parent=None) must be unique by name.
+        # Subtracks are unique within their parent (handled in clean()).
+        constraints = [
+            models.UniqueConstraint(
+                fields=['name'],
+                condition=models.Q(parent__isnull=True),
+                name='unique_top_level_asset_name',
+            )
+        ]
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+        if self.parent_id is not None:
+            siblings = Asset.objects.filter(parent_id=self.parent_id, name=self.name)
+            if self.pk:
+                siblings = siblings.exclude(pk=self.pk)
+            if siblings.exists():
+                raise ValidationError({'name': 'A subtrack with this name already exists under this parent track.'})
 
     def __str__(self):
         return f'{self.get_asset_type_display()} — {self.name}'
@@ -140,7 +158,7 @@ class Event(models.Model):
     def asset_badge_html(self):
         """Return inline HTML badge spans for each attached asset, colour-coded by type."""
         return ''.join(
-            f'<span class="asset-badge badge-{a.asset_type}">{escape(a.name)}</span>'
+            f'<span class="asset-badge badge-{a.asset_type}">{escape(a.display_name)}</span>'
             for a in self.assets.all()
         )
 

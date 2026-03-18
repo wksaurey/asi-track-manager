@@ -30,4 +30,11 @@ urlpatterns = [
     path('assets/edit/<int:asset_id>/',    views.asset_edit,   name='asset_edit'),
     path('assets/delete/<int:asset_id>/',   views.asset_delete, name='asset_delete'),
     path('assets/<int:asset_id>/',         views.asset_detail, name='asset_detail'),
+
+    # ── Dashboard ──────────────────────────────────────────────────────────
+    path('dashboard/',                              views.dashboard,              name='dashboard'),
+    path('api/dashboard-events/',                   views.dashboard_events_api,   name='dashboard_events_api'),
+    path('api/event/<int:event_id>/stamp/',         views.dashboard_stamp_actual, name='dashboard_stamp_actual'),
+    path('analytics/',                              views.analytics,              name='analytics'),
+    path('api/analytics/',                          views.analytics_api,          name='analytics_api'),
 ]

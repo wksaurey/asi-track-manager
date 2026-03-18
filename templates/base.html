@@ -33,6 +33,8 @@
             <i class="fas fa-clock"></i> Pending
             {% if pending_count %}<span class="nav-badge">{{ pending_count }}</span>{% endif %}
           </a>
+          <a href="{% url 'cal:dashboard' %}"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
+          <a href="{% url 'cal:analytics' %}"><i class="fas fa-chart-bar"></i> Analytics</a>
         {% endif %}
       {% endif %}
     </div>

@@ -549,7 +549,7 @@ def analytics_api(request):
             if e.actual_start and e.actual_end
         )
         track_utilization.append({
-            'name': track.name,
+            'name': track.display_name,
             'scheduled_hours': round(scheduled_secs / 3600, 1),
             'actual_hours': round(actual_secs / 3600, 1),
             'event_count': track_events.count(),

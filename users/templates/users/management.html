@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load static tz %}
+{% load static %}
 
 {% block title %}User Management — ASI Track Manager{% endblock %}
 
@@ -72,15 +72,6 @@
   .badge-superuser {
     background: linear-gradient(135deg, #f0ad4e, #ec971f);
   }
-  .badge-staff {
-    display: inline-block;
-    background: linear-gradient(135deg, #10b981, #059669);
-    color: #fff;
-    padding: 3px 10px;
-    border-radius: 20px;
-    font-size: 0.75rem;
-    font-weight: 600;
-  }
   .badge-user {
     display: inline-block;
     background: rgba(108,117,125,0.12);
@@ -139,16 +130,6 @@
     display: flex;
     align-items: center;
     gap: 6px;
-  }
-  .role-select {
-    padding: 5px 10px;
-    border-radius: 6px;
-    border: 1px solid var(--border);
-    font-size: 0.8rem;
-    font-weight: 500;
-    background: var(--card);
-    color: inherit;
-    cursor: pointer;
   }
 
   /* Self row highlight */
@@ -226,8 +207,6 @@
         <td>
           {% if u.is_superuser %}
             <i class="fas fa-user-shield" style="color:#f0ad4e;"></i>
-          {% elif u.is_developer %}
-            <i class="fas fa-user-cog" style="color:#10b981;"></i>
           {% elif u.is_staff %}
             <i class="fas fa-user-shield" style="color:var(--primary);"></i>
           {% else %}
@@ -239,8 +218,6 @@
         <td>
           {% if u.is_superuser %}
             <span class="badge-admin badge-superuser">Superuser</span>
-          {% elif u.is_developer %}
-            <span class="badge-staff">Staff</span>
           {% elif u.is_staff %}
             <span class="badge-admin">Admin</span>
           {% else %}
@@ -248,27 +225,23 @@
           {% endif %}
         </td>
         <td>{{ u.date_joined|date:"M d, Y" }}</td>
-        <td>{% if u.last_login %}{{ u.last_login|localtime|date:"M d, Y g:i A" }}{% else %}Never{% endif %}</td>
+        <td>{{ u.last_login|date:"M d, Y H:i"|default:"Never" }}</td>
         <td>
           <div class="actions-cell">
             {% if u == request.user %}
               <span style="color:var(--muted); font-size:0.8rem;">—</span>
             {% elif u.is_superuser and not request.user.is_superuser %}
               <span style="color:var(--muted); font-size:0.8rem;">Protected</span>
-            {% elif u.is_developer and not request.user.is_developer and not request.user.is_superuser %}
-              <span style="color:var(--muted); font-size:0.8rem;">Protected</span>
             {% else %}
-              <select class="role-select"
-                      data-uid="{{ u.pk }}"
-                      data-uname="{{ u.username }}"
-                      data-current="{% if u.is_developer %}staff{% elif u.is_staff %}admin{% else %}user{% endif %}"
-                      onchange="changeRole(this)">
-                <option value="user" {% if not u.is_staff and not u.is_developer %}selected{% endif %}>User</option>
-                <option value="admin" {% if u.is_staff and not u.is_developer %}selected{% endif %}>Admin</option>
-                {% if request.user.is_developer or request.user.is_superuser %}
-                  <option value="staff" {% if u.is_developer %}selected{% endif %}>Staff</option>
-                {% endif %}
-              </select>
+              {% if u.is_staff %}
+                <button class="btn-demote" onclick="toggleAdmin({{ u.pk }}, '{{ u.username }}')">
+                  <i class="fas fa-arrow-down"></i> Demote
+                </button>
+              {% else %}
+                <button class="btn-promote" onclick="toggleAdmin({{ u.pk }}, '{{ u.username }}')">
+                  <i class="fas fa-arrow-up"></i> Promote
+                </button>
+              {% endif %}
               <button class="btn-delete" onclick="deleteUser({{ u.pk }}, '{{ u.username }}')">
                 <i class="fas fa-trash"></i>
               </button>
@@ -295,86 +268,59 @@
     setTimeout(() => { t.className = 'toast-msg'; }, 3000);
   }
 
-  const roleLabels = { user: 'User', admin: 'Admin', staff: 'Staff' };
+  async function toggleAdmin(userId, username) {
+    const action = document.querySelector(`#user-row-${userId} .btn-promote`) ? 'promote' : 'demote';
+    const confirmMsg = action === 'promote'
+      ? `Promote "${username}" to Admin?`
+      : `Demote "${username}" from Admin?`;
 
-  function changeRole(selectEl) {
-    const userId = selectEl.dataset.uid;
-    const username = selectEl.dataset.uname;
-    const currentRole = selectEl.dataset.current;
-    const newRole = selectEl.value;
+    if (!confirm(confirmMsg)) return;
 
-    if (newRole === currentRole) return;
+    try {
+      const resp = await fetch(`/users/toggle-admin/${userId}/`, {
+        method: 'POST',
+        headers: { 'X-CSRFToken': csrfToken },
+      });
+      const data = await resp.json();
 
-    const msg = `Change "${username}" from ${roleLabels[currentRole]} to ${roleLabels[newRole]}?`;
+      if (!resp.ok) {
+        showToast(data.error || 'Something went wrong', true);
+        return;
+      }
 
-    showConfirmModal(msg, {
-      confirmLabel: `Set ${roleLabels[newRole]}`,
-      confirmClass: 'btn-primary',
-      onConfirm: async function() {
-        try {
-          const resp = await fetch(`/users/set-role/${userId}/`, {
-            method: 'POST',
-            headers: {
-              'X-CSRFToken': csrfToken,
-              'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            body: 'role=' + encodeURIComponent(newRole),
-          });
-          const data = await resp.json();
-
-          if (!resp.ok) {
-            showToast(data.error || 'Something went wrong', true);
-            selectEl.value = currentRole;
-            return;
-          }
-
-          showToast(`${username} is now ${roleLabels[newRole]}`);
-          setTimeout(() => location.reload(), 800);
-        } catch (err) {
-          showToast('Network error — please try again', true);
-          selectEl.value = currentRole;
-        }
-      },
-    });
-
-    // If user cancels the modal, revert the dropdown
-    const cancelBtn = document.getElementById('delete-modal-cancel');
-    const revert = function() {
-      selectEl.value = currentRole;
-      cancelBtn.removeEventListener('click', revert);
-    };
-    cancelBtn.addEventListener('click', revert);
+      showToast(`${username} is now ${data.is_staff ? 'an Admin' : 'a regular User'}`);
+      setTimeout(() => location.reload(), 800);
+    } catch (err) {
+      showToast('Network error — please try again', true);
+    }
   }
 
-  function deleteUser(userId, username) {
-    showConfirmModal(`Delete "${username}"? This will remove their account and cannot be undone.`, {
-      confirmLabel: 'Delete',
-      confirmClass: 'btn-danger',
-      onConfirm: async function() {
-        try {
-          const resp = await fetch(`/users/delete-user/${userId}/`, {
-            method: 'POST',
-            headers: { 'X-CSRFToken': csrfToken },
-          });
-          const data = await resp.json();
+  async function deleteUser(userId, username) {
+    if (!confirm(`Are you sure you want to DELETE "${username}"?\n\nThis action cannot be undone.`)) return;
+    if (!confirm(`Really delete "${username}"? This will remove all their data.`)) return;
 
-          if (!resp.ok) {
-            showToast(data.error || 'Something went wrong', true);
-            return;
-          }
+    try {
+      const resp = await fetch(`/users/delete-user/${userId}/`, {
+        method: 'POST',
+        headers: { 'X-CSRFToken': csrfToken },
+      });
+      const data = await resp.json();
 
-          showToast(`"${username}" has been deleted`);
-          const row = document.getElementById(`user-row-${userId}`);
-          if (row) {
-            row.style.transition = 'opacity 0.3s';
-            row.style.opacity = '0';
-            setTimeout(() => row.remove(), 300);
-          }
-        } catch (err) {
-          showToast('Network error — please try again', true);
-        }
-      },
-    });
+      if (!resp.ok) {
+        showToast(data.error || 'Something went wrong', true);
+        return;
+      }
+
+      showToast(`"${username}" has been deleted`);
+      const row = document.getElementById(`user-row-${userId}`);
+      if (row) {
+        row.style.transition = 'opacity 0.3s';
+        row.style.opacity = '0';
+        setTimeout(() => row.remove(), 300);
+      }
+    } catch (err) {
+      showToast('Network error — please try again', true);
+    }
   }
 </script>
 {% endblock %}

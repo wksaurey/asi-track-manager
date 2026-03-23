@@ -38,6 +38,7 @@ const API_URL = "/cal/api/dashboard-events/";
 
 let data          = {};
 let trackChannels = {};
+let trackColors   = {};
 let filterText    = "";
 let currentDate   = new Date(); // defaults to today
 
@@ -254,9 +255,11 @@ async function fetchAndLoadData() {
     // Reset in-memory state
     data = {};
     trackChannels = {};
+    trackColors   = {};
 
     for (const [trackName, trackInfo] of Object.entries(apiTracks)) {
       data[trackName] = [];
+      if (trackInfo.color) trackColors[trackName] = trackInfo.color;
       const events = Array.isArray(trackInfo.events) ? trackInfo.events : [];
 
       for (const ev of events) {
@@ -492,6 +495,13 @@ function render() {
     const card    = cloneTemplate("trackCardTemplate");
     const titleEl = card.querySelector(".track-name");
     titleEl.textContent = trackName;
+
+    // Apply track color as a top border accent on the card
+    const cardSection = card.querySelector(".track-card");
+    const trackColor = trackColors[trackName];
+    if (cardSection && trackColor) {
+      cardSection.style.borderTop = `3px solid ${trackColor}`;
+    }
 
     // Channel badge (track-level, top-left of card)
     const channelBadge = card.querySelector(".channel-badge");
@@ -988,7 +998,8 @@ function renderTimeline() {
 
     const blocks = laned.map(({ ev, startMins, endMins, lane, barType }) => {
       const ch          = ev.channel || "";
-      const col         = colorForChannel(ch);
+      const tColor      = trackColors[trackName];
+      const col         = tColor ? { bg: tColor + "26", border: tColor, text: tColor } : colorForChannel(ch);
       const isOpen      = endMins == null;
       const resolvedEnd = endMins ?? Math.min(startMins + 60, axisEnd);
       const left        = pct(startMins);

@@ -515,12 +515,13 @@ html.dark-theme table.calendar td:hover {
 
 .pending-badge {
   display: inline-block;
-  background: rgba(245,158,11,0.2);
+  background: rgba(245,158,11,0.4);
   color: #92400e;
   font-size: 10px;
-  font-weight: 700;
+  font-weight: 600;
   padding: 1px 5px;
   border-radius: 4px;
+  border-left: 2px solid #d97706;
   margin-left: 4px;
 }
 
@@ -1573,6 +1574,7 @@ html.dark-theme .gantt-subtrack-row  { border-color: rgba(46,168,229,0.08); }
 .gantt-block.event-operator { background: #6366f1; }
 .gantt-block.event-multi    { background: var(--primary); }
 .gantt-block.event-pending  { opacity: 0.75; }
+.gantt-block.event-past     { opacity: 0.45; filter: saturate(0.5); }
 
 .gantt-block-title {
   overflow: hidden;

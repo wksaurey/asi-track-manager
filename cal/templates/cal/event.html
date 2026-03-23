@@ -90,6 +90,7 @@
     {% if not event.is_approved %}
     <form method="post" action="{% url 'cal:event_approve' event.id %}">
       {% csrf_token %}
+      <input type="hidden" name="next" value="{% url 'cal:calendar' %}">
       <button type="submit" class="btn"
               style="background:linear-gradient(180deg,#10b981,#059669);">
         <i class="fas fa-check-circle"></i> Approve

@@ -849,6 +849,278 @@ class GanttDayViewTest(TestCase):
         self.assertGreaterEqual(response.content.decode().count('gantt-sub-row'), 2)
 
 
+# ════════════════════════════════════════════════════════════════════════════════
+# Subtrack tests
+# ════════════════════════════════════════════════════════════════════════════════
+
+class SubtrackModelTest(TestCase):
+    """Tests for the parent FK on Asset (subtrack support)."""
+
+    def test_subtrack_creation_and_parent_relationship(self):
+        """A subtrack can be created with a parent track and the relationship is correct."""
+        parent = Asset.objects.create(name='Test Main Track', asset_type=Asset.AssetType.TRACK)
+        sub_north = Asset.objects.create(
+            name='North', asset_type=Asset.AssetType.TRACK, parent=parent
+        )
+        sub_south = Asset.objects.create(
+            name='South', asset_type=Asset.AssetType.TRACK, parent=parent
+        )
+
+        self.assertEqual(sub_north.parent, parent)
+        self.assertEqual(sub_south.parent, parent)
+        self.assertIsNone(parent.parent)
+
+        subtracks = list(parent.subtracks.order_by('name'))
+        self.assertIn(sub_north, subtracks)
+        self.assertIn(sub_south, subtracks)
+        self.assertEqual(len(subtracks), 2)
+
+    def test_parent_track_has_no_parent(self):
+        """A top-level parent track must have parent=None."""
+        parent = Asset.objects.create(name='Top Track', asset_type=Asset.AssetType.TRACK)
+        self.assertIsNone(parent.parent)
+
+    def test_display_name_subtrack(self):
+        """Subtrack display_name should be 'Parent – Subtrack'."""
+        parent = Asset.objects.create(name='Test Main Track', asset_type=Asset.AssetType.TRACK)
+        sub = Asset.objects.create(
+            name='North', asset_type=Asset.AssetType.TRACK, parent=parent
+        )
+        self.assertEqual(sub.display_name, 'Test Main Track \u2013 North')
+
+    def test_display_name_parent_with_subtracks(self):
+        """Parent track display_name should be just the name (no suffix)."""
+        parent = Asset.objects.create(name='Test Main Track', asset_type=Asset.AssetType.TRACK)
+        Asset.objects.create(name='North', asset_type=Asset.AssetType.TRACK, parent=parent)
+        parent.refresh_from_db()
+        self.assertEqual(parent.display_name, 'Test Main Track')
+
+    def test_display_name_standalone_track(self):
+        """A track with no subtracks and no parent should display just its name."""
+        track = Asset.objects.create(name='Standalone', asset_type=Asset.AssetType.TRACK)
+        self.assertEqual(track.display_name, 'Standalone')
+
+    def test_subtrack_deleted_on_parent_delete(self):
+        """Deleting a parent track also deletes its subtracks (CASCADE)."""
+        parent = Asset.objects.create(name='Parent Track', asset_type=Asset.AssetType.TRACK)
+        sub = Asset.objects.create(
+            name='Sub Track', asset_type=Asset.AssetType.TRACK, parent=parent
+        )
+        parent.delete()
+        self.assertFalse(Asset.objects.filter(pk=sub.pk).exists())
+
+
+class SubtrackConflictDetectionTest(TestCase):
+    """Tests for subtrack-aware conflict detection in EventForm."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='employee', password='Testpass123!')
+        self.parent = Asset.objects.create(
+            name='Test Main Track', asset_type=Asset.AssetType.TRACK
+        )
+        self.sub_north = Asset.objects.create(
+            name='North', asset_type=Asset.AssetType.TRACK, parent=self.parent
+        )
+        self.sub_south = Asset.objects.create(
+            name='South', asset_type=Asset.AssetType.TRACK, parent=self.parent
+        )
+        self.start = datetime(2026, 4, 1, 9, 0, tzinfo=dt_timezone.utc)
+        self.end   = datetime(2026, 4, 1, 11, 0, tzinfo=dt_timezone.utc)
+
+    def _make_event(self, asset, title='Existing Event'):
+        ev = Event.objects.create(
+            title=title,
+            description='',
+            start_time=self.start,
+            end_time=self.end,
+            created_by=self.user,
+            is_approved=True,
+        )
+        ev.assets.add(asset)
+        return ev
+
+    def _form_data(self, asset, start=None, end=None):
+        s = (start or self.start).strftime('%Y-%m-%dT%H:%M')
+        e = (end or self.end).strftime('%Y-%m-%dT%H:%M')
+        return {
+            'title': 'New Event',
+            'description': 'Test event description',
+            'start_time': s,
+            'end_time': e,
+            'assets': [asset.pk],
+        }
+
+    def test_booking_subtrack_conflicts_with_existing_parent_booking(self):
+        """Booking a subtrack must conflict if the parent track is already booked."""
+        self._make_event(self.parent, 'Full Track Event')
+        form = EventForm(data=self._form_data(self.sub_north))
+        self.assertFalse(form.is_valid(), "Expected conflict with parent track booking")
+
+    def test_booking_parent_conflicts_with_existing_subtrack_booking(self):
+        """Booking the full (parent) track must conflict if any subtrack is already booked."""
+        self._make_event(self.sub_north, 'North Sub Event')
+        form = EventForm(data=self._form_data(self.parent))
+        self.assertFalse(form.is_valid(), "Expected conflict with subtrack booking")
+
+    def test_sibling_subtracks_do_not_conflict(self):
+        """Booking North subtrack must NOT conflict with an existing South subtrack booking."""
+        self._make_event(self.sub_south, 'South Sub Event')
+        form = EventForm(data=self._form_data(self.sub_north))
+        self.assertTrue(form.is_valid(), f"Sibling subtracks should not conflict. Errors: {form.errors}")
+
+    def test_same_subtrack_conflicts_with_itself(self):
+        """Booking a subtrack that is already booked at the same time must conflict."""
+        self._make_event(self.sub_north, 'Existing North Event')
+        form = EventForm(data=self._form_data(self.sub_north))
+        self.assertFalse(form.is_valid(), "Expected conflict on same subtrack")
+
+    def test_same_parent_track_conflicts_with_itself(self):
+        """Booking the full parent track that is already fully booked must conflict."""
+        self._make_event(self.parent, 'Existing Full Event')
+        form = EventForm(data=self._form_data(self.parent))
+        self.assertFalse(form.is_valid(), "Expected conflict on same parent track")
+
+    def test_no_conflict_non_overlapping_times(self):
+        """Even with parent/subtrack relationship, non-overlapping times must not conflict."""
+        self._make_event(self.parent, 'Morning Full Event')
+        afternoon_start = datetime(2026, 4, 1, 14, 0, tzinfo=dt_timezone.utc)
+        afternoon_end   = datetime(2026, 4, 1, 16, 0, tzinfo=dt_timezone.utc)
+        form = EventForm(data=self._form_data(self.sub_north, afternoon_start, afternoon_end))
+        self.assertTrue(form.is_valid(), f"Non-overlapping time should not conflict. Errors: {form.errors}")
+
+
+class SubtrackDayViewTest(TestCase):
+    """Day view renders separate rows for subtracks."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='employee', password='Testpass123!')
+        self.client.force_login(self.user)
+        self.parent = Asset.objects.create(
+            name='Test Main Track', asset_type=Asset.AssetType.TRACK
+        )
+        self.sub_north = Asset.objects.create(
+            name='North', asset_type=Asset.AssetType.TRACK, parent=self.parent
+        )
+        self.sub_south = Asset.objects.create(
+            name='South', asset_type=Asset.AssetType.TRACK, parent=self.parent
+        )
+
+    def test_day_view_shows_subtrack_names(self):
+        """Day view must show the subtrack names."""
+        response = self.client.get(reverse('cal:calendar') + '?view=day&date=2026-4-1')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'North')
+        self.assertContains(response, 'South')
+
+    def test_day_view_subtrack_event_appears_in_correct_row(self):
+        """An event booked on a subtrack must appear in the day view."""
+        start = datetime(2026, 4, 1, 9, 0, tzinfo=dt_timezone.utc)
+        end   = datetime(2026, 4, 1, 11, 0, tzinfo=dt_timezone.utc)
+        ev = Event.objects.create(
+            title='North Test', description='', start_time=start, end_time=end,
+            created_by=self.user, is_approved=True,
+        )
+        ev.assets.add(self.sub_north)
+        response = self.client.get(reverse('cal:calendar') + '?view=day&date=2026-4-1')
+        self.assertContains(response, 'North Test')
+        self.assertContains(response, 'gantt-block')
+
+    def test_day_view_full_track_event_shows_fulltrack_overlay(self):
+        """A full-track (parent) event must render with the gantt-fulltrack-overlay class."""
+        start = datetime(2026, 4, 1, 9, 0, tzinfo=dt_timezone.utc)
+        end   = datetime(2026, 4, 1, 11, 0, tzinfo=dt_timezone.utc)
+        ev = Event.objects.create(
+            title='Full Track Event', description='', start_time=start, end_time=end,
+            created_by=self.user, is_approved=True,
+        )
+        ev.assets.add(self.parent)
+        response = self.client.get(reverse('cal:calendar') + '?view=day&date=2026-4-1')
+        self.assertContains(response, 'Full Track Event')
+        self.assertContains(response, 'gantt-fulltrack-overlay')
+
+    def test_day_view_standalone_track_unchanged(self):
+        """A track with no subtracks renders normally (no subtrack row markup)."""
+        standalone = Asset.objects.create(
+            name='Standalone Track', asset_type=Asset.AssetType.TRACK
+        )
+        response = self.client.get(reverse('cal:calendar') + '?view=day&date=2026-4-1')
+        self.assertContains(response, 'Standalone Track')
+
+
+class SubtrackWeekViewTest(TestCase):
+    """Week view renders separate subtrack rows."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='employee', password='Testpass123!')
+        self.client.force_login(self.user)
+        self.parent = Asset.objects.create(
+            name='Test Main Track', asset_type=Asset.AssetType.TRACK
+        )
+        self.sub_north = Asset.objects.create(
+            name='North', asset_type=Asset.AssetType.TRACK, parent=self.parent
+        )
+        self.sub_south = Asset.objects.create(
+            name='South', asset_type=Asset.AssetType.TRACK, parent=self.parent
+        )
+
+    def test_week_view_shows_parent_track_name(self):
+        """Week view shows the parent track name (subtracks collapsed into one row)."""
+        response = self.client.get(reverse('cal:calendar') + '?view=week&date=2026-3-30')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Test Main Track')
+        # Subtrack names are not shown in the simplified single-row week view.
+        self.assertNotContains(response, 'trk-subtrack-row')
+
+    def test_week_view_subtrack_event_appears(self):
+        """An event booked on a subtrack must appear in the week view."""
+        start = datetime(2026, 3, 30, 9, 0, tzinfo=dt_timezone.utc)
+        end   = datetime(2026, 3, 30, 11, 0, tzinfo=dt_timezone.utc)
+        ev = Event.objects.create(
+            title='North Week Test', description='', start_time=start, end_time=end,
+            created_by=self.user, is_approved=True,
+        )
+        ev.assets.add(self.sub_north)
+        response = self.client.get(reverse('cal:calendar') + '?view=week&date=2026-3-30')
+        self.assertContains(response, 'North Week Test')
+
+    def test_week_view_full_track_event_appears(self):
+        """A full-track (parent) event must appear in the single parent-track row."""
+        start = datetime(2026, 3, 30, 9, 0, tzinfo=dt_timezone.utc)
+        end   = datetime(2026, 3, 30, 11, 0, tzinfo=dt_timezone.utc)
+        ev = Event.objects.create(
+            title='Full Track Week Event', description='', start_time=start, end_time=end,
+            created_by=self.user, is_approved=True,
+        )
+        ev.assets.add(self.parent)
+        response = self.client.get(reverse('cal:calendar') + '?view=week&date=2026-3-30')
+        self.assertContains(response, 'Full Track Week Event')
+
+    def test_week_view_single_row_per_track(self):
+        """The simplified week view renders exactly one row per parent track (no rowspans)."""
+        response = self.client.get(reverse('cal:calendar') + '?view=week&date=2026-3-30')
+        content = response.content.decode()
+        # No rowspan attributes — each track is a single row.
+        self.assertNotIn('rowspan=', content)
+
+    def test_week_view_sibling_events_both_appear(self):
+        """Two events on sibling subtracks on the same day must both appear."""
+        start = datetime(2026, 3, 30, 9, 0, tzinfo=dt_timezone.utc)
+        end   = datetime(2026, 3, 30, 11, 0, tzinfo=dt_timezone.utc)
+        ev1 = Event.objects.create(
+            title='North Event', description='', start_time=start, end_time=end,
+            created_by=self.user, is_approved=True,
+        )
+        ev1.assets.add(self.sub_north)
+        ev2 = Event.objects.create(
+            title='South Event', description='', start_time=start, end_time=end,
+            created_by=self.user, is_approved=True,
+        )
+        ev2.assets.add(self.sub_south)
+        response = self.client.get(reverse('cal:calendar') + '?view=week&date=2026-3-30')
+        self.assertContains(response, 'North Event')
+        self.assertContains(response, 'South Event')
+
+
 # ── Dashboard Events API Tests ───────────────────────────────────────────────
 
 class DashboardEventsAPITest(TestCase):
@@ -904,6 +1176,25 @@ class DashboardEventsAPITest(TestCase):
         data = resp.json()
         track_data = data['tracks'].get('API Track', {})
         self.assertGreaterEqual(len(track_data.get('events', [])), 1)
+
+    def test_track_includes_color_key(self):
+        """Each track dict in the API response must include a 'color' key."""
+        self.client.login(username='dashadmin', password='Testpass123!')
+        resp = self.client.get(self.url)
+        data = resp.json()
+        for track_name, track_info in data['tracks'].items():
+            self.assertIn('color', track_info,
+                          f"Track '{track_name}' missing 'color' key in API response")
+
+    def test_track_color_matches_model(self):
+        """When a track has a color set, the API response must return that exact value."""
+        self.track.color = '#e11d48'
+        self.track.save()
+        self.client.login(username='dashadmin', password='Testpass123!')
+        resp = self.client.get(self.url)
+        data = resp.json()
+        track_data = data['tracks'].get('API Track', {})
+        self.assertEqual(track_data.get('color'), '#e11d48')
 
 
 # ── Stamp Actual Time API Tests ──────────────────────────────────────────────

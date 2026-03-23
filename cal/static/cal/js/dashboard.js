@@ -288,6 +288,7 @@ async function fetchAndLoadData() {
           isScheduled:   true,
           actualStart:   ev.actual_start || null,
           actualEnd:     ev.actual_end   || null,
+          _trackColor:   trackInfo.color || null,
         });
       }
     }
@@ -496,11 +497,12 @@ function render() {
     const titleEl = card.querySelector(".track-name");
     titleEl.textContent = trackName;
 
-    // Apply track color as a top border accent on the card
-    const cardSection = card.querySelector(".track-card");
+    // Apply track color via CSS custom property on the card element.
+    // The ::before pseudo-element reads var(--track-color) to show a solid color
+    // accent bar; falls back to the default site gradient when no color is set.
     const trackColor = trackColors[trackName];
-    if (cardSection && trackColor) {
-      cardSection.style.borderTop = `3px solid ${trackColor}`;
+    if (trackColor) {
+      card.style.setProperty('--track-color', trackColor);
     }
 
     // Channel badge (track-level, top-left of card)
@@ -998,7 +1000,10 @@ function renderTimeline() {
 
     const blocks = laned.map(({ ev, startMins, endMins, lane, barType }) => {
       const ch          = ev.channel || "";
-      const tColor      = trackColors[trackName];
+      // Use _trackColor embedded on the event at load time (from API response).
+      // This avoids a separate trackColors map lookup that can fail if the map
+      // is stale or keyed differently.
+      const tColor      = ev._trackColor;
       const col         = tColor ? { bg: tColor + "26", border: tColor, text: tColor } : colorForChannel(ch);
       const isOpen      = endMins == null;
       const resolvedEnd = endMins ?? Math.min(startMins + 60, axisEnd);

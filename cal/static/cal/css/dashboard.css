@@ -185,7 +185,6 @@ html.dark-theme .add-track-form--stacked input:focus {
 .track-card {
   background: var(--card);
   border: 1px solid var(--border);
-  border-top: 3px solid transparent;
   border-radius: var(--border-r);
   box-shadow: 0 2px 8px rgba(46,168,229,0.08);
   overflow: hidden;
@@ -196,13 +195,12 @@ html.dark-theme .add-track-form--stacked input:focus {
   content: "";
   position: absolute;
   top: 0; left: 0; right: 0;
-  height: 2px;
-  background: linear-gradient(90deg, var(--primary), var(--accent));
+  height: 3px;
+  /* Uses --track-color CSS custom property set via JS; falls back to site gradient */
+  background: var(--track-color, linear-gradient(90deg, var(--primary), var(--accent)));
   border-radius: var(--border-r) var(--border-r) 0 0;
-  opacity: 0.8;
-}
-.track-card[style*="border-top"]::before {
-  display: none;
+  opacity: 0.9;
+  z-index: 1;
 }
 .track-card:hover {
   transform: translateY(-3px);

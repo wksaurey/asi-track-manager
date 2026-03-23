@@ -1151,14 +1151,28 @@ function renderTimeline() {
     });
   });
 
-  // Remove previous listener to prevent leaks on re-render
+  const closeTooltip = () => {
+    if (activeTooltip) { activeTooltip.classList.add("hidden"); activeTooltip = null; }
+  };
+
+  // Close on click anywhere outside a block
   if (renderTimeline._docClickHandler) {
     document.removeEventListener("click", renderTimeline._docClickHandler);
   }
-  renderTimeline._docClickHandler = () => {
-    if (activeTooltip) { activeTooltip.classList.add("hidden"); activeTooltip = null; }
-  };
+  renderTimeline._docClickHandler = closeTooltip;
   document.addEventListener("click", renderTimeline._docClickHandler);
+
+  // Close on scroll — fixed tooltip stays put while content moves, which is jarring.
+  // tl-body scroll: element is fresh each render so no cleanup needed.
+  const tlBody = container.querySelector(".tl-body");
+  if (tlBody) tlBody.addEventListener("scroll", closeTooltip);
+
+  // Window scroll: clean up previous listener to avoid accumulation.
+  if (renderTimeline._scrollHandler) {
+    window.removeEventListener("scroll", renderTimeline._scrollHandler, true);
+  }
+  renderTimeline._scrollHandler = closeTooltip;
+  window.addEventListener("scroll", renderTimeline._scrollHandler, true);
 }
 
 

@@ -10,6 +10,31 @@ from django.db import models
 from django.urls import reverse
 from django.utils.html import escape
 
+# Predefined palette for track colors.  New tracks auto-pick the first unused
+# color; all 16 are available for manual override via the asset edit form.
+TRACK_COLOR_PALETTE = [
+    # Reds / oranges / yellows  (~0° → 60° hue)
+    '#dc2626',  # red-600
+    '#ea580c',  # orange-600
+    '#d97706',  # amber-600
+    '#ca8a04',  # yellow-600
+    # Greens  (~80° → 175° hue)
+    '#65a30d',  # lime-600
+    '#16a34a',  # green-600
+    '#059669',  # emerald-600
+    '#0d9488',  # teal-600
+    # Blues  (~185° → 240° hue)
+    '#0891b2',  # cyan-600
+    '#0284c7',  # sky-600
+    '#2563eb',  # blue-600
+    '#4f46e5',  # indigo-600
+    # Purples / pinks  (~260° → 340° hue)
+    '#7c3aed',  # violet-600
+    '#9333ea',  # purple-600
+    '#c026d3',  # fuchsia-600
+    '#db2777',  # pink-600
+]
+
 
 class Asset(models.Model):
     """
@@ -32,6 +57,12 @@ class Asset(models.Model):
     name        = models.CharField(max_length=200)
     asset_type  = models.CharField(max_length=20, choices=AssetType.choices)
     description = models.TextField(blank=True)
+    color       = models.CharField(
+        max_length=7,
+        blank=True,
+        default='',
+        help_text='Hex color for this track (e.g. #3b82f6). Auto-assigned if left blank.',
+    )
     parent      = models.ForeignKey(
         'self',
         null=True,
@@ -52,6 +83,26 @@ class Asset(models.Model):
                 name='unique_top_level_asset_name',
             )
         ]
+
+    @classmethod
+    def next_available_color(cls):
+        """Return the first palette color not yet used by any track, cycling if needed."""
+        used = set(
+            cls.objects.filter(asset_type=cls.AssetType.TRACK)
+            .exclude(color='')
+            .values_list('color', flat=True)
+        )
+        for c in TRACK_COLOR_PALETTE:
+            if c not in used:
+                return c
+        # All colors taken — cycle by count
+        count = cls.objects.filter(asset_type=cls.AssetType.TRACK).exclude(color='').count()
+        return TRACK_COLOR_PALETTE[count % len(TRACK_COLOR_PALETTE)]
+
+    def save(self, *args, **kwargs):
+        if self.asset_type == self.AssetType.TRACK and not self.color:
+            self.color = self.next_available_color()
+        super().save(*args, **kwargs)
 
     def clean(self):
         from django.core.exceptions import ValidationError

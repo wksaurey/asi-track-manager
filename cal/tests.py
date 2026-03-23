@@ -1093,3 +1093,165 @@ class DashboardAnalyticsAccessTest(TestCase):
         resp = self.client.get(reverse('cal:dashboard'))
         self.assertEqual(resp.status_code, 302)
         self.assertIn('/users/login/', resp.url)
+
+
+# ── P1: Event.description optional ──────────────────────────────────────────
+
+class EventDescriptionOptionalTest(TestCase):
+    """Event.description must be optional (blank=True)."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='employee', password='Testpass123!')
+        self.staff = User.objects.create_user(
+            username='admin', password='Testpass123!', is_staff=True
+        )
+        self.start = timezone.now().replace(second=0, microsecond=0) + timedelta(days=1)
+        self.end = self.start + timedelta(hours=2)
+        self.asset = Asset.objects.create(
+            name='Test Track', asset_type=Asset.AssetType.TRACK
+        )
+
+    def test_model_saves_with_empty_description(self):
+        """Event created with description='' saves without raising."""
+        event = Event.objects.create(
+            title='No Desc',
+            description='',
+            start_time=self.start,
+            end_time=self.end,
+            created_by=self.user,
+        )
+        event.full_clean()  # must not raise ValidationError
+        self.assertEqual(event.description, '')
+
+    def test_form_valid_without_description(self):
+        """EventForm with empty description must be valid."""
+        form = EventForm(data={
+            'title': 'Test',
+            'description': '',
+            'start_time': self.start.strftime('%Y-%m-%dT%H:%M'),
+            'end_time': self.end.strftime('%Y-%m-%dT%H:%M'),
+            'assets': [self.asset.pk],
+        })
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_view_post_empty_description_redirects(self):
+        """POST to event/new/ with description='' returns 302 redirect."""
+        self.client.login(username='employee', password='Testpass123!')
+        response = self.client.post(reverse('cal:event_new'), {
+            'title': 'Test Event',
+            'description': '',
+            'start_time': self.start.strftime('%Y-%m-%dT%H:%M'),
+            'end_time': self.end.strftime('%Y-%m-%dT%H:%M'),
+            'assets': [self.asset.pk],
+        })
+        self.assertEqual(response.status_code, 302)
+
+
+# ── P2: Post-approval redirect ──────────────────────────────────────────────
+
+class EventApproveRedirectTest(TestCase):
+    """event_approve must respect the 'next' POST param for redirect, but reject external URLs."""
+
+    def setUp(self):
+        self.staff = User.objects.create_user(
+            username='admin', password='Testpass123!', is_staff=True
+        )
+        self.regular = User.objects.create_user(username='employee', password='Testpass123!')
+        self.start = timezone.now() + timedelta(days=1)
+        self.end = self.start + timedelta(hours=2)
+        self.event = Event.objects.create(
+            title='Pending Event',
+            description='desc',
+            start_time=self.start,
+            end_time=self.end,
+            created_by=self.regular,
+            is_approved=False,
+        )
+
+    def test_approve_with_next_redirects_to_next(self):
+        """POST with next=/cal/calendar/ must redirect there after approval."""
+        self.client.login(username='admin', password='Testpass123!')
+        url = reverse('cal:event_approve', args=[self.event.pk])
+        response = self.client.post(url, {'next': '/cal/calendar/'})
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response['Location'], '/cal/calendar/')
+        self.event.refresh_from_db()
+        self.assertTrue(self.event.is_approved)
+
+    def test_approve_with_external_next_falls_back_to_pending(self):
+        """POST with next=http://evil.com must NOT redirect externally."""
+        self.client.login(username='admin', password='Testpass123!')
+        url = reverse('cal:event_approve', args=[self.event.pk])
+        response = self.client.post(url, {'next': 'http://evil.com'})
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/events/pending/', response['Location'])
+        self.event.refresh_from_db()
+        self.assertTrue(self.event.is_approved)
+
+    def test_approve_with_protocol_relative_next_falls_back(self):
+        """//evil.com is a protocol-relative URL — must be rejected."""
+        self.client.login(username='admin', password='Testpass123!')
+        url = reverse('cal:event_approve', args=[self.event.pk])
+        response = self.client.post(url, {'next': '//evil.com'})
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/events/pending/', response['Location'])
+
+
+# ── P3: Gantt data-end attribute + event-past CSS ────────────────────────────
+
+class GanttDataEndAttributeTest(TestCase):
+    """Task 3: Gantt blocks must include a data-end attribute with ISO end time."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='employee', password='Testpass123!')
+        self.client.force_login(self.user)
+        self.track = Asset.objects.create(name='North Loop', asset_type='track')
+
+    def test_gantt_block_has_data_end_attribute(self):
+        """Day view Gantt blocks include data-end with the event end time."""
+        start = datetime(2026, 3, 9, 9, 0, tzinfo=dt_timezone.utc)
+        end = datetime(2026, 3, 9, 11, 0, tzinfo=dt_timezone.utc)
+        ev = Event.objects.create(
+            title='Data End Test', description='', start_time=start, end_time=end,
+            created_by=self.user, is_approved=True,
+        )
+        ev.assets.add(self.track)
+        response = self.client.get(reverse('cal:calendar') + '?view=day&date=2026-3-9')
+        self.assertContains(response, 'data-end="2026-03-09T11:00:00')
+
+    def test_event_past_css_rule_exists(self):
+        """styles.css must contain the .event-past rule with opacity."""
+        css_path = os.path.join(
+            os.path.dirname(__file__), 'static', 'cal', 'css', 'styles.css'
+        )
+        with open(css_path) as f:
+            css = f.read()
+        self.assertIn('.event-past', css)
+        self.assertIn('opacity', css[css.index('.event-past'):css.index('.event-past') + 200])
+
+
+# ── P3: Pending badge visibility ─────────────────────────────────────────────
+
+class PendingBadgeTest(TestCase):
+    """Task 6: Pending badge must appear for unapproved events and not for approved ones."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='employee', password='Testpass123!')
+        self.start = timezone.now() + timedelta(days=1)
+        self.end = self.start + timedelta(hours=2)
+
+    def test_pending_event_has_pending_badge(self):
+        """get_html_url for a PENDING event contains 'pending-badge'."""
+        ev = Event.objects.create(
+            title='Pending Ev', description='', start_time=self.start, end_time=self.end,
+            created_by=self.user, is_approved=False,
+        )
+        self.assertIn('pending-badge', ev.get_html_url)
+
+    def test_approved_event_no_pending_badge(self):
+        """get_html_url for an APPROVED event must NOT contain 'pending-badge'."""
+        ev = Event.objects.create(
+            title='Approved Ev', description='', start_time=self.start, end_time=self.end,
+            created_by=self.user, is_approved=True,
+        )
+        self.assertNotIn('pending-badge', ev.get_html_url)

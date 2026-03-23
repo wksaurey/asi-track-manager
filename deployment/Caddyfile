@@ -1,0 +1,12 @@
+schedule.asi.com {
+    tls internal
+
+    handle /static/* {
+        root * /srv
+        file_server
+    }
+
+    handle {
+        reverse_proxy web:8000
+    }
+}

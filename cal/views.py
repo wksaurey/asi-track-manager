@@ -404,6 +404,7 @@ def dashboard_events_api(request):
     for track in tracks:
         data[track.display_name] = {
             'id': track.pk,
+            'color': track.color,
             'events': [
                 {
                     'id':           ev.pk,
@@ -472,6 +473,7 @@ def analytics_api(request):
         )
         track_utilization.append({
             'name': track.display_name,
+            'color': track.color or '#10b981',
             'scheduled_hours': round(scheduled_secs / 3600, 1),
             'actual_hours': round(actual_secs / 3600, 1),
             'event_count': track_events.count(),

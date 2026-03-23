@@ -259,7 +259,7 @@ class Calendar(HTMLCalendar):
             f'</div>'
         )
 
-        def _make_block(ev, extra_css=''):
+        def _make_block(ev, extra_css='', track_color=None):
             """Build the HTML for a single Gantt event block."""
             origin    = ev.start_time.replace(hour=GANTT_START, minute=0, second=0, microsecond=0)
             start_off = max(0, int((ev.start_time - origin).total_seconds()) // 60)
@@ -273,10 +273,13 @@ class Calendar(HTMLCalendar):
             css       = self._event_classes(ev) + (f' {extra_css}' if extra_css else '')
             t_start   = self._fmt_time(ev.start_time)
             t_end     = self._fmt_time(ev.end_time)
+            color_style = f'background:{track_color};' if track_color else ''
+            end_iso = ev.end_time.isoformat()
             return (
                 f'<a class="gantt-block {css}" href="{edit_url}"'
-                f' style="left:{left_pct}%;width:{width_pct}%"'
-                f' title="{escape(ev.title)}">'
+                f' style="left:{left_pct}%;width:{width_pct}%;{color_style}"'
+                f' title="{escape(ev.title)}"'
+                f' data-end="{end_iso}">'
                 f'<span class="gantt-block-title">{escape(ev.title)}</span>'
                 f'<span class="gantt-block-time">{t_start}&ndash;{t_end}</span>'
                 f'</a>'
@@ -314,7 +317,7 @@ class Calendar(HTMLCalendar):
 
                     inner_rows = ''
                     for bucket in row_buckets:
-                        blocks = ''.join(_make_block(ev) for ev in bucket)
+                        blocks = ''.join(_make_block(ev, track_color=track.color) for ev in bucket)
                         inner_rows += f'<div class="gantt-sub-row">{blocks}</div>'
 
                     sub_rows_html += f'<div class="gantt-subtrack-row">{inner_rows}</div>'
@@ -323,16 +326,17 @@ class Calendar(HTMLCalendar):
                     )
 
                 # Full-track (parent) events rendered as an overlay spanning all sub-rows.
-                parent_blocks = ''.join(_make_block(ev, 'gantt-fulltrack-block') for ev in parent_events)
+                parent_blocks = ''.join(_make_block(ev, 'gantt-fulltrack-block', track_color=track.color) for ev in parent_events)
                 parent_overlay = (
                     f'<div class="gantt-fulltrack-overlay" style="--subtrack-count:{n_sub}">'
                     f'{parent_blocks}'
                     f'</div>'
                 ) if parent_blocks else ''
 
+                label_style = f'border-left:3px solid {track.color};' if track.color else ''
                 rows_html += (
                     f'<div class="gantt-row gantt-row-has-subtracks" style="--sub-rows:{n_sub}">'
-                    f'<div class="gantt-track-label">{escape(track.name)}</div>'
+                    f'<div class="gantt-track-label" style="{label_style}">{escape(track.name)}</div>'
                     f'<div class="gantt-sublabel-col">{subtrack_names_html}</div>'
                     f'<div class="gantt-lane gantt-lane-subtracks">'
                     f'{parent_overlay}'
@@ -354,12 +358,13 @@ class Calendar(HTMLCalendar):
 
                 sub_rows_html = ''
                 for sub_row_events in sub_rows:
-                    blocks = ''.join(_make_block(ev) for ev in sub_row_events)
+                    blocks = ''.join(_make_block(ev, track_color=track.color) for ev in sub_row_events)
                     sub_rows_html += f'<div class="gantt-sub-row">{blocks}</div>'
 
+                label_style = f'border-left:3px solid {track.color};' if track.color else ''
                 rows_html += (
                     f'<div class="gantt-row" style="--sub-rows:{max(n_rows,1)}">'
-                    f'<div class="gantt-track-label">{escape(track.name)}</div>'
+                    f'<div class="gantt-track-label" style="{label_style}">{escape(track.name)}</div>'
                     f'<div class="gantt-sublabel-col"></div>'
                     f'<div class="gantt-lane">{sub_rows_html}</div>'
                     f'</div>'
@@ -471,9 +476,13 @@ class Calendar(HTMLCalendar):
         body_rows = ''
         for track in parent_tracks:
             subtracks = list(track.subtracks.order_by('name'))
+            dot = (
+                f'<span class="trk-color-dot" style="background:{track.color}"></span>'
+                if track.color else ''
+            )
             row = (
                 f'<td class="trk-label-cell">'
-                f'<span class="trk-name">{escape(track.name)}</span>'
+                f'{dot}<span class="trk-name">{escape(track.name)}</span>'
                 f'</td>'
             )
             for i, day in enumerate(days):

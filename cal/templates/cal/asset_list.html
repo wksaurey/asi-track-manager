@@ -33,6 +33,7 @@
         {% endif %}
         <div class="asset-card-body">
           <div style="display:flex;align-items:center;gap:8px;">
+            {% if asset.asset_type == 'track' and asset.color %}<span class="asset-color-dot" style="background:{{ asset.color }};"></span>{% endif %}
             <strong class="asset-card-name">{{ asset.name }}</strong>
             {% if asset.subtracks.all %}
             <button type="button" class="btn btn-sm btn-secondary subtrack-toggle"

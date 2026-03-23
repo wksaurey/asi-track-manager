@@ -17,8 +17,9 @@ class AssetForm(ModelForm):
     """Simple model form for creating / editing an Asset."""
 
     class Meta:
-        model  = Asset
-        fields = ['name', 'asset_type', 'description', 'parent']
+        model   = Asset
+        fields  = ['name', 'asset_type', 'description', 'parent', 'color']
+        widgets = {'color': forms.HiddenInput()}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -30,10 +31,21 @@ class AssetForm(ModelForm):
         self.fields['parent'].required = False
         self.fields['parent'].label = 'Subtrack of'
         self.fields['parent'].help_text = 'Select a parent track if this is a subtrack.'
-        # Apply Bootstrap form-control class to every field widget
+        # Apply Bootstrap form-control class to all visible fields
         for name, field in self.fields.items():
+            if name == 'color':
+                continue
             existing = field.widget.attrs.get('class', '')
             field.widget.attrs['class'] = (existing + ' form-control').strip()
+
+    def clean_color(self):
+        import re
+        color = self.cleaned_data.get('color', '').strip()
+        asset_type = self.data.get('asset_type', '')
+        if asset_type == Asset.AssetType.TRACK and color:
+            if not re.match(r'^#[0-9A-Fa-f]{6}$', color):
+                raise forms.ValidationError('Color must be a valid hex code like #3b82f6.')
+        return color
 
 
 def get_asset_tree():

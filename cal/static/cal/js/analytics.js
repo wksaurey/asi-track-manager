@@ -133,8 +133,20 @@
         data: {
           labels: data.track_utilization.map(t => t.name),
           datasets: [
-            { label: 'Scheduled', data: data.track_utilization.map(t => t.scheduled_hours), backgroundColor: c.primaryLight, borderColor: c.primary, borderWidth: 1 },
-            { label: 'Actual', data: data.track_utilization.map(t => t.actual_hours), backgroundColor: c.secondaryLight, borderColor: c.secondary, borderWidth: 1 },
+            {
+              label: 'Scheduled',
+              data: data.track_utilization.map(t => t.scheduled_hours),
+              backgroundColor: data.track_utilization.map(t => (t.color || c.primary) + '55'),
+              borderColor:     data.track_utilization.map(t => t.color || c.primary),
+              borderWidth: 1,
+            },
+            {
+              label: 'Actual',
+              data: data.track_utilization.map(t => t.actual_hours),
+              backgroundColor: data.track_utilization.map(t => (t.color || c.secondary) + 'aa'),
+              borderColor:     data.track_utilization.map(t => t.color || c.secondary),
+              borderWidth: 1,
+            },
           ]
         },
         options: {

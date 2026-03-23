@@ -891,11 +891,11 @@ class SubtrackModelTest(TestCase):
         self.assertEqual(sub.display_name, 'Test Main Track \u2013 North')
 
     def test_display_name_parent_with_subtracks(self):
-        """Parent track display_name should be 'Name (whole)' when it has subtracks."""
+        """Parent track display_name should be just the name (no suffix)."""
         parent = Asset.objects.create(name='Test Main Track', asset_type=Asset.AssetType.TRACK)
         Asset.objects.create(name='North', asset_type=Asset.AssetType.TRACK, parent=parent)
         parent.refresh_from_db()
-        self.assertEqual(parent.display_name, 'Test Main Track (whole)')
+        self.assertEqual(parent.display_name, 'Test Main Track')
 
     def test_display_name_standalone_track(self):
         """A track with no subtracks and no parent should display just its name."""
@@ -1178,6 +1178,25 @@ class DashboardEventsAPITest(TestCase):
         data = resp.json()
         track_data = data['tracks'].get('API Track', {})
         self.assertGreaterEqual(len(track_data.get('events', [])), 1)
+
+    def test_track_includes_color_key(self):
+        """Each track dict in the API response must include a 'color' key."""
+        self.client.login(username='dashadmin', password='Testpass123!')
+        resp = self.client.get(self.url)
+        data = resp.json()
+        for track_name, track_info in data['tracks'].items():
+            self.assertIn('color', track_info,
+                          f"Track '{track_name}' missing 'color' key in API response")
+
+    def test_track_color_matches_model(self):
+        """When a track has a color set, the API response must return that exact value."""
+        self.track.color = '#e11d48'
+        self.track.save()
+        self.client.login(username='dashadmin', password='Testpass123!')
+        resp = self.client.get(self.url)
+        data = resp.json()
+        track_data = data['tracks'].get('API Track', {})
+        self.assertEqual(track_data.get('color'), '#e11d48')
 
 
 # ── Stamp Actual Time API Tests ──────────────────────────────────────────────

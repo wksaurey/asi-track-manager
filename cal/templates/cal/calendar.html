@@ -152,4 +152,16 @@
   });
 </script>
 {% endif %}
+{% if view == 'day' %}
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    var now = new Date().toISOString();
+    document.querySelectorAll('.gantt-block').forEach(function(block) {
+      if (block.dataset.end && block.dataset.end < now) {
+        block.classList.add('event-past');
+      }
+    });
+  });
+</script>
+{% endif %}
 {% endblock %}

@@ -160,7 +160,7 @@ class Event(models.Model):
     """
 
     title       = models.CharField(max_length=200)
-    description = models.TextField()
+    description = models.TextField(blank=True)
     start_time   = models.DateTimeField()
     end_time     = models.DateTimeField()
     actual_start = models.DateTimeField(null=True, blank=True)

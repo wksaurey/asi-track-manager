@@ -19,6 +19,7 @@ from django.views import generic
 from django.views.decorators.http import require_POST
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.safestring import mark_safe
 import calendar
 import json
@@ -214,6 +215,9 @@ def event_approve(request, event_id):
     event_obj = get_object_or_404(Event, pk=event_id)
     event_obj.is_approved = True
     event_obj.save(update_fields=['is_approved'])
+    next_url = request.POST.get('next', '')
+    if next_url and url_has_allowed_host_and_scheme(url=next_url, allowed_hosts={request.get_host()}):
+        return HttpResponseRedirect(next_url)
     return HttpResponseRedirect(reverse('cal:pending_events'))
 
 

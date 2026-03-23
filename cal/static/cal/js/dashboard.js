@@ -976,9 +976,20 @@ function renderTimeline() {
   }
 
   // Build rows
-  const BLOCK_H  = 34;
-  const LANE_GAP = 4;
-  const ROW_PAD  = 8;
+  const BLOCK_H  = 38;
+  const LANE_GAP = 5;
+  const ROW_PAD  = 10;
+
+  // Lighten a hex color by mixing it toward white — used for block text in dark mode
+  // so the text is a bright tint of the track color rather than the raw (often too-dark) hex.
+  const isDark = document.documentElement.classList.contains('dark-theme');
+  function lightenColor(hex, mix) {
+    if (!hex || hex.length < 7) return hex;
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return `rgb(${Math.round(r + (255-r)*mix)},${Math.round(g + (255-g)*mix)},${Math.round(b + (255-b)*mix)})`;
+  }
 
   const tracksWithEvents = trackNames.filter(t => allEvents.some(e => e.trackName === t));
 
@@ -1004,7 +1015,13 @@ function renderTimeline() {
       // This avoids a separate trackColors map lookup that can fail if the map
       // is stale or keyed differently.
       const tColor      = ev._trackColor;
-      const col         = tColor ? { bg: tColor + "26", border: tColor, text: tColor } : colorForChannel(ch);
+      const col         = tColor
+        ? {
+            bg:   tColor + (isDark ? "40" : "28"),    // slightly more opaque so blocks stand out
+            border: tColor,
+            text: isDark ? lightenColor(tColor, 0.52) : tColor,  // bright tint in dark mode for contrast
+          }
+        : colorForChannel(ch);
       const isOpen      = endMins == null;
       const resolvedEnd = endMins ?? Math.min(startMins + 60, axisEnd);
       const left        = pct(startMins);
@@ -1111,18 +1128,25 @@ function renderTimeline() {
 
       tip.classList.remove("hidden");
 
+      // Tooltip is position:fixed — position directly in viewport coordinates.
+      // This avoids scroll-offset math and works regardless of where in the
+      // timeline the block sits.
       const blockRect = block.getBoundingClientRect();
-      const wrapEl    = container.querySelector(".tl-wrap");
-      const wrapRect  = wrapEl.getBoundingClientRect();
       const tipH      = tip.offsetHeight || 160;
-      const tipW      = tip.offsetWidth  || 250;
-      const spaceAbove = blockRect.top - wrapRect.top;
+      const tipW      = tip.offsetWidth  || 260;
+      const margin    = 10;
+      const vh        = window.innerHeight;
+      const vw        = window.innerWidth;
 
-      tip.style.top    = spaceAbove >= tipH + 8
-        ? `${blockRect.top - wrapRect.top - tipH - 8}px`
-        : `${blockRect.bottom - wrapRect.top + 8}px`;
-      tip.style.left   = `${Math.min(Math.max(blockRect.left - wrapRect.left, 4), wrapRect.width - tipW - 4)}px`;
+      // Prefer opening above the block; fall back to below if not enough room.
+      const rawTop = (blockRect.top - margin >= tipH + margin)
+        ? blockRect.top  - tipH - margin
+        : blockRect.bottom + margin;
+
+      tip.style.top    = `${Math.min(Math.max(rawTop, margin), vh - tipH - margin)}px`;
+      tip.style.left   = `${Math.min(Math.max(blockRect.left, margin), vw - tipW - margin)}px`;
       tip.style.bottom = "auto";
+      tip.style.right  = "auto";
       activeTooltip    = tip;
     });
   });

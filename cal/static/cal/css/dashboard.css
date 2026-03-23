@@ -832,20 +832,20 @@ html.dark-theme .tl-gridline { background: rgba(255,255,255,0.04); }
   transition: filter 0.15s, transform 0.1s, box-shadow 0.15s;
   min-width: 4px;
 }
-.tl-block:hover { filter: brightness(1.1); transform: scaleY(1.06); box-shadow: 0 2px 12px rgba(46,168,229,0.18); z-index: 3; }
-html.dark-theme .tl-block:hover { filter: brightness(1.2); box-shadow: 0 2px 12px rgba(0,0,0,0.4); }
+.tl-block:hover { filter: brightness(1.15); transform: translateY(-2px); box-shadow: 0 4px 16px rgba(0,0,0,0.22); z-index: 3; }
+html.dark-theme .tl-block:hover { filter: brightness(1.2); box-shadow: 0 4px 16px rgba(0,0,0,0.55); }
 .tl-block--open { border-right-style: dashed; }
-.tl-block-desc { font-size: 11px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.2; }
-.tl-block-meta { font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.2; }
+.tl-block-desc { font-size: 12px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.2; }
+.tl-block-meta { font-size: 10.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.2; }
 
 
 /* ============================================================
    Tooltip
    ============================================================ */
 .tl-tooltip {
-  position: absolute;
-  z-index: 100;
-  width: 250px;
+  position: fixed;
+  z-index: 1000;
+  width: 260px;
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: 12px;

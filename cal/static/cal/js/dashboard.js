@@ -304,6 +304,17 @@ async function fetchAndLoadData() {
 
 const STAMP_API_URL = "/cal/api/event/{id}/stamp/";
 
+// ── Error toast ──────────────────────────────────────────────
+function showStampToast(message) {
+  const el = document.createElement("div");
+  el.className = "stamp-toast";
+  el.setAttribute("role", "alert");
+  el.textContent = message;
+  document.body.appendChild(el);
+  setTimeout(() => { el.classList.add("fade-out"); }, 4500);
+  setTimeout(() => { el.remove(); }, 5000);
+}
+
 async function stampActualTime(eventId, action, time) {
   try {
     const url  = STAMP_API_URL.replace("{id}", eventId);
@@ -314,12 +325,16 @@ async function stampActualTime(eventId, action, time) {
       body:    JSON.stringify(time ? { action, time } : { action }),
     });
     if (!resp.ok) {
-      console.error(`Stamp API returned ${resp.status}`);
+      const body = await resp.json().catch(() => ({}));
+      const msg = body.error || `Stamp API returned ${resp.status}`;
+      console.error(msg);
+      showStampToast(msg);
       return null;
     }
     return await resp.json();
   } catch (err) {
     console.error("Stamp API error:", err);
+    showStampToast("Network error — could not reach server.");
     return null;
   }
 }
@@ -590,6 +605,18 @@ function render() {
           actualLabel.innerHTML = `Actual: <span class="editable-time" title="Click to edit start time">${startHHMM || "?"}</span> \u2013 ...`;
           actualLabel.classList.add("time-label--active");
 
+          // Clear-start button (undo)
+          const clearStartBtn = document.createElement("button");
+          clearStartBtn.className = "stamp-clear-btn";
+          clearStartBtn.innerHTML = "&times;";
+          clearStartBtn.setAttribute("aria-label", "Clear actual start time");
+          clearStartBtn.addEventListener("click", async (e) => {
+            e.stopPropagation();
+            const result = await stampActualTime(ev.eventId, "clear_start");
+            if (result) { ev.actualStart = result.actual_start; ev.actualEnd = result.actual_end; render(); }
+          });
+          actualLabel.appendChild(clearStartBtn);
+
           // Make start time editable
           const editableStart = actualLabel.querySelector(".editable-time");
           editableStart.addEventListener("click", async (e) => {
@@ -616,8 +643,23 @@ function render() {
           const endHHMM = isoToLocalHHMM(ev.actualEnd);
           const dur = durationMinutes(startHHMM, endHHMM);
           const durStr = formatDuration(dur);
-          actualLabel.innerHTML = `Actual: <span class="editable-time" data-field="start" title="Click to edit start time">${startHHMM}</span>\u2013<span class="editable-time" data-field="end" title="Click to edit end time">${endHHMM}</span>${durStr ? ` \u2022 ${durStr}` : ""}`;
+          actualLabel.innerHTML = `Actual: <span class="editable-time" data-field="start" title="Click to edit start time">${startHHMM}</span><button class="stamp-clear-btn" data-clear="start" aria-label="Clear actual start time">&times;</button>\u2013<span class="editable-time" data-field="end" title="Click to edit end time">${endHHMM}</span><button class="stamp-clear-btn" data-clear="end" aria-label="Clear actual end time">&times;</button>${durStr ? ` \u2022 ${durStr}` : ""}`;
           actualLabel.classList.add("time-label--complete");
+
+          // Clear buttons (undo)
+          actualLabel.querySelectorAll(".stamp-clear-btn").forEach(btn => {
+            btn.addEventListener("click", async (e) => {
+              e.stopPropagation();
+              const field = btn.dataset.clear;
+              const action = field === "start" ? "clear_start" : "clear_end";
+              const result = await stampActualTime(ev.eventId, action);
+              if (result) {
+                ev.actualStart = result.actual_start;
+                ev.actualEnd = result.actual_end;
+                render();
+              }
+            });
+          });
 
           // Make both times editable
           actualLabel.querySelectorAll(".editable-time").forEach(span => {

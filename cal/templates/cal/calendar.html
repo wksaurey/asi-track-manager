@@ -35,7 +35,6 @@
     <form method="get" action="{% url 'cal:calendar' %}" class="asset-filter-form">
       <input type="hidden" name="view" value="{{ view }}">
       <input type="hidden" name="month" value="{{ request.GET.month }}">
-      {% if hide_pending %}<input type="hidden" name="hide_pending" value="1">{% endif %}
       <select name="asset" class="asset-filter-select" onchange="this.form.submit()">
         <option value="">All Assets</option>
         {% for asset in assets %}
@@ -48,8 +47,7 @@
     {% endif %}
 
     <label class="pending-filter" aria-label="Show pending events">
-      <input type="checkbox" id="pending-toggle"
-             {% if not hide_pending %}checked{% endif %}
+      <input type="checkbox" id="pending-toggle" checked
              onchange="togglePending(this)">
       <span class="pending-filter-label">Show pending</span>
     </label>
@@ -84,16 +82,33 @@
 
 {% block script %}
 <script>
-  // ── Pending filter toggle ─────────────────────────────────────────
+  // ── Pending filter toggle (client-side, no reload) ────────────────
   function togglePending(cb) {
+    var body = document.querySelector('.cal-body');
+    if (!body) return;
+    if (cb.checked) {
+      body.classList.remove('cal-hide-pending');
+    } else {
+      body.classList.add('cal-hide-pending');
+    }
+    // Sync URL so refresh preserves state (no navigation)
     var url = new URL(window.location.href);
     if (cb.checked) {
       url.searchParams.delete('hide_pending');
     } else {
       url.searchParams.set('hide_pending', '1');
     }
-    window.location.href = url.toString();
+    history.replaceState(null, '', url.toString());
   }
+  // Apply on load if hide_pending=1 is in the URL
+  (function() {
+    if (new URL(window.location.href).searchParams.get('hide_pending') === '1') {
+      var body = document.querySelector('.cal-body');
+      if (body) body.classList.add('cal-hide-pending');
+      var cb = document.getElementById('pending-toggle');
+      if (cb) cb.checked = false;
+    }
+  })();
 </script>
 {% if view == 'month' %}
 <script>

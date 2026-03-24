@@ -169,6 +169,17 @@ class EventForm(ModelForm):
         if 'assets' in cleaned and not assets:
             self.add_error('assets', 'At least one asset (track, vehicle, or operator) must be selected.')
 
+        # Only one track group per reservation: multiple subtracks of the same
+        # parent are OK, but mixing different parent tracks is not.
+        if assets:
+            track_assets = [a for a in assets if a.asset_type == Asset.AssetType.TRACK]
+            if len(track_assets) > 1:
+                parents = set()
+                for t in track_assets:
+                    parents.add(t.parent_id if t.parent_id else t.pk)
+                if len(parents) > 1:
+                    self.add_error('assets', 'Only one track group may be selected per reservation.')
+
         # End must come after start
         if start_time and end_time and start_time >= end_time:
             raise ValidationError('End time must be after start time.')

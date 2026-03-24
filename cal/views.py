@@ -64,9 +64,8 @@ class CalendarView(LoginRequiredMixin, generic.ListView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        view         = self.request.GET.get('view', 'month')
-        asset_id     = self.request.GET.get('asset', None)
-        hide_pending = self.request.GET.get('hide_pending', '') == '1'
+        view     = self.request.GET.get('view', 'month')
+        asset_id = self.request.GET.get('asset', None)
 
         # Month view uses ?month=YYYY-M; week/day views use ?date=YYYY-M-D
         if view == 'month':
@@ -75,7 +74,7 @@ class CalendarView(LoginRequiredMixin, generic.ListView):
             param = self.request.GET.get('date', None)
 
         d   = get_date(param, view)
-        cal = Calendar(d.year, d.month, asset_id=asset_id, hide_pending=hide_pending)
+        cal = Calendar(d.year, d.month, asset_id=asset_id)
 
         # Render the appropriate calendar HTML
         if view == 'week':
@@ -93,22 +92,15 @@ class CalendarView(LoginRequiredMixin, generic.ListView):
         else:
             current_q = f"date={d.year}-{d.month}-{d.day}"
 
-        # Carry optional filters through navigation links
-        filter_q = ''
         if asset_id:
-            filter_q += f'&asset={asset_id}'
-        if hide_pending:
-            filter_q += '&hide_pending=1'
-
-        current_q += filter_q
+            current_q += f"&asset={asset_id}"
 
         context['current_q']      = current_q
-        context['prev']           = prev_for(d, view) + filter_q
-        context['next']           = next_for(d, view) + filter_q
+        context['prev']           = prev_for(d, view) + (f'&asset={asset_id}' if asset_id else '')
+        context['next']           = next_for(d, view) + (f'&asset={asset_id}' if asset_id else '')
         context['view']           = view
         context['assets']         = Asset.objects.all()
         context['selected_asset'] = asset_id
-        context['hide_pending']   = hide_pending
         return context
 
 

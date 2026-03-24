@@ -80,6 +80,14 @@
   <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl"
     crossorigin="anonymous"></script>
 
+  <!-- Measure nav height for sticky toolbar positioning -->
+  <script>
+    (function() {
+      var nav = document.querySelector('.site-nav');
+      if (nav) document.documentElement.style.setProperty('--nav-height', nav.offsetHeight + 'px');
+    })();
+  </script>
+
   <!-- Theme toggle -->
   <script>
     // Sync icon with current theme on load

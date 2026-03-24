@@ -268,59 +268,68 @@
     setTimeout(() => { t.className = 'toast-msg'; }, 3000);
   }
 
-  async function toggleAdmin(userId, username) {
+  function toggleAdmin(userId, username) {
     const action = document.querySelector(`#user-row-${userId} .btn-promote`) ? 'promote' : 'demote';
     const confirmMsg = action === 'promote'
       ? `Promote "${username}" to Admin?`
       : `Demote "${username}" from Admin?`;
+    const label = action === 'promote' ? 'Promote' : 'Demote';
+    const cls   = action === 'promote' ? 'btn-primary' : 'btn-danger';
 
-    if (!confirm(confirmMsg)) return;
+    showConfirmModal(confirmMsg, {
+      confirmLabel: label,
+      confirmClass: cls,
+      onConfirm: async function() {
+        try {
+          const resp = await fetch(`/users/toggle-admin/${userId}/`, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrfToken },
+          });
+          const data = await resp.json();
 
-    try {
-      const resp = await fetch(`/users/toggle-admin/${userId}/`, {
-        method: 'POST',
-        headers: { 'X-CSRFToken': csrfToken },
-      });
-      const data = await resp.json();
+          if (!resp.ok) {
+            showToast(data.error || 'Something went wrong', true);
+            return;
+          }
 
-      if (!resp.ok) {
-        showToast(data.error || 'Something went wrong', true);
-        return;
-      }
-
-      showToast(`${username} is now ${data.is_staff ? 'an Admin' : 'a regular User'}`);
-      setTimeout(() => location.reload(), 800);
-    } catch (err) {
-      showToast('Network error — please try again', true);
-    }
+          showToast(`${username} is now ${data.is_staff ? 'an Admin' : 'a regular User'}`);
+          setTimeout(() => location.reload(), 800);
+        } catch (err) {
+          showToast('Network error — please try again', true);
+        }
+      },
+    });
   }
 
-  async function deleteUser(userId, username) {
-    if (!confirm(`Are you sure you want to DELETE "${username}"?\n\nThis action cannot be undone.`)) return;
-    if (!confirm(`Really delete "${username}"? This will remove all their data.`)) return;
+  function deleteUser(userId, username) {
+    showConfirmModal(`Delete "${username}"? This will remove their account and cannot be undone.`, {
+      confirmLabel: 'Delete',
+      confirmClass: 'btn-danger',
+      onConfirm: async function() {
+        try {
+          const resp = await fetch(`/users/delete-user/${userId}/`, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrfToken },
+          });
+          const data = await resp.json();
 
-    try {
-      const resp = await fetch(`/users/delete-user/${userId}/`, {
-        method: 'POST',
-        headers: { 'X-CSRFToken': csrfToken },
-      });
-      const data = await resp.json();
+          if (!resp.ok) {
+            showToast(data.error || 'Something went wrong', true);
+            return;
+          }
 
-      if (!resp.ok) {
-        showToast(data.error || 'Something went wrong', true);
-        return;
-      }
-
-      showToast(`"${username}" has been deleted`);
-      const row = document.getElementById(`user-row-${userId}`);
-      if (row) {
-        row.style.transition = 'opacity 0.3s';
-        row.style.opacity = '0';
-        setTimeout(() => row.remove(), 300);
-      }
-    } catch (err) {
-      showToast('Network error — please try again', true);
-    }
+          showToast(`"${username}" has been deleted`);
+          const row = document.getElementById(`user-row-${userId}`);
+          if (row) {
+            row.style.transition = 'opacity 0.3s';
+            row.style.opacity = '0';
+            setTimeout(() => row.remove(), 300);
+          }
+        } catch (err) {
+          showToast('Network error — please try again', true);
+        }
+      },
+    });
   }
 </script>
 {% endblock %}

@@ -71,6 +71,18 @@
   {% block content %}
   {% endblock %}
 
+  <!-- ── Delete confirmation modal ──────────────────────────────── -->
+  <div id="delete-modal" class="delete-modal-overlay" hidden>
+    <div class="delete-modal-box">
+      <div class="delete-modal-icon"><i class="fas fa-exclamation-triangle"></i></div>
+      <p class="delete-modal-msg" id="delete-modal-msg">Delete this item? This cannot be undone.</p>
+      <div class="delete-modal-actions">
+        <button type="button" class="btn btn-muted" id="delete-modal-cancel">Cancel</button>
+        <button type="button" class="btn btn-danger" id="delete-modal-confirm">Delete</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Optional JavaScript -->
   <!-- jQuery first, then Popper.js, then Bootstrap JS -->
   <script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN"
@@ -106,6 +118,81 @@
       if (icon) icon.className = isDark ? 'fas fa-sun' : 'fas fa-moon';
       localStorage.setItem('asi-theme', isDark ? 'dark' : 'light');
     }
+  </script>
+
+  <!-- Confirmation modal logic -->
+  <script>
+    (function() {
+      var modal      = document.getElementById('delete-modal');
+      var msgEl      = document.getElementById('delete-modal-msg');
+      var cancelBtn  = document.getElementById('delete-modal-cancel');
+      var confirmBtn = document.getElementById('delete-modal-confirm');
+      var pendingForm = null;
+      var pendingCallback = null;
+
+      function open(msg, opts) {
+        // opts: { form, onConfirm, confirmLabel, confirmClass }
+        opts = opts || {};
+        pendingForm     = opts.form || null;
+        pendingCallback = opts.onConfirm || null;
+        msgEl.textContent = msg || 'Are you sure?';
+        confirmBtn.textContent = opts.confirmLabel || 'Delete';
+        confirmBtn.className   = 'btn ' + (opts.confirmClass || 'btn-danger');
+        modal.hidden = false;
+      }
+      function close() {
+        modal.hidden = true;
+        pendingForm = null;
+        pendingCallback = null;
+      }
+
+      cancelBtn.addEventListener('click', close);
+      modal.addEventListener('click', function(e) { if (e.target === modal) close(); });
+      document.addEventListener('keydown', function(e) { if (e.key === 'Escape' && !modal.hidden) close(); });
+
+      confirmBtn.addEventListener('click', function() {
+        if (pendingCallback) {
+          var cb = pendingCallback;
+          close();
+          cb();
+          return;
+        }
+        if (!pendingForm) return;
+        var action = pendingForm.getAttribute('action');
+        var csrf   = pendingForm.querySelector('[name=csrfmiddlewaretoken]').value;
+        var card   = pendingForm.closest('.asset-card, .event-row, tr, .form-page');
+        close();
+        fetch(action, {
+          method: 'POST',
+          headers: { 'X-CSRFToken': csrf },
+          redirect: 'follow',
+        }).then(function() {
+          if (card && !card.classList.contains('form-page')) {
+            card.style.transition = 'opacity .25s';
+            card.style.opacity = '0';
+            setTimeout(function() { card.remove(); }, 250);
+          } else {
+            window.location.href = '{% url "cal:calendar" %}';
+          }
+        });
+      });
+
+      // Form-based: used by onsubmit="return confirmDelete(this, msg, opts)"
+      window.confirmDelete = function(form, msg, opts) {
+        open(msg, Object.assign({ form: form }, opts || {}));
+        return false;
+      };
+
+      // Callback-based: used by JS code that needs a confirm() replacement
+      // showConfirmModal(msg, onConfirm) or showConfirmModal(msg, opts)
+      window.showConfirmModal = function(msg, optsOrCb) {
+        if (typeof optsOrCb === 'function') {
+          open(msg, { onConfirm: optsOrCb });
+        } else {
+          open(msg, optsOrCb);
+        }
+      };
+    })();
   </script>
 
   {% block extra_js %}{% endblock %}

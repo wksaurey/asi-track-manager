@@ -51,7 +51,7 @@ class Asset(models.Model):
     """
 
     class AssetType(models.TextChoices):
-        VEHICLE  = 'vehicle',  'Heavy Equipment Vehicle'
+        VEHICLE  = 'vehicle',  'Vehicle'
         TRACK    = 'track',    'Track'
         OPERATOR = 'operator', 'Operator'
 

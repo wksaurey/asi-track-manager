@@ -26,7 +26,7 @@
       <div class="asset-card{% if asset.subtracks.all %} asset-card-has-subtracks{% endif %}">
         {% if request.user.is_staff %}
         <form class="asset-card-delete-form" method="post" action="{% url 'cal:asset_delete' asset.id %}"
-              onsubmit="return confirm('Delete {{ asset.name|escapejs }}? This cannot be undone.')">
+              onsubmit="return confirmDelete(this, 'Delete {{ asset.name|escapejs }}? This cannot be undone.')">
           {% csrf_token %}
           <button type="submit" class="asset-card-delete-btn" title="Delete {{ asset.name|escapejs }}">&times;</button>
         </form>
@@ -61,7 +61,7 @@
         <div class="subtrack-card" data-subtracks="{{ asset.id }}" style="display:none">
           {% if request.user.is_staff %}
           <form class="asset-card-delete-form" method="post" action="{% url 'cal:asset_delete' sub.id %}"
-                onsubmit="return confirm('Delete {{ sub.name|escapejs }}? This cannot be undone.')">
+                onsubmit="return confirmDelete(this, 'Delete {{ sub.name|escapejs }}? This cannot be undone.')">
             {% csrf_token %}
             <button type="submit" class="asset-card-delete-btn" title="Delete {{ sub.name|escapejs }}">&times;</button>
           </form>

@@ -131,14 +131,29 @@ document.addEventListener('DOMContentLoaded', function () {
     if (cb) cb.checked = val;
   }
 
+  // ── Single track group: deselect all tracks EXCEPT the given group ──
+  function deselectOtherTracks(keepGroupId) {
+    ASSET_DATA.tracks.forEach(track => {
+      if (track.id === keepGroupId) return;
+      setChecked(track.id, false);
+      track.subtracks.forEach(s => setChecked(s.id, false));
+    });
+  }
+  function deselectAllTracks() {
+    ASSET_DATA.tracks.forEach(track => {
+      setChecked(track.id, false);
+      track.subtracks.forEach(s => setChecked(s.id, false));
+    });
+  }
+
   function renderPicker() {
     picker.innerHTML = '';
 
-    // ── Tracks ──────────────────────────────────────────────────────────
+    // ── Tracks (one group at a time; multiple subtracks within a group OK) ──
     if (ASSET_DATA.tracks.length) {
       const heading = document.createElement('div');
       heading.className = 'asset-picker-heading';
-      heading.textContent = 'Tracks';
+      heading.textContent = 'Track';
       picker.appendChild(heading);
 
       ASSET_DATA.tracks.forEach(track => {
@@ -154,9 +169,12 @@ document.addEventListener('DOMContentLoaded', function () {
         pill.type = 'button';
         pill.className = 'track-pill' + (groupActive ? ' active' : '');
 
+        const allSubsSelected = track.subtracks.length > 0
+          && subtracksChecked.length === track.subtracks.length;
+
         if (track.subtracks.length === 0) {
           pill.textContent = track.name;
-        } else if (parentActive) {
+        } else if (parentActive || allSubsSelected) {
           pill.innerHTML = `${track.name} <span class="pill-sub-label">whole</span>`;
         } else if (subtracksChecked.length > 0) {
           const names = subtracksChecked.map(s => s.name).join(', ');
@@ -168,26 +186,30 @@ document.addEventListener('DOMContentLoaded', function () {
         group.appendChild(pill);
 
         if (track.subtracks.length === 0) {
-          // No subtracks — pill directly toggles the parent
+          // No subtracks — radio behavior across groups
           pill.addEventListener('click', () => {
-            setChecked(track.id, !isChecked(track.id));
+            const wasChecked = isChecked(track.id);
+            deselectAllTracks();
+            if (!wasChecked) setChecked(track.id, true);
             renderPicker();
           });
         } else {
-          // Has subtracks — pill selects whole track and opens panel
+          // Has subtracks — multi-select within group, single-select across groups
           const panel = document.createElement('div');
           panel.className = 'subtrack-panel' + (groupActive ? ' open' : '');
 
-          // Individual subtrack options only (no "Whole track" button)
           track.subtracks.forEach(sub => {
             const subBtn = document.createElement('button');
             subBtn.type = 'button';
             subBtn.className = 'subtrack-option' + (isChecked(sub.id) ? ' active' : '');
             subBtn.textContent = sub.name;
             subBtn.addEventListener('click', () => {
-              const next = !isChecked(sub.id);
-              setChecked(sub.id, next);
-              if (next) setChecked(track.id, false); // selecting a subtrack deselects whole
+              // Clear other track groups, keep this group
+              deselectOtherTracks(track.id);
+              // Toggle this subtrack within the group
+              setChecked(sub.id, !isChecked(sub.id));
+              // If selecting a subtrack, deselect "whole track" parent
+              if (isChecked(sub.id)) setChecked(track.id, false);
               renderPicker();
             });
             panel.appendChild(subBtn);
@@ -195,13 +217,13 @@ document.addEventListener('DOMContentLoaded', function () {
 
           group.appendChild(panel);
 
-          // Pill click: if group inactive → select whole + open panel
-          //             if group active  → deselect everything + close panel
+          // Pill click: if group inactive → deselect others, select whole + open panel
+          //             if group active  → deselect everything
           pill.addEventListener('click', () => {
             if (groupActive) {
-              setChecked(track.id, false);
-              track.subtracks.forEach(s => setChecked(s.id, false));
+              deselectAllTracks();
             } else {
+              deselectAllTracks();
               setChecked(track.id, true);
               panel.classList.add('open');
             }

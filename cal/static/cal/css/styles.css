@@ -69,6 +69,8 @@ ul { list-style: none; padding: 0; margin: 0; }
   position: sticky;
   top: 0;
   z-index: 100;
+  height: var(--nav-height, 44px);
+  box-sizing: border-box;
 }
 .site-nav-brand {
   font-size: 17px;
@@ -513,6 +515,11 @@ html.dark-theme table.calendar td:hover {
 .month-table li.event-pending,
 .day-modal-list li.event-pending  { background: linear-gradient(90deg, rgba(245,158,11,0.08), rgba(253,230,138,0.04)); border-left-color: #d97706; opacity: 0.80; }
 
+/* Hide pending events when filter is active */
+.cal-hide-pending .event-pending { display: none !important; }
+.cal-hide-pending .gantt-block.event-pending { display: none !important; }
+.cal-hide-pending .gantt-fulltrack-overlay.event-pending { display: none !important; }
+
 .pending-badge {
   display: inline-block;
   background: rgba(245,158,11,0.4);
@@ -548,7 +555,7 @@ html.dark-theme table.calendar td:hover {
   flex-wrap: wrap;
   gap: 8px;
   position: sticky;
-  top: 44px;   /* sits just below the site-nav */
+  top: var(--nav-height, 44px);   /* sits just below the site-nav */
   z-index: 50;
   box-shadow: 0 2px 8px rgba(2,40,54,0.04);
 }

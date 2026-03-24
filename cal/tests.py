@@ -1548,3 +1548,254 @@ class PendingBadgeTest(TestCase):
             created_by=self.user, is_approved=True,
         )
         self.assertNotIn('pending-badge', ev.get_html_url)
+
+
+# ── Test Gap 3: Event auto-approval ──────────────────────────────────────────
+
+class EventAutoApprovalTest(TestCase):
+    """Staff-created events are auto-approved; regular-user events are pending."""
+
+    def setUp(self):
+        self.staff = User.objects.create_user(
+            username='admin', password='Testpass123!', is_staff=True
+        )
+        self.regular = User.objects.create_user(username='employee', password='Testpass123!')
+        self.asset = Asset.objects.create(
+            name='Approval Track', asset_type=Asset.AssetType.TRACK
+        )
+        self.start = timezone.now().replace(second=0, microsecond=0) + timedelta(days=1)
+        self.end = self.start + timedelta(hours=2)
+
+    def _post_data(self):
+        return {
+            'title': 'Auto Approval Test',
+            'description': 'desc',
+            'start_time': self.start.strftime('%Y-%m-%dT%H:%M'),
+            'end_time': self.end.strftime('%Y-%m-%dT%H:%M'),
+            'assets': [self.asset.pk],
+        }
+
+    def test_staff_created_event_is_auto_approved(self):
+        """Staff user POSTs to cal:event_new -> event.is_approved is True."""
+        self.client.login(username='admin', password='Testpass123!')
+        response = self.client.post(reverse('cal:event_new'), self._post_data())
+        self.assertEqual(response.status_code, 302)
+        event = Event.objects.get(title='Auto Approval Test')
+        self.assertTrue(event.is_approved)
+
+    def test_non_staff_created_event_is_pending(self):
+        """Regular user POSTs -> event.is_approved is False."""
+        self.client.login(username='employee', password='Testpass123!')
+        response = self.client.post(reverse('cal:event_new'), self._post_data())
+        self.assertEqual(response.status_code, 302)
+        event = Event.objects.get(title='Auto Approval Test')
+        self.assertFalse(event.is_approved)
+
+
+# ── Test Gap 4: Touching vs overlapping times ────────────────────────────────
+
+class EventTouchingTimesTest(TestCase):
+    """Touching times (end == start) do not conflict; overlapping times do."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='employee', password='Testpass123!')
+        self.asset = Asset.objects.create(
+            name='Touch Track', asset_type=Asset.AssetType.TRACK
+        )
+        self.nine_am = datetime(2026, 5, 1, 9, 0, tzinfo=dt_timezone.utc)
+        self.ten_am = datetime(2026, 5, 1, 10, 0, tzinfo=dt_timezone.utc)
+        self.eleven_am = datetime(2026, 5, 1, 11, 0, tzinfo=dt_timezone.utc)
+        self.noon = datetime(2026, 5, 1, 12, 0, tzinfo=dt_timezone.utc)
+        # Existing event: 9 AM - 10 AM
+        ev = Event.objects.create(
+            title='First Block', description='',
+            start_time=self.nine_am, end_time=self.ten_am,
+            created_by=self.user, is_approved=True,
+        )
+        ev.assets.add(self.asset)
+
+    def test_touching_times_do_not_conflict(self):
+        """Event1 is 9-10 AM, event2 tries 10-11 AM on same asset -> form IS valid."""
+        form = EventForm(data={
+            'title': 'Touching Block',
+            'description': '',
+            'start_time': self.ten_am.strftime('%Y-%m-%dT%H:%M'),
+            'end_time': self.eleven_am.strftime('%Y-%m-%dT%H:%M'),
+            'assets': [self.asset.pk],
+        })
+        self.assertTrue(form.is_valid(), f"Touching times should not conflict. Errors: {form.errors}")
+
+    def test_overlapping_times_do_conflict(self):
+        """Event1 is 9-11 AM, event2 tries 10-12 AM -> form is NOT valid."""
+        # Update existing event to 9-11 AM
+        ev = Event.objects.get(title='First Block')
+        ev.end_time = self.eleven_am
+        ev.save()
+        form = EventForm(data={
+            'title': 'Overlapping Block',
+            'description': '',
+            'start_time': self.ten_am.strftime('%Y-%m-%dT%H:%M'),
+            'end_time': self.noon.strftime('%Y-%m-%dT%H:%M'),
+            'assets': [self.asset.pk],
+        })
+        self.assertFalse(form.is_valid(), "Overlapping times should conflict")
+
+
+# ── Test Gap 5: Asset form POST ──────────────────────────────────────────────
+
+class AssetFormPostTest(TestCase):
+    """Tests for creating and editing assets via POST."""
+
+    def setUp(self):
+        self.staff = User.objects.create_user(
+            username='admin', password='Testpass123!', is_staff=True
+        )
+        self.client.login(username='admin', password='Testpass123!')
+
+    def test_staff_can_create_track_via_post(self):
+        """Staff POSTs to cal:asset_create with name + asset_type=track -> 302, asset created."""
+        response = self.client.post(reverse('cal:asset_create'), {
+            'name': 'Brand New Track',
+            'asset_type': 'track',
+            'description': '',
+            'parent': '',
+            'color': '',
+        })
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(Asset.objects.filter(name='Brand New Track').exists())
+
+    def test_subtrack_creation_via_parent_param(self):
+        """Staff POSTs with parent field set to existing parent track ID -> subtrack created."""
+        parent = Asset.objects.create(
+            name='Parent Track', asset_type=Asset.AssetType.TRACK
+        )
+        response = self.client.post(reverse('cal:asset_create'), {
+            'name': 'East Lane',
+            'asset_type': 'track',
+            'description': '',
+            'parent': parent.pk,
+            'color': '',
+        })
+        self.assertEqual(response.status_code, 302)
+        subtrack = Asset.objects.get(name='East Lane')
+        self.assertEqual(subtrack.parent_id, parent.pk)
+
+    def test_staff_can_edit_asset_via_post(self):
+        """Staff POSTs to cal:asset_edit with updated name -> asset name changed."""
+        asset = Asset.objects.create(
+            name='Old Name', asset_type=Asset.AssetType.TRACK
+        )
+        url = reverse('cal:asset_edit', args=[asset.pk])
+        response = self.client.post(url, {
+            'name': 'New Name',
+            'asset_type': 'track',
+            'description': '',
+            'parent': '',
+            'color': asset.color,
+        })
+        self.assertEqual(response.status_code, 302)
+        asset.refresh_from_db()
+        self.assertEqual(asset.name, 'New Name')
+
+
+# ── Test Gap 6: Analytics computation ─────────────────────────────────────────
+
+class AnalyticsComputationTest(TestCase):
+    """Tests for analytics_api computation correctness."""
+
+    def setUp(self):
+        self.admin = User.objects.create_user(
+            username='analyticsstaff', password='Testpass123!', is_staff=True
+        )
+        self.client.login(username='analyticsstaff', password='Testpass123!')
+        self.url = reverse('cal:analytics_api')
+        self.track = Asset.objects.create(
+            name='Analytics Track', asset_type=Asset.AssetType.TRACK
+        )
+
+    def test_track_utilization_computation(self):
+        """Create a 2h approved event -> scheduled_hours matches expected value."""
+        start = datetime(2026, 5, 4, 9, 0, tzinfo=dt_timezone.utc)
+        end = datetime(2026, 5, 4, 11, 0, tzinfo=dt_timezone.utc)
+        ev = Event.objects.create(
+            title='Util Test', description='',
+            start_time=start, end_time=end,
+            created_by=self.admin, is_approved=True,
+        )
+        ev.assets.add(self.track)
+        resp = self.client.get(self.url, {'start': '2026-05-04', 'end': '2026-05-04'})
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        track_entry = next(
+            (t for t in data['track_utilization'] if t['name'] == self.track.display_name),
+            None,
+        )
+        self.assertIsNotNone(track_entry, "Expected track in utilization data")
+        self.assertEqual(track_entry['scheduled_hours'], 2.0)
+
+    def test_schedule_accuracy_computation(self):
+        """Create event with actual_start 15 min late -> avg_start_delta_minutes is 15."""
+        start = datetime(2026, 5, 4, 9, 0, tzinfo=dt_timezone.utc)
+        end = datetime(2026, 5, 4, 11, 0, tzinfo=dt_timezone.utc)
+        actual_start = datetime(2026, 5, 4, 9, 15, tzinfo=dt_timezone.utc)
+        actual_end = datetime(2026, 5, 4, 11, 0, tzinfo=dt_timezone.utc)
+        ev = Event.objects.create(
+            title='Accuracy Test', description='',
+            start_time=start, end_time=end,
+            actual_start=actual_start, actual_end=actual_end,
+            created_by=self.admin, is_approved=True,
+        )
+        ev.assets.add(self.track)
+        resp = self.client.get(self.url, {'start': '2026-05-04', 'end': '2026-05-04'})
+        data = resp.json()
+        self.assertEqual(data['schedule_accuracy']['avg_start_delta_minutes'], 15.0)
+        self.assertEqual(data['schedule_accuracy']['avg_end_delta_minutes'], 0)
+
+    def test_empty_range_returns_zeros(self):
+        """Call analytics_api with a date range that has no events -> all metrics are 0/empty."""
+        resp = self.client.get(self.url, {'start': '2099-01-01', 'end': '2099-01-07'})
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data['schedule_accuracy']['avg_start_delta_minutes'], 0)
+        self.assertEqual(data['schedule_accuracy']['avg_end_delta_minutes'], 0)
+        self.assertEqual(data['schedule_accuracy']['events_with_actuals'], 0)
+        self.assertEqual(data['schedule_accuracy']['total_events'], 0)
+
+
+# ── Test Gap 7: Asset color auto-assignment ───────────────────────────────────
+
+from .models import TRACK_COLOR_PALETTE
+
+
+class AssetColorAutoAssignmentTest(TestCase):
+    """Tests for automatic color assignment to new track assets."""
+
+    def test_first_track_gets_first_palette_color(self):
+        """Create a track without setting color -> color equals first color in TRACK_COLOR_PALETTE."""
+        # Clear any tracks seeded by migrations
+        Asset.objects.filter(asset_type=Asset.AssetType.TRACK).delete()
+        track = Asset.objects.create(
+            name='Color Test Track 1', asset_type=Asset.AssetType.TRACK
+        )
+        self.assertEqual(track.color, TRACK_COLOR_PALETTE[0])
+
+    def test_second_track_gets_second_color(self):
+        """Create two tracks -> second gets second palette color."""
+        Asset.objects.filter(asset_type=Asset.AssetType.TRACK).delete()
+        Asset.objects.create(name='Color Track A', asset_type=Asset.AssetType.TRACK)
+        track2 = Asset.objects.create(name='Color Track B', asset_type=Asset.AssetType.TRACK)
+        self.assertEqual(track2.color, TRACK_COLOR_PALETTE[1])
+
+    def test_color_cycles_after_palette_exhausted(self):
+        """Create 17 tracks -> 17th cycles back to a palette color."""
+        Asset.objects.filter(asset_type=Asset.AssetType.TRACK).delete()
+        palette_len = len(TRACK_COLOR_PALETTE)
+        for i in range(palette_len):
+            Asset.objects.create(
+                name=f'Palette Track {i}', asset_type=Asset.AssetType.TRACK
+            )
+        # 17th track (index 16 = palette_len) should cycle
+        track_17 = Asset.objects.create(
+            name='Cycle Track', asset_type=Asset.AssetType.TRACK
+        )
+        self.assertIn(track_17.color, TRACK_COLOR_PALETTE)

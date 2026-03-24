@@ -114,8 +114,9 @@
 {% endblock %}
 
 {% block script %}
+{{ asset_data_json|json_script:"asset-data" }}
 <script>
-const ASSET_DATA = {{ asset_data_json }};
+const ASSET_DATA = JSON.parse(document.getElementById('asset-data').textContent);
 
 document.addEventListener('DOMContentLoaded', function () {
   // ── Asset picker ───────────────────────────────────────────────────────

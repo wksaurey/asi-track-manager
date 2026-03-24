@@ -29,25 +29,31 @@
     <a class="cal-today-btn" href="{% url 'cal:calendar' %}?view={{ view }}">Today</a>
   </div>
 
-  <!-- Center: asset filter -->
-  {% if view == 'month' %}
-  <form method="get" action="{% url 'cal:calendar' %}" class="asset-filter-form">
-    <input type="hidden" name="view" value="{{ view }}">
+  <!-- Center: filters -->
+  <div class="cal-tb-center">
     {% if view == 'month' %}
+    <form method="get" action="{% url 'cal:calendar' %}" class="asset-filter-form">
+      <input type="hidden" name="view" value="{{ view }}">
       <input type="hidden" name="month" value="{{ request.GET.month }}">
-    {% else %}
-      <input type="hidden" name="date" value="{{ request.GET.date }}">
+      {% if hide_pending %}<input type="hidden" name="hide_pending" value="1">{% endif %}
+      <select name="asset" class="asset-filter-select" onchange="this.form.submit()">
+        <option value="">All Assets</option>
+        {% for asset in assets %}
+          <option value="{{ asset.id }}" {% if selected_asset == asset.id|stringformat:"s" %}selected{% endif %}>
+            {{ asset }}
+          </option>
+        {% endfor %}
+      </select>
+    </form>
     {% endif %}
-    <select name="asset" class="asset-filter-select" onchange="this.form.submit()">
-      <option value="">All Assets</option>
-      {% for asset in assets %}
-        <option value="{{ asset.id }}" {% if selected_asset == asset.id|stringformat:"s" %}selected{% endif %}>
-          {{ asset }}
-        </option>
-      {% endfor %}
-    </select>
-  </form>
-  {% endif %}
+
+    <label class="pending-filter" aria-label="Show pending events">
+      <input type="checkbox" id="pending-toggle"
+             {% if not hide_pending %}checked{% endif %}
+             onchange="togglePending(this)">
+      <span class="pending-filter-label">Show pending</span>
+    </label>
+  </div>
 
   <!-- Right: view switcher + new event -->
   <div class="cal-tb-right">
@@ -77,6 +83,18 @@
 {% endblock %}
 
 {% block script %}
+<script>
+  // ── Pending filter toggle ─────────────────────────────────────────
+  function togglePending(cb) {
+    var url = new URL(window.location.href);
+    if (cb.checked) {
+      url.searchParams.delete('hide_pending');
+    } else {
+      url.searchParams.set('hide_pending', '1');
+    }
+    window.location.href = url.toString();
+  }
+</script>
 {% if view == 'month' %}
 <script>
   // ── Day-events modal ────────────────────────────────────────────

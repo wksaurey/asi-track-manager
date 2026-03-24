@@ -26,20 +26,23 @@ class Calendar(HTMLCalendar):
                   asset are shown.
     """
 
-    def __init__(self, year=None, month=None, asset_id=None):
-        self.year     = year
-        self.month    = month
-        self.asset_id = asset_id
-        self.today    = date_type.today()
+    def __init__(self, year=None, month=None, asset_id=None, hide_pending=False):
+        self.year         = year
+        self.month        = month
+        self.asset_id     = asset_id
+        self.hide_pending = hide_pending
+        self.today        = date_type.today()
         super(Calendar, self).__init__()
 
     # ── Shared helpers ─────────────────────────────────────────────────────
 
     def _base_queryset(self):
-        """Return the Event queryset, optionally filtered by asset_id."""
+        """Return the Event queryset, optionally filtered by asset_id and approval status."""
         qs = Event.objects.prefetch_related('assets')
         if self.asset_id:
             qs = qs.filter(assets__id=self.asset_id)
+        if self.hide_pending:
+            qs = qs.filter(is_approved=True)
         return qs
 
     def _event_classes(self, event):

@@ -7,22 +7,23 @@ Authentication is handled by Django's built-in auth framework via
 @login_required and request.user.is_staff.
 """
 
+import calendar
 import json
+from collections import defaultdict
 from datetime import datetime, timedelta, date
+
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db.models import Count, Q
-from django.db.models.functions import ExtractHour
-from django.shortcuts import render, get_object_or_404, redirect
+from django.db.models import Count, Prefetch, Q
+from django.db.models.functions import ExtractHour, TruncDate
 from django.http import HttpResponseRedirect, JsonResponse
-from django.views import generic
-from django.views.decorators.http import require_POST
+from django.shortcuts import render, get_object_or_404, redirect
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.safestring import mark_safe
-import calendar
-import json
+from django.views import generic
+from django.views.decorators.http import require_POST
 
 from .models import Asset, Event
 from .utils import Calendar
@@ -63,8 +64,9 @@ class CalendarView(LoginRequiredMixin, generic.ListView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        view     = self.request.GET.get('view', 'month')
-        asset_id = self.request.GET.get('asset', None)
+        view         = self.request.GET.get('view', 'month')
+        asset_id     = self.request.GET.get('asset', None)
+        hide_pending = self.request.GET.get('hide_pending', '') == '1'
 
         # Month view uses ?month=YYYY-M; week/day views use ?date=YYYY-M-D
         if view == 'month':
@@ -73,7 +75,7 @@ class CalendarView(LoginRequiredMixin, generic.ListView):
             param = self.request.GET.get('date', None)
 
         d   = get_date(param, view)
-        cal = Calendar(d.year, d.month, asset_id=asset_id)
+        cal = Calendar(d.year, d.month, asset_id=asset_id, hide_pending=hide_pending)
 
         # Render the appropriate calendar HTML
         if view == 'week':
@@ -91,15 +93,22 @@ class CalendarView(LoginRequiredMixin, generic.ListView):
         else:
             current_q = f"date={d.year}-{d.month}-{d.day}"
 
+        # Carry optional filters through navigation links
+        filter_q = ''
         if asset_id:
-            current_q += f"&asset={asset_id}"
+            filter_q += f'&asset={asset_id}'
+        if hide_pending:
+            filter_q += '&hide_pending=1'
+
+        current_q += filter_q
 
         context['current_q']      = current_q
-        context['prev']           = prev_for(d, view) + (f'&asset={asset_id}' if asset_id else '')
-        context['next']           = next_for(d, view) + (f'&asset={asset_id}' if asset_id else '')
+        context['prev']           = prev_for(d, view) + filter_q
+        context['next']           = next_for(d, view) + filter_q
         context['view']           = view
         context['assets']         = Asset.objects.all()
         context['selected_asset'] = asset_id
+        context['hide_pending']   = hide_pending
         return context
 
 
@@ -191,7 +200,7 @@ def event(request, event_id=None):
         'form':            form,
         'event':           instance if event_id else None,
         'is_admin':        request.user.is_staff,
-        'asset_data_json': mark_safe(json.dumps(get_asset_tree())),
+        'asset_data_json': get_asset_tree(),
     })
 
 
@@ -392,8 +401,6 @@ def dashboard_events_api(request):
     else:
         target_date = today
 
-    from django.db.models import Prefetch
-
     track_events_qs = Event.objects.filter(
         is_approved=True, start_time__date=target_date
     ).order_by('start_time')
@@ -461,11 +468,21 @@ def analytics_api(request):
         is_approved=True,
     )
 
-    # 1. Track utilization — compute in Python since SQLite lacks good duration support
+    # Prefetch all events once to avoid N+1 queries per asset.
+    # SQLite lacks duration math, so we compute in Python from a single queryset.
+    all_events = list(events.prefetch_related('assets'))
+
+    # Build asset_id → [event, ...] mapping for O(1) lookups
+    events_by_asset = defaultdict(list)
+    for ev in all_events:
+        for asset in ev.assets.all():
+            events_by_asset[asset.pk].append(ev)
+
+    # 1. Track utilization
     track_assets = Asset.objects.filter(asset_type=Asset.AssetType.TRACK)
     track_utilization = []
     for track in track_assets:
-        track_events = events.filter(assets=track)
+        track_events = events_by_asset.get(track.pk, [])
         scheduled_secs = sum(
             (e.end_time - e.start_time).total_seconds()
             for e in track_events
@@ -480,26 +497,25 @@ def analytics_api(request):
             'color': track.color or '#10b981',
             'scheduled_hours': round(scheduled_secs / 3600, 1),
             'actual_hours': round(actual_secs / 3600, 1),
-            'event_count': track_events.count(),
+            'event_count': len(track_events),
         })
 
     # 2. Schedule accuracy — for events with actual times
-    events_with_actuals = events.filter(actual_start__isnull=False, actual_end__isnull=False)
     start_deltas = []
     end_deltas = []
-    for e in events_with_actuals:
-        start_deltas.append((e.actual_start - e.start_time).total_seconds() / 60)
-        end_deltas.append((e.actual_end - e.end_time).total_seconds() / 60)
+    for e in all_events:
+        if e.actual_start and e.actual_end:
+            start_deltas.append((e.actual_start - e.start_time).total_seconds() / 60)
+            end_deltas.append((e.actual_end - e.end_time).total_seconds() / 60)
 
     schedule_accuracy = {
         'avg_start_delta_minutes': round(sum(start_deltas) / len(start_deltas), 1) if start_deltas else 0,
         'avg_end_delta_minutes': round(sum(end_deltas) / len(end_deltas), 1) if end_deltas else 0,
         'events_with_actuals': len(start_deltas),
-        'total_events': events.count(),
+        'total_events': len(all_events),
     }
 
     # 3. Usage trends — events per day
-    from django.db.models.functions import TruncDate
     daily = (
         events
         .annotate(day=TruncDate('start_time'))
@@ -508,7 +524,6 @@ def analytics_api(request):
         .order_by('day')
     )
     # Fill in missing days with 0
-    from datetime import timedelta as td
     day_counts = {str(row['day']): row['count'] for row in daily}
     labels = []
     counts = []
@@ -516,7 +531,7 @@ def analytics_api(request):
     while d <= end_date:
         labels.append(str(d))
         counts.append(day_counts.get(str(d), 0))
-        d += td(days=1)
+        d += timedelta(days=1)
 
     usage_trends = {'labels': labels, 'counts': counts}
 
@@ -559,7 +574,7 @@ def analytics_api(request):
     non_track_assets = Asset.objects.exclude(asset_type=Asset.AssetType.TRACK)
     asset_usage = []
     for asset in non_track_assets:
-        asset_events = events.filter(assets=asset)
+        asset_events = events_by_asset.get(asset.pk, [])
         sched_secs = sum(
             (e.end_time - e.start_time).total_seconds()
             for e in asset_events
@@ -567,7 +582,7 @@ def analytics_api(request):
         asset_usage.append({
             'name': asset.name,
             'type': asset.asset_type,
-            'event_count': asset_events.count(),
+            'event_count': len(asset_events),
             'total_hours': round(sched_secs / 3600, 1),
         })
 
@@ -635,6 +650,27 @@ def dashboard_stamp_actual(request, event_id):
                     custom_time = timezone.make_aware(naive)
             except (ValueError, TypeError):
                 pass
+
+    # ── Validation ──────────────────────────────────────────────
+    if action == 'end':
+        if not event.actual_start:
+            return JsonResponse(
+                {'error': 'Cannot stamp end time before start time is recorded.'},
+                status=400,
+            )
+        if custom_time and custom_time < event.actual_start:
+            return JsonResponse(
+                {'error': 'End time cannot be before start time.'},
+                status=400,
+            )
+    if action == 'start' and custom_time:
+        event_date = event.start_time.date()
+        event_midnight = timezone.make_aware(datetime.combine(event_date, datetime.min.time()))
+        if custom_time < event_midnight - timedelta(hours=24) or custom_time > event_midnight + timedelta(hours=48):
+            return JsonResponse(
+                {'error': 'Custom time must be within 24 hours of the event date.'},
+                status=400,
+            )
 
     if action == 'start':
         event.actual_start = custom_time or timezone.now()

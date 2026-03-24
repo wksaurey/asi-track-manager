@@ -1308,3 +1308,48 @@ html.dark-theme .modal-field input:focus { box-shadow: 0 0 0 3px rgba(96,165,250
   justify-content: flex-end;
   margin-top: 20px;
 }
+
+/* ── Stamp clear (undo) button ────────────────────────────── */
+.stamp-clear-btn {
+  cursor: pointer;
+  font-size: 14px;
+  color: #9ca3af;
+  margin-left: 6px;
+  border: none;
+  background: none;
+  padding: 0 2px;
+  line-height: 1;
+  vertical-align: middle;
+}
+.stamp-clear-btn:hover {
+  color: #ef4444;
+}
+
+/* ── Stamp error toast ────────────────────────────────────── */
+.stamp-toast {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #ef4444;
+  color: #fff;
+  padding: 12px 20px;
+  border-radius: 6px;
+  z-index: 9999;
+  font-size: 14px;
+  box-shadow: 0 4px 12px rgba(0,0,0,.2);
+  transition: opacity .3s;
+}
+.stamp-toast.fade-out { opacity: 0; }
+
+/* ── Dark theme variants ──────────────────────────────────── */
+html.dark-theme .stamp-clear-btn {
+  color: #6b7280;
+}
+html.dark-theme .stamp-clear-btn:hover {
+  color: #f87171;
+}
+html.dark-theme .stamp-toast {
+  background: #dc2626;
+  box-shadow: 0 4px 12px rgba(0,0,0,.4);
+}

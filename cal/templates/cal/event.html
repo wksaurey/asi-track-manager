@@ -77,34 +77,43 @@
       {% endfor %}
     </table>
 
-    <div class="form-actions">
-      <button type="submit" class="btn">
-        <i class="fas fa-save"></i> Save Event
-      </button>
-
-    </div>
+    {# Hidden submit button — the real Save is in the action bar below #}
+    <button type="submit" id="event-save-hidden" hidden></button>
   </form>
 
-  {# Approve / Delete forms are OUTSIDE the event form — nested forms are invalid HTML #}
-  {% if is_admin and event %}
-    {% if not event.is_approved %}
-    <form method="post" action="{% url 'cal:event_approve' event.id %}">
-      {% csrf_token %}
-      <input type="hidden" name="next" value="{% url 'cal:calendar' %}">
-      <button type="submit" class="btn"
-              style="background:linear-gradient(180deg,#10b981,#059669);">
-        <i class="fas fa-check-circle"></i> Approve
-      </button>
-    </form>
+  <div class="event-action-bar">
+    <button type="button" class="btn" onclick="document.getElementById('event-save-hidden').click()">
+      <i class="fas fa-save"></i> Save Event
+    </button>
+    {% if is_admin and event %}
+      {% if not event.is_approved %}
+      <form method="post" action="{% url 'cal:event_approve' event.id %}">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{% url 'cal:calendar' %}">
+        <button type="submit" class="btn"
+                style="background:linear-gradient(180deg,#10b981,#059669);">
+          <i class="fas fa-check-circle"></i> Approve
+        </button>
+      </form>
+      {% else %}
+      <form method="post" action="{% url 'cal:event_unapprove' event.id %}"
+            onsubmit="return confirmDelete(this, 'Revoke approval? This event will return to pending status.', {confirmLabel:'Revoke', confirmClass:'btn-warning'})">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{% url 'cal:event_edit' event.id %}">
+        <button type="submit" class="btn btn-warning">
+          <i class="fas fa-undo"></i> Revoke Approval
+        </button>
+      </form>
+      {% endif %}
+      <form method="post" action="{% url 'cal:event_delete' event.id %}"
+            onsubmit="return confirmDelete(this, 'Delete this event? This cannot be undone.')">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-danger">
+          <i class="fas fa-trash"></i> Delete
+        </button>
+      </form>
     {% endif %}
-    <form method="post" action="{% url 'cal:event_delete' event.id %}"
-          onsubmit="return confirm('Delete this event? This cannot be undone.')">
-      {% csrf_token %}
-      <button type="submit" class="btn" style="background:linear-gradient(180deg,#ef4444,#dc2626);">
-        <i class="fas fa-trash"></i> Delete
-      </button>
-    </form>
-  {% endif %}
+  </div>
 
 </div>
 {% endblock %}

@@ -732,9 +732,10 @@ function render() {
         delBtn.className   = "btn btn-xxs btn-danger subnote-delete";
         delBtn.textContent = "Delete";
         delBtn.addEventListener("click", () => {
-          if (!confirm("Delete this sub-note?")) return;
-          ev.notes.splice(nIdx, 1);
-          render();
+          showConfirmModal("Delete this sub-note?", function() {
+            ev.notes.splice(nIdx, 1);
+            render();
+          });
         });
 
         li.appendChild(textSpan);
@@ -756,9 +757,10 @@ function render() {
       item.querySelector(".edit-event").addEventListener("click", (e) => openEventModal(trackName, ev, e.currentTarget));
 
       item.querySelector(".delete-event").addEventListener("click", () => {
-        if (!confirm("Delete this event?")) return;
-        const idxInData = data[trackName].findIndex(x => x === ev);
-        if (idxInData > -1) { data[trackName].splice(idxInData, 1); render(); }
+        showConfirmModal("Delete this event?", function() {
+          const idxInData = data[trackName].findIndex(x => x === ev);
+          if (idxInData > -1) { data[trackName].splice(idxInData, 1); render(); }
+        });
       });
 
       // End button (only for events with no end time)
@@ -806,9 +808,10 @@ function render() {
         render();
       });
       note.querySelector(".delete-note").addEventListener("click", () => {
-        if (!confirm("Delete this note?")) return;
-        const idxInData = data[trackName].findIndex(x => x === n);
-        if (idxInData > -1) { data[trackName].splice(idxInData, 1); render(); }
+        showConfirmModal("Delete this note?", function() {
+          const idxInData = data[trackName].findIndex(x => x === n);
+          if (idxInData > -1) { data[trackName].splice(idxInData, 1); render(); }
+        });
       });
       notesListEl.appendChild(note);
     });
@@ -827,9 +830,10 @@ function render() {
 
     // Delete entire track
     delTrackBtn.addEventListener("click", () => {
-      if (!confirm(`Delete track "${trackName}"? This cannot be undone.`)) return;
-      delete data[trackName];
-      render();
+      showConfirmModal(`Delete track "${trackName}"? This cannot be undone.`, function() {
+        delete data[trackName];
+        render();
+      });
     });
 
     // Filter visibility check
@@ -881,10 +885,12 @@ document.getElementById("importInput").addEventListener("change", async (e) => {
 });
 
 // Reload from Server — re-fetches the API for the current date and re-renders
-document.getElementById("reloadBtn").addEventListener("click", async () => {
-  if (!confirm("Reload all track data from the server? Any unsaved client-side additions will be lost.")) return;
-  await fetchAndLoadData();
-  render();
+document.getElementById("reloadBtn").addEventListener("click", () => {
+  showConfirmModal("Reload all track data from the server? Any unsaved client-side additions will be lost.", {
+    onConfirm: async function() { await fetchAndLoadData(); render(); },
+    confirmLabel: "Reload",
+    confirmClass: "btn-primary",
+  });
 });
 
 

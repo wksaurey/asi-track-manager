@@ -303,6 +303,22 @@ def event_approve(request, event_id):
     return HttpResponseRedirect(reverse('cal:pending_events'))
 
 
+@login_required
+@require_POST
+def event_unapprove(request, event_id):
+    """Admin only — revoke approval, returning an event to pending status."""
+    if not request.user.is_staff:
+        return HttpResponseRedirect(reverse('cal:calendar'))
+    event_obj = get_object_or_404(Event, pk=event_id)
+    event_obj.is_approved = False
+    event_obj.save(update_fields=['is_approved'])
+    next_url = request.POST.get('next', '')
+    if next_url and url_has_allowed_host_and_scheme(url=next_url, allowed_hosts={request.get_host()}):
+        return HttpResponseRedirect(next_url)
+    return HttpResponseRedirect(reverse('cal:event_edit', args=[event_id]))
+
+
+@login_required
 def pending_events(request):
     """Admin only — list all events awaiting approval."""
     if not is_admin(request):

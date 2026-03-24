@@ -15,5 +15,6 @@ COPY . .
 # Collect static files into /app/staticfiles
 RUN python manage.py collectstatic --noinput
 
-# 3 workers is plenty for 15 concurrent users; timeout=120 handles slow queries gracefully
-CMD ["gunicorn", "asi_track_manager.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "3", "--timeout", "120"]
+# Single worker + threads for SQLite compatibility (SQLite doesn't support concurrent
+# writes from multiple processes).  Upgrade to --workers N after migrating to PostgreSQL.
+CMD ["gunicorn", "asi_track_manager.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "1", "--threads", "4", "--timeout", "120"]

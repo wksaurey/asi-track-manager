@@ -556,6 +556,22 @@ html.dark-theme table.calendar td:hover {
 /* Left group */
 .cal-tb-left { display: flex; align-items: center; gap: 6px; }
 
+/* Center group */
+.cal-tb-center { display: flex; align-items: center; gap: 12px; }
+
+/* Pending filter */
+.pending-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-muted, #6b7280);
+  user-select: none;
+}
+.pending-filter input[type="checkbox"] { margin: 0; cursor: pointer; }
+.pending-filter:hover .pending-filter-label { text-decoration: underline; }
+
 .cal-nav-arrow {
   display: inline-flex;
   align-items: center;

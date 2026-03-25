@@ -56,17 +56,18 @@
       {% for field in form %}
       {% if field.html_name == 'assets' %}
       <tr>
-        <td><label>Assets</label></td>
+        <td><label>Assets <span class="required-mark">*</span></label></td>
         <td>
           {# Hidden original checkboxes — Django uses these for validation and save #}
           <div style="display:none">{{ field }}</div>
           {# Custom two-step asset picker #}
           <div class="asset-picker" id="asset-picker"></div>
+          <small class="field-help">Select at least one track or vehicle for this reservation.</small>
         </td>
       </tr>
       {% else %}
       <tr>
-        <td><label for="{{ field.id_for_label }}">{{ field.label }}</label></td>
+        <td><label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="required-mark">*</span>{% endif %}</label></td>
         <td>
           {{ field }}
           {% if field.help_text %}

@@ -64,7 +64,7 @@ class CalendarView(LoginRequiredMixin, generic.ListView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        view     = self.request.GET.get('view', 'month')
+        view     = self.request.GET.get('view', 'day')
         asset_id = self.request.GET.get('asset', None)
 
         # Month view uses ?month=YYYY-M; week/day views use ?date=YYYY-M-D

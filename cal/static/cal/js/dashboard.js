@@ -20,7 +20,27 @@
  *   On page load, track and event data is fetched from the Django API at
  *   /cal/api/dashboard-events/ and merged into the local data object.
  *   All edits (add event, add note, delete, etc.) are client-side only for
- *   real-time logging during the day. Use Export JSON to back up.
+ *   real-time logging during the day.
+ *
+ * CLIENT-ONLY FEATURES (not persisted to the database):
+ *   The following data lives only in the browser's in-memory JS state and is
+ *   lost on page reload:
+ *
+ *   1. Track-level notes      — data[trackName] entries with desc "__TRACK_NOTE__".
+ *                                Created via the "Add Note" form on each track card.
+ *   2. Event sub-notes        — ev.notes[] array on each event entry.
+ *                                Created via the "+ Sub-note" button on event items.
+ *   3. Inline event edits     — editing time/desc of an event via the popup modal
+ *                                only updates the in-memory object, not the DB.
+ *   4. Client-added events    — events created via the popup modal (not from the API)
+ *                                exist only in `data[trackName]` and have no `eventId`.
+ *   5. Client-side deletions  — deleting events, notes, or tracks only removes them
+ *                                from in-memory state; DB records are untouched.
+ *
+ *   Server-persisted features:
+ *   - Radio channels (saved via /cal/api/track/<id>/channel/)
+ *   - Actual start/end stamps (saved via /cal/api/event/<id>/stamp/)
+ *   - Scheduled events loaded from /cal/api/dashboard-events/ (read-only)
  */
 
 
@@ -278,6 +298,7 @@ async function fetchAndLoadData() {
           actualStart: ev.actual_start || null,
           actualEnd: ev.actual_end || null,
           _trackColor: color || null,
+          radioChannelOverride: ev.radio_channel || null,
         });
       }
       return result;
@@ -351,45 +372,7 @@ async function stampActualTime(eventId, action, time) {
 }
 
 
-// ============================================================
-// Export / Import helpers (no localStorage — in-memory only)
-// ============================================================
-
-function exportData() {
-  const exportObj = { version: 3, tracks: data, trackChannels };
-  const blob = new Blob([JSON.stringify(exportObj, null, 2)], { type: "application/json" });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement("a");
-  a.href     = url;
-  const dt   = new Date();
-  const pad  = n => String(n).padStart(2, "0");
-  a.download = `tracks_export_${dt.getFullYear()}-${pad(dt.getMonth()+1)}-${pad(dt.getDate())}_${pad(dt.getHours())}${pad(dt.getMinutes())}.json`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-}
-
-async function importFile(file) {
-  if (!file) return;
-  try {
-    const text     = await file.text();
-    const incoming = JSON.parse(text);
-    if (incoming && typeof incoming === "object" && !Array.isArray(incoming)) {
-      if (incoming.tracks || incoming.trackChannels || incoming.version) {
-        data          = incoming.tracks && typeof incoming.tracks === "object" ? incoming.tracks : data;
-        trackChannels = incoming.trackChannels && typeof incoming.trackChannels === "object" ? incoming.trackChannels : trackChannels;
-      } else {
-        data = incoming;
-      }
-      render();
-    } else {
-      throw new Error("Bad format");
-    }
-  } catch {
-    alert("Import failed. Ensure this is a valid JSON export from this app.");
-  }
-}
+// (Export / Import helpers removed — data is server-managed)
 
 
 // ============================================================
@@ -514,6 +497,193 @@ eventModalForm.addEventListener("submit", (e) => {
 // Rendering
 // ============================================================
 
+/**
+ * Render a single event item into the given list element.
+ * Shared by parent tracks and subtracks for consistent styling.
+ */
+function renderEventItem(ev, trackLabel, dataSource, listEl, normalizedFilter) {
+  const item = cloneTemplate("eventItemTemplate");
+  item.querySelector(".time-chip").textContent = formatTimeChip(ev.time);
+
+  // Per-event radio channel dropdown (scheduled events only)
+  if (ev.isScheduled && ev.eventId) {
+    const chSelect = document.createElement("select");
+    chSelect.className = "event-channel-badge";
+    chSelect.title = "Event radio channel";
+
+    // Build options: Track default + Ch 11-16
+    const defaultOpt = document.createElement("option");
+    defaultOpt.value = "";
+    defaultOpt.textContent = "Track Ch";
+    chSelect.appendChild(defaultOpt);
+    for (let ch = 11; ch <= 16; ch++) {
+      const opt = document.createElement("option");
+      opt.value = String(ch);
+      opt.textContent = `Ch ${ch}`;
+      chSelect.appendChild(opt);
+    }
+
+    // Set current value
+    if (ev.radioChannelOverride) {
+      chSelect.value = String(ev.radioChannelOverride);
+    } else {
+      chSelect.value = "";
+    }
+    chSelect.setAttribute("data-empty", ev.radioChannelOverride ? "false" : "true");
+
+    chSelect.addEventListener("change", async () => {
+      const val = chSelect.value;
+      const csrf = document.querySelector('meta[name="csrf-token"]')?.content || "";
+      const resp = await fetch(`/cal/api/event/${ev.eventId}/channel/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-CSRFToken": csrf },
+        body: JSON.stringify({ channel: val ? parseInt(val, 10) : null }),
+      });
+      if (resp.ok) {
+        const result = await resp.json();
+        ev.radioChannelOverride = result.radio_channel || null;
+        chSelect.setAttribute("data-empty", ev.radioChannelOverride ? "false" : "true");
+      } else {
+        showStampToast("Failed to set event radio channel");
+        chSelect.value = ev.radioChannelOverride ? String(ev.radioChannelOverride) : "";
+      }
+    });
+
+    const eventMain = item.querySelector(".event-main");
+    eventMain.appendChild(chSelect);
+  }
+
+  // Actual-time row (scheduled events only)
+  if (ev.isScheduled) {
+    const actualRow = document.createElement("div");
+    actualRow.className = "actual-time-row";
+
+    const schedLabel = document.createElement("span");
+    schedLabel.className   = "time-label time-label--scheduled";
+    schedLabel.textContent = `Scheduled: ${formatTimeChip(ev.scheduledTime)}`;
+    actualRow.appendChild(schedLabel);
+
+    const actualLabel = document.createElement("span");
+    actualLabel.className = "time-label time-label--actual";
+
+    if (!ev.actualStart) {
+      actualLabel.textContent = "Actual: \u2014";
+      const startBtn = document.createElement("button");
+      startBtn.className = "btn btn-xxs btn-start";
+      startBtn.innerHTML = "&#9654; Start";
+      startBtn.addEventListener("click", async () => {
+        const result = await stampActualTime(ev.eventId, "start");
+        if (result) { ev.actualStart = result.actual_start; render(); }
+      });
+      actualRow.appendChild(actualLabel);
+      actualRow.appendChild(startBtn);
+    } else if (!ev.actualEnd) {
+      const startHHMM = isoToLocalHHMM(ev.actualStart);
+      actualLabel.innerHTML = `Actual: <span class="editable-time" title="Click to edit start time">${startHHMM || "?"}</span> \u2013 ...`;
+      actualLabel.classList.add("time-label--active");
+
+      const clearStartBtn = document.createElement("button");
+      clearStartBtn.className = "stamp-clear-btn";
+      clearStartBtn.innerHTML = "&times;";
+      clearStartBtn.setAttribute("aria-label", "Clear actual start time");
+      clearStartBtn.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        const result = await stampActualTime(ev.eventId, "clear_start");
+        if (result) { ev.actualStart = result.actual_start; ev.actualEnd = result.actual_end; render(); }
+      });
+      actualLabel.appendChild(clearStartBtn);
+
+      const editableStart = actualLabel.querySelector(".editable-time");
+      editableStart.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        const newTime = prompt("Edit actual start time (HH:MM, 24h):", startHHMM || "");
+        if (newTime === null) return;
+        const trimmed = newTime.trim();
+        if (!trimmed.match(/^\d{1,2}:\d{2}$/)) { alert("Invalid format. Use HH:MM (e.g., 09:15)"); return; }
+        const result = await stampActualTime(ev.eventId, "start", localHHMMtoISO(trimmed));
+        if (result) { ev.actualStart = result.actual_start; render(); }
+      });
+
+      const endBtn = document.createElement("button");
+      endBtn.className = "btn btn-xxs btn-end";
+      endBtn.innerHTML = "&#9632; End";
+      endBtn.addEventListener("click", async () => {
+        const result = await stampActualTime(ev.eventId, "end");
+        if (result) { ev.actualEnd = result.actual_end; render(); }
+      });
+      actualRow.appendChild(actualLabel);
+      actualRow.appendChild(endBtn);
+    } else {
+      const startHHMM = isoToLocalHHMM(ev.actualStart);
+      const endHHMM = isoToLocalHHMM(ev.actualEnd);
+      const dur = durationMinutes(startHHMM, endHHMM);
+      const durStr = formatDuration(dur);
+      actualLabel.innerHTML = `Actual: <span class="editable-time" data-field="start" title="Click to edit start time">${startHHMM}</span><button class="stamp-clear-btn" data-clear="start" aria-label="Clear actual start time">&times;</button>\u2013<span class="editable-time" data-field="end" title="Click to edit end time">${endHHMM}</span><button class="stamp-clear-btn" data-clear="end" aria-label="Clear actual end time">&times;</button>${durStr ? ` \u2022 ${durStr}` : ""}`;
+      actualLabel.classList.add("time-label--complete");
+
+      actualLabel.querySelectorAll(".stamp-clear-btn").forEach(btn => {
+        btn.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          const field = btn.dataset.clear;
+          const action = field === "start" ? "clear_start" : "clear_end";
+          const result = await stampActualTime(ev.eventId, action);
+          if (result) {
+            ev.actualStart = result.actual_start;
+            ev.actualEnd = result.actual_end;
+            render();
+          }
+        });
+      });
+
+      actualLabel.querySelectorAll(".editable-time").forEach(span => {
+        span.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          const field = span.dataset.field;
+          const currentVal = field === "start" ? startHHMM : endHHMM;
+          const newTime = prompt(`Edit actual ${field} time (HH:MM, 24h):`, currentVal || "");
+          if (newTime === null) return;
+          const trimmed = newTime.trim();
+          if (!trimmed.match(/^\d{1,2}:\d{2}$/)) { alert("Invalid format. Use HH:MM (e.g., 09:15)"); return; }
+          const result = await stampActualTime(ev.eventId, field, localHHMMtoISO(trimmed));
+          if (result) {
+            if (field === "start") ev.actualStart = result.actual_start;
+            else ev.actualEnd = result.actual_end;
+            render();
+          }
+        });
+      });
+
+      actualRow.appendChild(actualLabel);
+    }
+
+    const eventMain = item.querySelector(".event-main");
+    eventMain.after(actualRow);
+  }
+
+  const textEl  = item.querySelector(".event-text");
+
+  const safe = smartHighlight(ev.desc);
+  textEl.innerHTML = normalizedFilter ? highlightTerm(safe, filterText) : safe;
+
+  // Remove action buttons and sub-notes from the card
+  const actionsEl = item.querySelector(".event-actions");
+  if (actionsEl) actionsEl.remove();
+  const subList = item.querySelector(".subnotes-list");
+  if (subList) subList.remove();
+
+  // Make entire event card clickable — navigate to edit view
+  if (ev.eventId) {
+    item.style.cursor = "pointer";
+    item.addEventListener("click", (e) => {
+      // Don't navigate when clicking stamp buttons or editable times
+      if (e.target.closest("button") || e.target.closest(".editable-time") || e.target.closest("select")) return;
+      window.location.href = `/cal/event/edit/${ev.eventId}/?next=/cal/dashboard/`;
+    });
+  }
+
+  listEl.appendChild(item);
+}
+
 function render() {
   grid.innerHTML = "";
   const normalizedFilter = filterText.trim().toLowerCase();
@@ -559,7 +729,13 @@ function render() {
     const eventsListEl   = card.querySelector(".events-list");
     const notesListEl    = card.querySelector(".notes-list");
 
-    on(quickAddBtn,   "click", () => openEventModal(trackName, null, quickAddBtn));
+    on(quickAddBtn,   "click", () => {
+      const dateStr = toISODateStr(currentDate);
+      const tid = trackIds[trackName];
+      let url = `/cal/event/new/?next=/cal/dashboard/&date=${dateStr}`;
+      if (tid) url += `&track=${tid}`;
+      window.location.href = url;
+    });
     on(addNoteToggle, "click", () => noteForm?.classList.toggle("hidden"));
     on(cancelNoteBtn, "click", () => noteForm?.classList.add("hidden"));
 
@@ -586,201 +762,7 @@ function render() {
 
     // Render each event
     filteredEvents.forEach((ev) => {
-      const item = cloneTemplate("eventItemTemplate");
-      item.querySelector(".time-chip").textContent = formatTimeChip(ev.time);
-
-      // Actual-time row (scheduled events only)
-      if (ev.isScheduled) {
-        const actualRow = document.createElement("div");
-        actualRow.className = "actual-time-row";
-
-        // Scheduled label
-        const schedLabel = document.createElement("span");
-        schedLabel.className   = "time-label time-label--scheduled";
-        schedLabel.textContent = `Scheduled: ${formatTimeChip(ev.scheduledTime)}`;
-        actualRow.appendChild(schedLabel);
-
-        // Actual label + buttons
-        const actualLabel = document.createElement("span");
-        actualLabel.className = "time-label time-label--actual";
-
-        if (!ev.actualStart) {
-          actualLabel.textContent = "Actual: \u2014";
-          const startBtn = document.createElement("button");
-          startBtn.className = "btn btn-xxs btn-start";
-          startBtn.innerHTML = "&#9654; Start";
-          startBtn.addEventListener("click", async () => {
-            const result = await stampActualTime(ev.eventId, "start");
-            if (result) { ev.actualStart = result.actual_start; render(); }
-          });
-          actualRow.appendChild(actualLabel);
-          actualRow.appendChild(startBtn);
-        } else if (!ev.actualEnd) {
-          const startHHMM = isoToLocalHHMM(ev.actualStart);
-          actualLabel.innerHTML = `Actual: <span class="editable-time" title="Click to edit start time">${startHHMM || "?"}</span> \u2013 ...`;
-          actualLabel.classList.add("time-label--active");
-
-          // Clear-start button (undo)
-          const clearStartBtn = document.createElement("button");
-          clearStartBtn.className = "stamp-clear-btn";
-          clearStartBtn.innerHTML = "&times;";
-          clearStartBtn.setAttribute("aria-label", "Clear actual start time");
-          clearStartBtn.addEventListener("click", async (e) => {
-            e.stopPropagation();
-            const result = await stampActualTime(ev.eventId, "clear_start");
-            if (result) { ev.actualStart = result.actual_start; ev.actualEnd = result.actual_end; render(); }
-          });
-          actualLabel.appendChild(clearStartBtn);
-
-          // Make start time editable
-          const editableStart = actualLabel.querySelector(".editable-time");
-          editableStart.addEventListener("click", async (e) => {
-            e.stopPropagation();
-            const newTime = prompt("Edit actual start time (HH:MM, 24h):", startHHMM || "");
-            if (newTime === null) return;
-            const trimmed = newTime.trim();
-            if (!trimmed.match(/^\d{1,2}:\d{2}$/)) { alert("Invalid format. Use HH:MM (e.g., 09:15)"); return; }
-            const result = await stampActualTime(ev.eventId, "start", localHHMMtoISO(trimmed));
-            if (result) { ev.actualStart = result.actual_start; render(); }
-          });
-
-          const endBtn = document.createElement("button");
-          endBtn.className = "btn btn-xxs btn-end";
-          endBtn.innerHTML = "&#9632; End";
-          endBtn.addEventListener("click", async () => {
-            const result = await stampActualTime(ev.eventId, "end");
-            if (result) { ev.actualEnd = result.actual_end; render(); }
-          });
-          actualRow.appendChild(actualLabel);
-          actualRow.appendChild(endBtn);
-        } else {
-          const startHHMM = isoToLocalHHMM(ev.actualStart);
-          const endHHMM = isoToLocalHHMM(ev.actualEnd);
-          const dur = durationMinutes(startHHMM, endHHMM);
-          const durStr = formatDuration(dur);
-          actualLabel.innerHTML = `Actual: <span class="editable-time" data-field="start" title="Click to edit start time">${startHHMM}</span><button class="stamp-clear-btn" data-clear="start" aria-label="Clear actual start time">&times;</button>\u2013<span class="editable-time" data-field="end" title="Click to edit end time">${endHHMM}</span><button class="stamp-clear-btn" data-clear="end" aria-label="Clear actual end time">&times;</button>${durStr ? ` \u2022 ${durStr}` : ""}`;
-          actualLabel.classList.add("time-label--complete");
-
-          // Clear buttons (undo)
-          actualLabel.querySelectorAll(".stamp-clear-btn").forEach(btn => {
-            btn.addEventListener("click", async (e) => {
-              e.stopPropagation();
-              const field = btn.dataset.clear;
-              const action = field === "start" ? "clear_start" : "clear_end";
-              const result = await stampActualTime(ev.eventId, action);
-              if (result) {
-                ev.actualStart = result.actual_start;
-                ev.actualEnd = result.actual_end;
-                render();
-              }
-            });
-          });
-
-          // Make both times editable
-          actualLabel.querySelectorAll(".editable-time").forEach(span => {
-            span.addEventListener("click", async (e) => {
-              e.stopPropagation();
-              const field = span.dataset.field;
-              const currentVal = field === "start" ? startHHMM : endHHMM;
-              const newTime = prompt(`Edit actual ${field} time (HH:MM, 24h):`, currentVal || "");
-              if (newTime === null) return;
-              const trimmed = newTime.trim();
-              if (!trimmed.match(/^\d{1,2}:\d{2}$/)) { alert("Invalid format. Use HH:MM (e.g., 09:15)"); return; }
-              const result = await stampActualTime(ev.eventId, field, localHHMMtoISO(trimmed));
-              if (result) {
-                if (field === "start") ev.actualStart = result.actual_start;
-                else ev.actualEnd = result.actual_end;
-                render();
-              }
-            });
-          });
-
-          actualRow.appendChild(actualLabel);
-        }
-
-        // Insert after event-main
-        const eventMain = item.querySelector(".event-main");
-        eventMain.after(actualRow);
-      }
-
-      const textEl  = item.querySelector(".event-text");
-      const subList = item.querySelector(".subnotes-list");
-
-      const safe = smartHighlight(ev.desc);
-      textEl.innerHTML = normalizedFilter ? highlightTerm(safe, filterText) : safe;
-
-      // Sub-notes
-      (ev.notes || []).forEach((n, nIdx) => {
-        const li = document.createElement("li");
-        li.className = "subnote-item";
-
-        const textSpan = document.createElement("span");
-        textSpan.className = "subnote-text";
-        textSpan.innerHTML = normalizedFilter ? highlightTerm(n, filterText) : smartHighlight(n);
-
-        const editBtn = document.createElement("button");
-        editBtn.className   = "btn btn-xxs btn-outline subnote-edit";
-        editBtn.textContent = "Edit";
-        editBtn.addEventListener("click", () => {
-          const newVal = prompt("Edit sub-note:", n);
-          if (newVal === null) return;
-          const trimmed = newVal.trim();
-          if (trimmed) { ev.notes[nIdx] = trimmed; render(); }
-        });
-
-        const delBtn = document.createElement("button");
-        delBtn.className   = "btn btn-xxs btn-danger subnote-delete";
-        delBtn.textContent = "Delete";
-        delBtn.addEventListener("click", () => {
-          showConfirmModal("Delete this sub-note?", function() {
-            ev.notes.splice(nIdx, 1);
-            render();
-          });
-        });
-
-        li.appendChild(textSpan);
-        li.appendChild(editBtn);
-        li.appendChild(delBtn);
-        subList.appendChild(li);
-      });
-
-      // Event action buttons
-      item.querySelector(".add-subnote").addEventListener("click", () => {
-        const val = prompt("Add sub-note (e.g., 'AJ assisting'):");
-        if (val && val.trim()) {
-          ev.notes = ev.notes || [];
-          ev.notes.push(val.trim());
-          render();
-        }
-      });
-
-      item.querySelector(".edit-event").addEventListener("click", (e) => openEventModal(trackName, ev, e.currentTarget));
-
-      item.querySelector(".delete-event").addEventListener("click", () => {
-        showConfirmModal("Delete this event?", function() {
-          const idxInData = data[trackName].findIndex(x => x === ev);
-          if (idxInData > -1) { data[trackName].splice(idxInData, 1); render(); }
-        });
-      });
-
-      // End button (only for events with no end time)
-      (function attachEndButton() {
-        if (String(ev.time || "").includes("-")) return;
-        const actionsEl = item.querySelector(".event-actions");
-        const endBtn    = document.createElement("button");
-        endBtn.className   = "btn btn-xxs";
-        endBtn.textContent = "End";
-        endBtn.title       = "Stamp the current time as this event's end time";
-        endBtn.addEventListener("click", () => {
-          if (!ev.time) ev.time = nowHHMM();
-          const startPart = String(ev.time).split("-")[0].trim();
-          ev.time = `${startPart}-${nowHHMM()}`;
-          render();
-        });
-        actionsEl.insertBefore(endBtn, actionsEl.firstChild);
-      })();
-
-      eventsListEl.appendChild(item);
+      renderEventItem(ev, trackName, data[trackName], eventsListEl, normalizedFilter);
     });
 
     // Empty state
@@ -875,7 +857,17 @@ function render() {
           }
         });
 
-        // Subtrack events
+        // Subtrack "+" button — navigate to new event with subtrack pre-selected
+        const subAddBtn = subSection.querySelector(".subtrack-add-btn");
+        if (subAddBtn) {
+          const subTrackId = trackIds[subChKey] || subInfo.id;
+          subAddBtn.addEventListener("click", () => {
+            const dateStr = toISODateStr(currentDate);
+            window.location.href = `/cal/event/new/?next=/cal/dashboard/&date=${dateStr}&track=${subTrackId}`;
+          });
+        }
+
+        // Subtrack events — same rendering as parent track events
         const subEventsList = subSection.querySelector(".subtrack-events-list");
         const subEvents = sortEvents(subInfo.events || []);
         if (subEvents.length === 0) {
@@ -884,11 +876,9 @@ function render() {
           li.textContent = "No events";
           subEventsList.appendChild(li);
         } else {
+          const subLabel = `${trackName} \u203a ${subName}`;
           subEvents.forEach(ev => {
-            const li = document.createElement("li");
-            li.className = "subtrack-event-item";
-            li.innerHTML = `<span class="time-chip">${formatTimeChip(ev.time)}</span> <span>${ev.desc}</span>`;
-            subEventsList.appendChild(li);
+            renderEventItem(ev, subLabel, subInfo.events, subEventsList, normalizedFilter);
           });
         }
 
@@ -903,7 +893,7 @@ function render() {
     const empty = document.createElement("div");
     empty.style.color   = "var(--muted)";
     empty.style.padding = "16px";
-    empty.textContent   = "No tracks yet. Use 'Add Track' to create one, or click 'Reload from Server'.";
+    empty.textContent   = "No tracks with events for this date.";
     grid.appendChild(empty);
   }
 }
@@ -913,59 +903,7 @@ function render() {
 // Global controls
 // ============================================================
 
-document.getElementById("searchInput").addEventListener("input", (e) => {
-  filterText = e.target.value;
-  render();
-});
-
-document.getElementById("addTrackForm").addEventListener("submit", (e) => {
-  e.preventDefault();
-  const inp  = document.getElementById("newTrackName");
-  const name = (inp.value || "").trim();
-  if (!name) return;
-  if (data[name]) { alert("Track already exists."); return; }
-  data[name] = [];
-  inp.value = "";
-  render();
-});
-
-document.getElementById("exportBtn").addEventListener("click", exportData);
-
-document.getElementById("importInput").addEventListener("change", async (e) => {
-  const file = e.target.files?.[0];
-  if (!file) return;
-  await importFile(file);
-  e.target.value = "";
-});
-
-// Reload from Server — re-fetches the API for the current date and re-renders
-document.getElementById("reloadBtn").addEventListener("click", () => {
-  showConfirmModal("Reload all track data from the server? Any unsaved client-side additions will be lost.", {
-    onConfirm: async function() { await fetchAndLoadData(); render(); },
-    confirmLabel: "Reload",
-    confirmClass: "btn-primary",
-  });
-});
-
-
-// ============================================================
-// Header hamburger menu
-// ============================================================
-
-(function initHeaderHamburger() {
-  const wrap = document.getElementById("headerHamburger");
-  if (!wrap) return;
-  const btn  = wrap.querySelector(".hamburger-btn");
-  const menu = wrap.querySelector(".hamburger-menu");
-
-  function closeMenu() { wrap.classList.remove("open"); btn.setAttribute("aria-expanded","false"); menu.setAttribute("aria-hidden","true"); }
-  function openMenu()  { wrap.classList.add("open");    btn.setAttribute("aria-expanded","true");  menu.setAttribute("aria-hidden","false"); }
-
-  btn.addEventListener("click", (e) => { e.stopPropagation(); wrap.classList.contains("open") ? closeMenu() : openMenu(); });
-  document.addEventListener("click",   (e) => { if (!wrap.contains(e.target)) closeMenu(); });
-  document.addEventListener("keydown",  (e) => { if (e.key === "Escape") closeMenu(); });
-  menu.addEventListener("click", (e) => { if (e.target.closest(".menu-item") || e.target.closest("label.menu-item")) closeMenu(); });
-})();
+// (Reload button removed — data auto-loads on page load and date change)
 
 
 // ============================================================
@@ -976,7 +914,6 @@ document.getElementById("reloadBtn").addEventListener("click", () => {
   const tabs        = document.querySelectorAll(".view-tab");
   const tracksView  = document.getElementById("tracksView");
   const tlView      = document.getElementById("timelineView");
-  const tracksCtrls = document.getElementById("tracksControls");
   const tlCtrls     = document.getElementById("timelineControls");
 
   function switchView(view) {
@@ -984,8 +921,7 @@ document.getElementById("reloadBtn").addEventListener("click", () => {
     const isTl = view === "timeline";
     tracksView.classList.toggle("hidden", isTl);
     tlView.classList.toggle("hidden", !isTl);
-    tracksCtrls.classList.toggle("hidden", isTl);
-    tlCtrls.classList.toggle("hidden", !isTl);
+    if (tlCtrls) tlCtrls.classList.toggle("hidden", !isTl);
     if (isTl) renderTimeline();
   }
 

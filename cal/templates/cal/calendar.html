@@ -60,7 +60,7 @@
       <a class="vsw {% if view == 'week' %}vsw-active{% endif %}"  href="{% url 'cal:calendar' %}?view=week&{{ current_q }}">Week</a>
       <a class="vsw {% if view == 'day' %}vsw-active{% endif %}"   href="{% url 'cal:calendar' %}?view=day&{{ current_q }}">Day</a>
     </div>
-    <a class="btn-new-event" href="{% url 'cal:event_new' %}"><i class="fas fa-plus"></i> New Event</a>
+    <a class="btn-new-event" href="{% url 'cal:event_new' %}?next={{ request.get_full_path|urlencode }}"><i class="fas fa-plus"></i> New Event</a>
   </div>
 
 </div>
@@ -71,12 +71,25 @@
 </div>
 
 <!-- ── Legend ───────────────────────────────────────────────────── -->
+{% if view == 'day' %}
+<div class="cal-legend">
+  <span class="legend-item">
+    <span class="legend-dot legend-dot-pending"></span> Pending Approval
+  </span>
+  {% if is_today %}
+  <span class="legend-item">
+    <span class="legend-now-line"></span> Now
+  </span>
+  {% endif %}
+</div>
+{% else %}
 <div class="cal-legend">
   <span class="legend-item"><span class="legend-dot dot-vehicle"></span> Vehicle</span>
   <span class="legend-item"><span class="legend-dot dot-track"></span> Track</span>
   <span class="legend-item"><span class="legend-dot dot-operator"></span> Operator</span>
   <span class="legend-item"><span class="legend-dot dot-pending"></span> Pending Approval</span>
 </div>
+{% endif %}
 
 {% endblock %}
 
@@ -188,12 +201,54 @@
 {% if view == 'day' %}
 <script>
   document.addEventListener('DOMContentLoaded', function() {
-    var now = new Date().toISOString();
-    document.querySelectorAll('.gantt-block').forEach(function(block) {
-      if (block.dataset.end && block.dataset.end < now) {
-        block.classList.add('event-past');
+
+    // ── Now line (only on today's date) ──────────────────────────
+    {% if is_today %}
+    (function() {
+      var GANTT_START = 6;   // 6:00 AM
+      var GANTT_MINS  = 840; // 14 hours
+      var nowLines = [];
+
+      function getNowPct() {
+        var d = new Date();
+        var mins = d.getHours() * 60 + d.getMinutes();
+        var offset = mins - (GANTT_START * 60);
+        return (offset / GANTT_MINS) * 100;
       }
-    });
+
+      function updateNowLine() {
+        var pct = getNowPct();
+        var visible = pct >= 0 && pct <= 100;
+        nowLines.forEach(function(el) {
+          el.style.left = pct + '%';
+          el.style.display = visible ? '' : 'none';
+        });
+      }
+
+      // Insert now-line elements into the Gantt structure
+
+      var axisRow = document.querySelector('.gantt-axis');
+      if (axisRow) {
+        var axisEl = document.createElement('div');
+        axisEl.className = 'gantt-now-line gantt-now-axis';
+        axisEl.innerHTML = '<span class="gantt-now-label">Now</span>';
+        axisRow.appendChild(axisEl);
+        nowLines.push(axisEl);
+      }
+
+      // Add a now-line to each gantt-lane so it aligns with the event blocks
+      document.querySelectorAll('.gantt-lane').forEach(function(lane) {
+        var lineEl = document.createElement('div');
+        lineEl.className = 'gantt-now-line gantt-now-body';
+        lane.appendChild(lineEl);
+        nowLines.push(lineEl);
+      });
+
+      updateNowLine();
+      // Update every 60 seconds
+      setInterval(updateNowLine, 60000);
+    })();
+    {% endif %}
   });
 </script>
 {% endif %}

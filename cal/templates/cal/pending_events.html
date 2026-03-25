@@ -38,13 +38,14 @@
       <div style="display:flex;gap:8px;align-items:center;flex-shrink:0;">
         <form method="post" action="{% url 'cal:event_approve' ev.id %}">
           {% csrf_token %}
+          <input type="hidden" name="next" value="{% url 'cal:pending_events' %}">
           <button type="submit"
                   class="btn"
                   style="background:linear-gradient(180deg,#10b981,#059669);padding:6px 12px;font-size:13px;">
             <i class="fas fa-check"></i> Approve
           </button>
         </form>
-        <a href="{% url 'cal:event_edit' ev.id %}"
+        <a href="{% url 'cal:event_edit' ev.id %}?next={% url 'cal:pending_events' %}"
            class="btn btn-muted"
            style="font-size:13px;padding:6px 12px;">
           <i class="fas fa-edit"></i> Edit
@@ -52,6 +53,7 @@
         <form method="post" action="{% url 'cal:event_delete' ev.id %}"
               onsubmit="return confirmDelete(this, 'Delete this event? This cannot be undone.')">
           {% csrf_token %}
+          <input type="hidden" name="next" value="{% url 'cal:pending_events' %}">
           <button type="submit"
                   class="btn btn-danger"
                   style="padding:6px 12px;font-size:13px;">

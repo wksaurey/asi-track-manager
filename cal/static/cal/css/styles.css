@@ -150,6 +150,14 @@ form input, form select, form textarea {
   padding: 8px 10px;
   min-width: 260px;
   width: 100%;
+  font-family: inherit;
+  font-size: 14px;
+  color: inherit;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+form input:focus, form select:focus, form textarea:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(46,168,229,0.12);
 }
 .form-errors  { background: #fff3cd; border: 1px solid #ffc107; border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; }
 .error-msg    { color: #856404; margin: 4px 0; font-size: 14px; }
@@ -239,7 +247,7 @@ html.dark-theme .color-popover-swatch.selected { border-color: #fff; box-shadow:
 .sched-num      { display: block; font-size: 22px; font-weight: 700; color: #023447; line-height: 1.1; }
 .sched-mon      { display: block; font-size: 11px; color: var(--muted); }
 .schedule-info  { display: flex; flex-direction: column; gap: 3px; }
-.schedule-title { font-weight: 600; font-size: 15px; color: #01445a; text-decoration: none; }
+.schedule-title { font-weight: 600; font-size: 15px; color: #073242; text-decoration: none; }
 .schedule-title:hover { text-decoration: underline; }
 .schedule-time  { font-size: 13px; color: var(--muted); }
 .schedule-desc  { font-size: 12px; color: var(--muted); margin-top: 2px; }
@@ -735,6 +743,21 @@ html.dark-theme table.calendar td:hover {
 .dot-operator { background: #6366f1; }
 .dot-pending  { background: #d97706; opacity: 0.75; }
 
+/* Day-view legend extras */
+.legend-separator  { width: 1px; height: 14px; background: var(--border); margin: 0 2px; }
+.legend-dot-pending {
+  display: inline-block; width: 12px; height: 12px; border-radius: 3px;
+  background: #d97706; opacity: 0.75; border: 1.5px solid #b45309;
+}
+.legend-dot-past {
+  display: inline-block; width: 12px; height: 12px; border-radius: 3px;
+  background: #94a3b8; opacity: 0.45; filter: saturate(0.5);
+}
+.legend-now-line {
+  display: inline-block; width: 2px; height: 14px; background: #ef4444;
+  border-radius: 1px;
+}
+
 /* ── Asset multi-select checklist (pill style) ──────────────── */
 .asset-checklist {
   list-style: none;
@@ -946,6 +969,19 @@ html.dark-theme .subtrack-panel    { background: rgba(46,168,229,0.07); border-c
 }
 .flatpickr-display {
   cursor: pointer;
+  border: 1px solid var(--border) !important;
+  border-radius: 8px !important;
+  padding: 8px 10px !important;
+  background: var(--card) !important;
+  font-family: inherit !important;
+  font-size: 14px !important;
+  color: inherit !important;
+  outline: none !important;
+  transition: border-color 150ms ease, box-shadow 150ms ease !important;
+}
+.flatpickr-display:focus {
+  border-color: var(--primary) !important;
+  box-shadow: 0 0 0 3px rgba(46,168,229,0.12) !important;
 }
 
 /* ── Asset cards ──────────────────────────────────────────── */
@@ -1184,6 +1220,9 @@ html.dark-theme .event-time  { color: #5a8090; }
 html.dark-theme form input,
 html.dark-theme form select,
 html.dark-theme form textarea { background: #1a2b38; color: #c0d8e4; border-color: rgba(46,168,229,0.25); }
+html.dark-theme form input:focus,
+html.dark-theme form select:focus,
+html.dark-theme form textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(46,168,229,0.20); }
 html.dark-theme .page-container { color: #c0d8e4; }
 html.dark-theme .page-heading   { color: #c0d8e4; }
 html.dark-theme .section-heading{ color: #c0d8e4; }
@@ -1194,6 +1233,7 @@ html.dark-theme .error-msg      { color: #f0c060; }
 html.dark-theme .asset-header-card { background: #1a2b38; border-color: rgba(46,168,229,0.18); }
 html.dark-theme .schedule-row      { background: #1a2b38; border-color: rgba(46,168,229,0.18); }
 html.dark-theme .sched-num         { color: #c0d8e4; }
+html.dark-theme .schedule-title    { color: #c0d8e4; }
 
 /* Page title / bubble heading */
 html.dark-theme .title  { color: #c0d8e4; }
@@ -1235,6 +1275,7 @@ html.dark-theme .flatpickr-months .flatpickr-next-month   { fill: #7090a0 !impor
 html.dark-theme .flatpickr-current-month .flatpickr-monthDropdown-months,
 html.dark-theme .flatpickr-current-month input.cur-year   { color: #c0d8e4 !important; background: transparent !important; }
 html.dark-theme .flatpickr-input.flatpickr-display        { background: #1a2b38 !important; color: #c0d8e4 !important; border-color: rgba(46,168,229,0.25) !important; }
+html.dark-theme .flatpickr-input.flatpickr-display:focus  { border-color: var(--primary) !important; box-shadow: 0 0 0 3px rgba(46,168,229,0.20) !important; }
 
 /* Login card */
 html.dark-theme .card              { background: var(--card); border-color: var(--border); }
@@ -1250,6 +1291,7 @@ html.dark-theme .card a            { color: var(--primary); }
 html.dark-theme .cal-body { background: var(--bg); }
 html.dark-theme .cal-legend { background: var(--bg); }
 html.dark-theme .legend-item { color: #7090a0; }
+html.dark-theme .legend-separator { background: rgba(46,168,229,0.18); }
 
 /* ════════════════════════════════════════════════════════════════
    TRACK VIEW
@@ -1465,6 +1507,7 @@ html.dark-theme .wk-today-num    { background: var(--primary); color: #fff; }
   display: flex;
   justify-content: space-between;
   align-items: flex-end;
+  position: relative;
 }
 .gantt-hour-marker {
   display: flex;
@@ -1667,3 +1710,36 @@ html.dark-theme .gantt-lane   {
   );
 }
 html.dark-theme .gantt-axis-row { border-color: rgba(46,168,229,0.15); }
+
+/* ── Gantt now-line ────────────────────────────────────────── */
+.gantt-now-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #ef4444;
+  z-index: 5;
+  pointer-events: none;
+}
+.gantt-now-axis {
+  /* In the axis row — show the "Now" label above the line */
+  bottom: -2px;
+  top: auto;
+  height: calc(100% + 4px);
+}
+.gantt-now-label {
+  position: absolute;
+  top: -1px;
+  left: 4px;
+  font-size: 9px;
+  font-weight: 700;
+  color: #ef4444;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  white-space: nowrap;
+}
+.gantt-now-body {
+  /* In the body — spans full height of all track rows */
+  top: 0;
+  bottom: 0;
+}

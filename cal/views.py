@@ -182,6 +182,15 @@ class CalendarView(generic.ListView):
         context['view']           = view
         context['assets']         = Asset.objects.all()
         context['selected_asset'] = asset_id
+
+        # Day-view legend needs parent tracks with their colors
+        if view == 'day':
+            context['day_tracks'] = Asset.objects.filter(
+                asset_type=Asset.AssetType.TRACK,
+                parent__isnull=True,
+            ).order_by('name')
+            context['is_today'] = (d == timezone.now().date())
+
         return context
 
 
@@ -238,6 +247,18 @@ def next_for(d, view):
 
 # ── Events ────────────────────────────────────────────────────────────────────
 
+def _safe_next_url(request, default_url):
+    """
+    Return the ``next`` URL from POST or GET params if it passes
+    open-redirect validation, otherwise return *default_url*.
+    """
+    next_url = request.POST.get('next') or request.GET.get('next') or ''
+    if next_url and url_has_allowed_host_and_scheme(url=next_url, allowed_hosts=set()):
+        return next_url
+    return default_url
+
+
+@login_required
 def event(request, event_id=None):
     """
     Create or edit an event.
@@ -261,6 +282,9 @@ def event(request, event_id=None):
         instance = Event()
 
     form = EventForm(request.POST or None, instance=instance)
+    # Hide radio_channel from non-admin users
+    if not request.user.is_staff:
+        del form.fields['radio_channel']
     if request.POST and form.is_valid():
         ev = form.save(commit=False)
         if not event_id:
@@ -268,13 +292,17 @@ def event(request, event_id=None):
             ev.is_approved = is_admin(request)  # admin = auto-approve; user = pending
         ev.save()
         form.save_m2m()   # persist ManyToMany (assets) after the instance is saved
-        return HttpResponseRedirect(reverse('cal:calendar'))
+        default = reverse('cal:calendar')
+        return HttpResponseRedirect(_safe_next_url(request, default))
 
+    # Carry ?next= through to the template so the hidden field can persist it
+    next_url = request.GET.get('next', '')
     return render(request, 'cal/event.html', {
         'form':            form,
         'event':           instance if event_id else None,
         'is_admin':        request.user.is_staff,
         'asset_data_json': get_asset_tree(),
+        'next_url':        next_url,
     })
 
 
@@ -285,7 +313,8 @@ def event_delete(request, event_id):
         return HttpResponseRedirect(reverse('cal:calendar'))
     event_obj = get_object_or_404(Event, pk=event_id)
     event_obj.delete()
-    return HttpResponseRedirect(reverse('cal:calendar'))
+    default = reverse('cal:calendar')
+    return HttpResponseRedirect(_safe_next_url(request, default))
 
 
 @login_required
@@ -297,10 +326,8 @@ def event_approve(request, event_id):
     event_obj = get_object_or_404(Event, pk=event_id)
     event_obj.is_approved = True
     event_obj.save(update_fields=['is_approved'])
-    next_url = request.POST.get('next', '')
-    if next_url and url_has_allowed_host_and_scheme(url=next_url, allowed_hosts={request.get_host()}):
-        return HttpResponseRedirect(next_url)
-    return HttpResponseRedirect(reverse('cal:pending_events'))
+    default = reverse('cal:pending_events')
+    return HttpResponseRedirect(_safe_next_url(request, default))
 
 
 @login_required
@@ -312,10 +339,8 @@ def event_unapprove(request, event_id):
     event_obj = get_object_or_404(Event, pk=event_id)
     event_obj.is_approved = False
     event_obj.save(update_fields=['is_approved'])
-    next_url = request.POST.get('next', '')
-    if next_url and url_has_allowed_host_and_scheme(url=next_url, allowed_hosts={request.get_host()}):
-        return HttpResponseRedirect(next_url)
-    return HttpResponseRedirect(reverse('cal:event_edit', args=[event_id]))
+    default = reverse('cal:event_edit', args=[event_id])
+    return HttpResponseRedirect(_safe_next_url(request, default))
 
 
 @login_required
@@ -500,14 +525,16 @@ def dashboard_events_api(request):
     def _serialize_events(track):
         return [
             {
-                'id':           ev.pk,
-                'title':        ev.title,
-                'description':  ev.description,
-                'start_time':   ev.start_time.isoformat(),
-                'end_time':     ev.end_time.isoformat(),
-                'is_approved':  ev.is_approved,
+                'id': ev.pk,
+                'title': ev.title,
+                'description': ev.description,
+                'start_time': ev.start_time.isoformat(),
+                'end_time': ev.end_time.isoformat(),
+                'is_approved': ev.is_approved,
                 'actual_start': ev.actual_start.isoformat() if ev.actual_start else None,
-                'actual_end':   ev.actual_end.isoformat() if ev.actual_end else None,
+                'actual_end': ev.actual_end.isoformat() if ev.actual_end else None,
+                'radio_channel': ev.radio_channel,
+                'effective_radio_channel': ev.effective_radio_channel,
             }
             for ev in track.day_events
         ]
@@ -566,6 +593,34 @@ def set_radio_channel(request, asset_id):
     track.radio_channel = channel
     track.save(update_fields=['radio_channel'])
     return JsonResponse({'id': track.pk, 'radio_channel': track.radio_channel})
+
+
+@login_required
+@require_POST
+def set_event_radio_channel(request, event_id):
+    """Admin only — set or clear a per-event radio channel override (11–16)."""
+    if not request.user.is_staff:
+        return JsonResponse({'error': 'Forbidden'}, status=403)
+    event_obj = get_object_or_404(Event, pk=event_id)
+    try:
+        body = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+    channel = body.get('channel')
+    if channel is not None:
+        try:
+            channel = int(channel)
+        except (ValueError, TypeError):
+            return JsonResponse({'error': 'Channel must be an integer (11–16) or null.'}, status=400)
+        if channel < 11 or channel > 16:
+            return JsonResponse({'error': 'Channel must be between 11 and 16.'}, status=400)
+    event_obj.radio_channel = channel
+    event_obj.save(update_fields=['radio_channel'])
+    return JsonResponse({
+        'id': event_obj.pk,
+        'radio_channel': event_obj.radio_channel,
+        'effective_radio_channel': event_obj.effective_radio_channel,
+    })
 
 
 @login_required

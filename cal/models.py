@@ -176,6 +176,15 @@ class Event(models.Model):
         blank=True,
         related_name='events',
     )
+    # Per-event radio channel override (None = inherit from track)
+    RADIO_CHANNEL_CHOICES = [(ch, f'Ch {ch}') for ch in range(11, 17)]
+    radio_channel = models.IntegerField(
+        null=True,
+        blank=True,
+        default=None,
+        choices=RADIO_CHANNEL_CHOICES,
+        help_text='Override radio channel for this event (11–16). Leave blank to use the track default.',
+    )
     # Auth / approval fields
     created_by  = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -189,6 +198,22 @@ class Event(models.Model):
 
     def __str__(self):
         return self.title
+
+    @property
+    def effective_radio_channel(self):
+        """
+        Return the radio channel in effect for this event.
+
+        - The event's own ``radio_channel`` if explicitly set.
+        - Otherwise, the ``radio_channel`` of the first track-type asset.
+        - Otherwise, ``None``.
+        """
+        if self.radio_channel is not None:
+            return self.radio_channel
+        for asset in self.assets.all():
+            if asset.asset_type == Asset.AssetType.TRACK and asset.radio_channel is not None:
+                return asset.radio_channel
+        return None
 
     # ── Display helpers used by calendar templates ─────────────────────────
 

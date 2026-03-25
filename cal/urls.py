@@ -41,6 +41,7 @@ urlpatterns = [
     path('api/dashboard-events/',                   views.dashboard_events_api,   name='dashboard_events_api'),
     path('api/event/<int:event_id>/stamp/',         views.dashboard_stamp_actual, name='dashboard_stamp_actual'),
     path('api/track/<int:asset_id>/channel/',      views.set_radio_channel,      name='set_radio_channel'),
+    path('api/event/<int:event_id>/channel/',     views.set_event_radio_channel, name='set_event_radio_channel'),
     path('analytics/',                              views.analytics,              name='analytics'),
     path('api/analytics/',                          views.analytics_api,          name='analytics_api'),
 ]

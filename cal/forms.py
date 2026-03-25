@@ -137,7 +137,7 @@ class EventForm(ModelForm):
             'end_time':   TextInput(attrs={'autocomplete': 'off', 'placeholder': 'Pick date & time…'}),
             'assets':     CheckboxSelectMultiple(attrs={'class': 'asset-checklist'}),
         }
-        fields = ['title', 'description', 'start_time', 'end_time', 'assets']
+        fields = ['title', 'description', 'start_time', 'end_time', 'assets', 'radio_channel']
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -151,6 +151,10 @@ class EventForm(ModelForm):
         # bypassing the default ModelChoiceIterator while keeping queryset intact.
         self.fields['assets'].queryset = Asset.objects.all()
         self.fields['assets'].choices = _build_grouped_asset_choices()
+        # Configure radio_channel dropdown with a "Use track default" empty label
+        self.fields['radio_channel'].choices = [('', 'Use track default')] + Event.RADIO_CHANNEL_CHOICES
+        self.fields['radio_channel'].label = 'Radio Channel'
+        self.fields['radio_channel'].required = False
         # Add Bootstrap form-control to all fields except the checkbox group
         for name, field in self.fields.items():
             if name == 'assets':

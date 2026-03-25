@@ -23,32 +23,6 @@
           <button class="view-tab" data-view="timeline">Timeline</button>
         </div>
 
-        <div class="header-actions">
-          <div class="hamburger-wrap" id="headerHamburger">
-            <button class="hamburger-btn" aria-label="Open menu" aria-haspopup="true" aria-expanded="false">&#9776;</button>
-            <div class="hamburger-menu" role="menu" aria-hidden="true">
-              <button id="exportBtn" class="menu-item" role="menuitem">Export JSON</button>
-              <label for="importInput" class="menu-item" role="menuitem" tabindex="0">
-                Import JSON
-                <input id="importInput" type="file" accept="application/json" hidden />
-              </label>
-              <hr class="menu-sep" />
-              <button id="reloadBtn" class="menu-item" role="menuitem">Reload from Server</button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Controls row (Tracks view) -->
-      <div class="controls-row" id="tracksControls">
-        <div class="search-wrap">
-          <label for="searchInput">Filter by person / text</label>
-          <input id="searchInput" type="text" placeholder="e.g., Hollis, Cody, Dozer, Water Truck..." />
-        </div>
-        <form id="addTrackForm" class="add-track-form" autocomplete="off">
-          <input id="newTrackName" type="text" placeholder="Add track (e.g., East Loop)" required />
-          <button type="submit" class="btn">Add</button>
-        </form>
       </div>
 
       <!-- Timeline controls (empty placeholder, reserved for future use) -->
@@ -76,7 +50,7 @@
     </main>
 
     <footer class="app-footer">
-      <small>Track data is loaded from the server. Use Export JSON to back up or move the day's log between devices.</small>
+      <small>Track data is loaded from the server and updates automatically.</small>
     </footer>
 
 
@@ -129,9 +103,8 @@
               <h3>Notes</h3>
               <ul class="notes-list"></ul>
             </div>
+            <div class="subtracks-container"></div>
           </div>
-
-          <div class="subtracks-container"></div>
         </div>
       </section>
     </template>
@@ -149,6 +122,7 @@
             <option value="16">Ch 16</option>
           </select>
           <span class="subtrack-name"></span>
+          <button class="icon-btn icon-btn--sm subtrack-add-btn" title="Add event to this subtrack">&#xff0b;</button>
         </div>
         <ol class="events-list subtrack-events-list"></ol>
       </div>

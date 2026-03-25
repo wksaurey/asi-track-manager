@@ -1302,6 +1302,76 @@ class StampActualAPITest(TestCase):
         self.assertEqual(self.event.actual_start.minute, custom.minute)
 
 
+# ── Radio Channel API Tests ─────────────────────────────────────────────────
+
+class RadioChannelAPITest(TestCase):
+    """Tests for /cal/api/track/<id>/channel/ endpoint."""
+
+    def setUp(self):
+        self.admin = User.objects.create_user(
+            username='channeladmin', password='Testpass123!', is_staff=True
+        )
+        self.regular = User.objects.create_user(
+            username='channeluser', password='Testpass123!'
+        )
+        self.track = Asset.objects.create(
+            name='Channel Track', asset_type=Asset.AssetType.TRACK
+        )
+        self.url = reverse('cal:set_radio_channel', args=[self.track.pk])
+
+    def test_admin_can_set_channel(self):
+        self.client.login(username='channeladmin', password='Testpass123!')
+        resp = self.client.post(
+            self.url, data=json.dumps({'channel': 12}),
+            content_type='application/json',
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.track.refresh_from_db()
+        self.assertEqual(self.track.radio_channel, 12)
+
+    def test_admin_can_clear_channel(self):
+        self.track.radio_channel = 14
+        self.track.save()
+        self.client.login(username='channeladmin', password='Testpass123!')
+        resp = self.client.post(
+            self.url, data=json.dumps({'channel': None}),
+            content_type='application/json',
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.track.refresh_from_db()
+        self.assertIsNone(self.track.radio_channel)
+
+    def test_rejects_out_of_range(self):
+        self.client.login(username='channeladmin', password='Testpass123!')
+        resp = self.client.post(
+            self.url, data=json.dumps({'channel': 5}),
+            content_type='application/json',
+        )
+        self.assertEqual(resp.status_code, 400)
+
+    def test_non_admin_gets_403(self):
+        self.client.login(username='channeluser', password='Testpass123!')
+        resp = self.client.post(
+            self.url, data=json.dumps({'channel': 11}),
+            content_type='application/json',
+        )
+        self.assertEqual(resp.status_code, 403)
+
+    def test_get_returns_405(self):
+        self.client.login(username='channeladmin', password='Testpass123!')
+        resp = self.client.get(self.url)
+        self.assertEqual(resp.status_code, 405)
+
+    def test_dashboard_api_includes_radio_channel(self):
+        self.track.radio_channel = 15
+        self.track.save()
+        self.client.login(username='channeladmin', password='Testpass123!')
+        resp = self.client.get(reverse('cal:dashboard_events_api'))
+        data = resp.json()
+        track_data = data['tracks'].get('Channel Track', {})
+        self.assertEqual(track_data.get('radio_channel'), 15)
+
+
 # ── Analytics API Tests ──────────────────────────────────────────────────────
 
 class AnalyticsAPITest(TestCase):

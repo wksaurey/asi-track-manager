@@ -71,6 +71,13 @@ class Asset(models.Model):
         related_name='subtracks',
         help_text='Parent track (only for subtracks)',
     )
+    RADIO_CHANNEL_CHOICES = [(None, '—')] + [(ch, f'Ch {ch}') for ch in range(11, 17)]
+    radio_channel = models.IntegerField(
+        null=True,
+        blank=True,
+        choices=[(ch, f'Ch {ch}') for ch in range(11, 17)],
+        help_text='Radio channel assigned to this track (11–16).',
+    )
 
     class Meta:
         ordering = ['asset_type', 'name']

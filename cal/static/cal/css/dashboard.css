@@ -191,23 +191,42 @@ html.dark-theme .add-track-form--stacked input:focus {
   transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
   position: relative;
 }
-.track-card::before {
-  content: "";
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 3px;
-  /* Uses --track-color CSS custom property set via JS; falls back to site gradient */
-  background: var(--track-color, linear-gradient(90deg, var(--primary), var(--accent)));
-  border-radius: var(--border-r) var(--border-r) 0 0;
-  opacity: 0.9;
-  z-index: 1;
+.track-card::before { display: none; }
+
+/* ── Subtrack sections inside parent card ──────────────────── */
+.subtracks-container { border-top: 1px solid var(--border); }
+.subtrack-section { padding: 8px 14px; border-bottom: 1px solid var(--border); }
+.subtrack-section:last-child { border-bottom: none; }
+.subtrack-header {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 4px;
 }
+.subtrack-name {
+  font-size: 13px; font-weight: 600; color: var(--text, #073242);
+  letter-spacing: 0.2px;
+}
+html.dark-theme .subtrack-name { color: #93c5fd; }
+.radio-channel-select--sub { font-size: 10px; padding: 1px 4px; }
+.subtrack-events-list {
+  list-style: none; margin: 0; padding: 0;
+}
+.subtrack-event-item {
+  font-size: 12px; color: var(--text, #333);
+  padding: 2px 0; display: flex; align-items: center; gap: 6px;
+}
+.subtrack-event-item .time-chip {
+  font-size: 10px; padding: 1px 6px;
+}
+.subtrack-events-list .empty-msg {
+  font-size: 12px; color: var(--muted, #999);
+  font-style: italic; padding: 2px 0;
+}
+html.dark-theme .subtrack-event-item { color: #c0d8e4; }
 .track-card:hover {
   transform: translateY(-3px);
   border-color: var(--card-border-hover);
   box-shadow: var(--shadow-hover);
 }
-.track-card:hover::before { opacity: 1; }
 .track-card__inner { display: flex; flex-direction: column; height: 360px; }
 
 html.dark-theme .track-card {
@@ -219,10 +238,9 @@ html.dark-theme .track-card {
 .track-card__header {
   display: flex;
   align-items: center;
-  justify-content: center;
   gap: 10px;
   position: relative;
-  padding: 13px 50px 11px 58px;
+  padding: 13px 12px 11px 12px;
   border-bottom: 1px solid var(--border);
   background: rgba(46,168,229,0.04);
 }
@@ -234,20 +252,21 @@ html.dark-theme .track-card__header {
 
 .track-name {
   margin: 0;
+  flex: 1;
+  min-width: 0;
   font-size: 15px;
   font-weight: 700;
   text-align: center;
   letter-spacing: 0.3px;
   color: #073242;
-  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 html.dark-theme .track-name { color: #dbeafe; }
 
 .track-actions {
-  position: absolute;
-  right: 8px;
-  top: 50%;
-  transform: translateY(-50%);
+  flex-shrink: 0;
   display: flex;
   gap: 4px;
 }
@@ -653,37 +672,23 @@ html.dark-theme .brand-title {
 /* ============================================================
    Channel badge (track-level, card header)
    ============================================================ */
-.channel-badge {
-  position: absolute; left: 9px; top: 50%; transform: translateY(-50%);
-  appearance: none; background: rgba(16,185,129,0.08); color: var(--accent);
-  border: 1px solid rgba(16,185,129,0.28); padding: 2px 8px; border-radius: 999px;
-  font-size: 10px; font-weight: 700; letter-spacing: 0.3px; cursor: pointer;
-  white-space: nowrap; line-height: 1.6; transition: background 0.15s, border-color 0.15s, color 0.15s;
+/* Radio channel dropdown in track card header — dark in both modes */
+.radio-channel-select {
+  flex-shrink: 0;
+  background: #073242; color: #34d399;
+  border: 1px solid rgba(52,211,153,0.35); padding: 2px 6px; border-radius: 6px;
+  font-size: 11px; font-weight: 600; cursor: pointer;
+  outline: none; transition: border-color 0.15s, background 0.15s;
+  color-scheme: dark;
 }
-.channel-badge:hover { border-color: var(--accent); background: rgba(16,185,129,0.16); }
-html.dark-theme .channel-badge {
-  background: rgba(52,211,153,0.10);
+.radio-channel-select:hover,
+.radio-channel-select:focus { border-color: #34d399; background: #0a4155; }
+html.dark-theme .radio-channel-select {
+  background: #0f1d2a;
   border-color: rgba(52,211,153,0.3);
 }
-html.dark-theme .channel-badge:hover { background: rgba(52,211,153,0.18); }
-.channel-badge[data-empty="true"] {
-  color: rgba(108,117,125,0.4);
-  border-color: rgba(46,168,229,0.08);
-  background: transparent;
-}
-html.dark-theme .channel-badge[data-empty="true"] {
-  color: rgba(139,149,167,0.3);
-  border-color: rgba(255,255,255,0.05);
-}
-.channel-badge[data-empty="true"]:hover {
-  color: var(--accent);
-  border-color: rgba(16,185,129,0.3);
-  background: rgba(16,185,129,0.07);
-}
-html.dark-theme .channel-badge[data-empty="true"]:hover {
-  border-color: rgba(52,211,153,0.3);
-  background: rgba(52,211,153,0.07);
-}
+html.dark-theme .radio-channel-select:hover,
+html.dark-theme .radio-channel-select:focus { background: #162636; }
 
 
 /* ============================================================

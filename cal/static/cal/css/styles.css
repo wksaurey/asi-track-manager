@@ -166,6 +166,7 @@ form input:focus, form select:focus, form textarea:focus {
 .form-table td { padding: 8px 6px; vertical-align: middle; }
 .form-table td:first-child { width: 140px; font-weight: 500; font-size: 14px; }
 .field-help   { display: block; font-size: 12px; color: var(--muted); margin-top: 3px; }
+.required-mark { color: #dc2626; font-weight: 700; }
 .form-actions { display: flex; gap: 10px; margin-top: 20px; }
 
 /* Event edit: save + approve/revoke/delete in one horizontal row, aligned with input column */
@@ -747,7 +748,8 @@ html.dark-theme table.calendar td:hover {
 .legend-separator  { width: 1px; height: 14px; background: var(--border); margin: 0 2px; }
 .legend-dot-pending {
   display: inline-block; width: 12px; height: 12px; border-radius: 3px;
-  background: #d97706; opacity: 0.75; border: 1.5px solid #b45309;
+  background: var(--primary); opacity: 0.7;
+  border: 2px dashed rgba(255,255,255,0.85);
 }
 .legend-dot-past {
   display: inline-block; width: 12px; height: 12px; border-radius: 3px;
@@ -1748,33 +1750,52 @@ html.dark-theme .gantt-subtrack-row  { border-color: rgba(46,168,229,0.08); }
 .gantt-block.event-vehicle  { background: #f59e0b; }
 .gantt-block.event-operator { background: #6366f1; }
 .gantt-block.event-multi    { background: var(--primary); }
-.gantt-block.event-pending  { opacity: 0.75; }
+.gantt-block.event-pending  {
+  opacity: 0.7;
+  border: 2px dashed rgba(255,255,255,0.85);
+}
 .gantt-block.event-past     { opacity: 0.45; filter: saturate(0.5); }
 
-/* Ghost bar (scheduled time when actuals exist) */
+/* Ghost bar (scheduled time when actuals exist) — offset below actual */
 .gantt-block.gantt-block--ghost {
-  opacity: 0.45;
-  border: 1.5px dashed var(--muted);
-  background: rgba(108,117,125,0.08) !important;
-  z-index: 0;
+  top: 20px;
+  height: 14px;
+  opacity: 0.7;
+  border: 2px dashed rgba(108,117,125,0.6);
+  background: rgba(108,117,125,0.12) !important;
+  z-index: 2;
+  font-size: 9px;
+  padding: 0 4px;
 }
-.gantt-block.gantt-block--ghost .gantt-block-title,
-.gantt-block.gantt-block--ghost .gantt-block-time { color: var(--muted); }
+.gantt-block.gantt-block--ghost .gantt-block-title { display: none; }
+.gantt-block.gantt-block--ghost .gantt-block-time {
+  color: var(--muted); font-size: 9px; opacity: 0.8;
+}
 
-/* Actual bar (solid, rendered on top of ghost) */
+/* Actual bar (solid, occupies top portion of lane) */
 .gantt-block.gantt-block--actual {
+  top: 3px;
+  height: 20px;
   z-index: 1;
   border: 1.5px solid rgba(255,255,255,0.35);
 }
 
 /* Legend swatches for the day view */
-.legend-swatch-scheduled {
-  display: inline-block; width: 14px; height: 10px; border-radius: 3px;
-  border: 1.5px dashed var(--muted); opacity: 0.45;
-}
 .legend-swatch-actual {
   display: inline-block; width: 14px; height: 10px; border-radius: 3px;
   background: var(--primary); border: 1.5px solid rgba(255,255,255,0.35);
+}
+.legend-swatch-dual {
+  display: inline-flex; flex-direction: column; gap: 1px; vertical-align: middle;
+}
+.legend-swatch-dual__actual {
+  width: 14px; height: 7px; border-radius: 2px;
+  background: var(--primary); border: 1px solid rgba(255,255,255,0.3);
+}
+.legend-swatch-dual__ghost {
+  width: 14px; height: 5px; border-radius: 2px;
+  border: 1.5px dashed rgba(108,117,125,0.6);
+  background: rgba(108,117,125,0.12); opacity: 0.7;
 }
 
 .gantt-block-title {

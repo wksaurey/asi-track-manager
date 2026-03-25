@@ -36,9 +36,11 @@ const API_URL = "/cal/api/dashboard-events/";
 // In-memory state (no localStorage)
 // ============================================================
 
-let data          = {};
-let trackChannels = {};
+let data          = {};   // trackName → [events]
+let trackChannels = {};   // trackName → channel int
+let trackIds      = {};   // trackName → asset pk
 let trackColors   = {};
+let trackSubtracks = {};  // parentName → { subName: { id, radio_channel, events: [] } }
 let filterText    = "";
 let currentDate   = new Date(); // defaults to today
 
@@ -255,41 +257,50 @@ async function fetchAndLoadData() {
     // Reset in-memory state
     data = {};
     trackChannels = {};
+    trackIds      = {};
     trackColors   = {};
+    trackSubtracks = {};
 
-    for (const [trackName, trackInfo] of Object.entries(apiTracks)) {
-      data[trackName] = [];
-      if (trackInfo.color) trackColors[trackName] = trackInfo.color;
-      const events = Array.isArray(trackInfo.events) ? trackInfo.events : [];
-
-      for (const ev of events) {
+    function parseEvents(events, color) {
+      const result = [];
+      for (const ev of (events || [])) {
         const startHHMM = isoToLocalHHMM(ev.start_time);
         const endHHMM   = isoToLocalHHMM(ev.end_time);
-
         let timeStr = "";
-        if (startHHMM && endHHMM) {
-          timeStr = `${startHHMM}-${endHHMM}`;
-        } else if (startHHMM) {
-          timeStr = startHHMM;
-        }
-
+        if (startHHMM && endHHMM) timeStr = `${startHHMM}-${endHHMM}`;
+        else if (startHHMM) timeStr = startHHMM;
         const notes = [];
-        if (ev.description && ev.description.trim()) {
-          notes.push(ev.description.trim());
-        }
-
-        data[trackName].push({
-          time:          timeStr,
-          scheduledTime: timeStr,
-          desc:          ev.title || "(untitled)",
-          notes,
-          channel:       "",
-          eventId:       ev.id,
-          isScheduled:   true,
-          actualStart:   ev.actual_start || null,
-          actualEnd:     ev.actual_end   || null,
-          _trackColor:   trackInfo.color || null,
+        if (ev.description && ev.description.trim()) notes.push(ev.description.trim());
+        result.push({
+          time: timeStr, scheduledTime: timeStr,
+          desc: ev.title || "(untitled)", notes, channel: "",
+          eventId: ev.id, isScheduled: true,
+          actualStart: ev.actual_start || null,
+          actualEnd: ev.actual_end || null,
+          _trackColor: color || null,
         });
+      }
+      return result;
+    }
+
+    for (const [trackName, trackInfo] of Object.entries(apiTracks)) {
+      if (trackInfo.id) trackIds[trackName] = trackInfo.id;
+      if (trackInfo.color) trackColors[trackName] = trackInfo.color;
+      if (trackInfo.radio_channel) trackChannels[trackName] = trackInfo.radio_channel;
+      data[trackName] = parseEvents(trackInfo.events, trackInfo.color);
+
+      // Parse subtracks
+      if (trackInfo.subtracks && typeof trackInfo.subtracks === "object") {
+        trackSubtracks[trackName] = {};
+        for (const [subName, subInfo] of Object.entries(trackInfo.subtracks)) {
+          trackIds[`${trackName}::${subName}`] = subInfo.id;
+          if (subInfo.radio_channel) trackChannels[`${trackName}::${subName}`] = subInfo.radio_channel;
+          trackSubtracks[trackName][subName] = {
+            id: subInfo.id,
+            radio_channel: subInfo.radio_channel,
+            events: parseEvents(subInfo.events, trackInfo.color),
+          };
+        }
       }
     }
   } catch (err) {
@@ -513,26 +524,30 @@ function render() {
     titleEl.textContent = trackName;
 
     // Apply track color via CSS custom property on the card element.
-    // The ::before pseudo-element reads var(--track-color) to show a solid color
-    // accent bar; falls back to the default site gradient when no color is set.
-    const trackColor = trackColors[trackName];
-    if (trackColor) {
-      card.style.setProperty('--track-color', trackColor);
-    }
+    // Track colors disabled in dashboard tracks view — cards use uniform styling.
 
-    // Channel badge (track-level, top-left of card)
-    const channelBadge = card.querySelector(".channel-badge");
+    // Radio channel dropdown (track-level, persisted server-side)
+    const channelSelect = card.querySelector(".radio-channel-select");
     const chVal = trackChannels[trackName];
-    channelBadge.textContent   = chVal ? `Ch ${chVal}` : "—";
-    channelBadge.dataset.empty = chVal ? "false" : "true";
-    channelBadge.addEventListener("click", () => {
-      const current = trackChannels[trackName] || "";
-      const val     = prompt(`Channel for "${trackName}" (leave blank to clear):`, current);
-      if (val === null) return;
-      const trimmed = val.trim();
-      if (trimmed) { trackChannels[trackName] = trimmed; }
-      else         { delete trackChannels[trackName]; }
-      render();
+    if (chVal) channelSelect.value = String(chVal);
+    channelSelect.addEventListener("change", async () => {
+      const val = channelSelect.value;
+      const trackId = trackIds[trackName];
+      if (!trackId) return;
+      const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
+      const resp = await fetch(`/cal/api/track/${trackId}/channel/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-CSRFToken": csrfToken },
+        body: JSON.stringify({ channel: val ? parseInt(val, 10) : null }),
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        if (data.radio_channel) { trackChannels[trackName] = data.radio_channel; }
+        else { delete trackChannels[trackName]; }
+      } else {
+        showStampToast("Failed to set radio channel");
+        channelSelect.value = chVal ? String(chVal) : "";
+      }
     });
 
     // Form and button refs
@@ -688,21 +703,6 @@ function render() {
         eventMain.after(actualRow);
       }
 
-      // Per-event channel badge
-      const chBadge = item.querySelector(".event-channel-badge");
-      if (chBadge) {
-        const evCh = ev.channel || "";
-        chBadge.textContent    = evCh || "—";
-        chBadge.dataset.empty  = evCh ? "false" : "true";
-        chBadge.addEventListener("click", () => {
-          const val = prompt(`Channel for this event (leave blank to clear):`, evCh);
-          if (val === null) return;
-          const trimmed = val.trim();
-          ev.channel = trimmed || undefined;
-          render();
-        });
-      }
-
       const textEl  = item.querySelector(".event-text");
       const subList = item.querySelector(".subnotes-list");
 
@@ -840,6 +840,60 @@ function render() {
     if (normalizedFilter && !matchesFilter && filteredEvents.length === 0) {
       const noteHit = notes.some(n => (n.time || "").toLowerCase().includes(normalizedFilter));
       if (!noteHit) return;
+    }
+
+    // Render subtracks as sections inside the card
+    const subsContainer = card.querySelector(".subtracks-container");
+    const subs = trackSubtracks[trackName];
+    if (subs && Object.keys(subs).length > 0) {
+      for (const [subName, subInfo] of Object.entries(subs)) {
+        const subSection = cloneTemplate("subtrackSectionTemplate");
+        subSection.querySelector(".subtrack-name").textContent = subName;
+
+        // Subtrack radio channel dropdown
+        const subChSelect = subSection.querySelector(".radio-channel-select");
+        const subChKey = `${trackName}::${subName}`;
+        const subChVal = trackChannels[subChKey];
+        if (subChVal) subChSelect.value = String(subChVal);
+        subChSelect.addEventListener("change", async () => {
+          const val = subChSelect.value;
+          const subId = trackIds[subChKey];
+          if (!subId) return;
+          const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
+          const resp = await fetch(`/cal/api/track/${subId}/channel/`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-CSRFToken": csrfToken },
+            body: JSON.stringify({ channel: val ? parseInt(val, 10) : null }),
+          });
+          if (resp.ok) {
+            const d = await resp.json();
+            if (d.radio_channel) trackChannels[subChKey] = d.radio_channel;
+            else delete trackChannels[subChKey];
+          } else {
+            showStampToast("Failed to set radio channel");
+            subChSelect.value = subChVal ? String(subChVal) : "";
+          }
+        });
+
+        // Subtrack events
+        const subEventsList = subSection.querySelector(".subtrack-events-list");
+        const subEvents = sortEvents(subInfo.events || []);
+        if (subEvents.length === 0) {
+          const li = document.createElement("li");
+          li.className = "empty-msg";
+          li.textContent = "No events";
+          subEventsList.appendChild(li);
+        } else {
+          subEvents.forEach(ev => {
+            const li = document.createElement("li");
+            li.className = "subtrack-event-item";
+            li.innerHTML = `<span class="time-chip">${formatTimeChip(ev.time)}</span> <span>${ev.desc}</span>`;
+            subEventsList.appendChild(li);
+          });
+        }
+
+        subsContainer.appendChild(subSection);
+      }
     }
 
     grid.appendChild(card);

@@ -412,36 +412,83 @@ def dashboard_events_api(request):
         is_approved=True, start_time__date=target_date
     ).order_by('start_time')
 
-    tracks = Asset.objects.filter(
+    all_tracks = Asset.objects.filter(
         asset_type=Asset.AssetType.TRACK
     ).prefetch_related(
-        Prefetch('events', queryset=track_events_qs, to_attr='day_events')
-    )
+        Prefetch('events', queryset=track_events_qs, to_attr='day_events'),
+        'subtracks',
+    ).order_by('name')
 
+    def _serialize_events(track):
+        return [
+            {
+                'id':           ev.pk,
+                'title':        ev.title,
+                'description':  ev.description,
+                'start_time':   ev.start_time.isoformat(),
+                'end_time':     ev.end_time.isoformat(),
+                'is_approved':  ev.is_approved,
+                'actual_start': ev.actual_start.isoformat() if ev.actual_start else None,
+                'actual_end':   ev.actual_end.isoformat() if ev.actual_end else None,
+            }
+            for ev in track.day_events
+        ]
+
+    # Group: parent tracks with subtracks nested; standalone tracks at top level
     data = {}
-    for track in tracks:
-        data[track.display_name] = {
+    parent_tracks = [t for t in all_tracks if t.parent_id is None]
+    sub_by_parent = {}
+    for t in all_tracks:
+        if t.parent_id is not None:
+            sub_by_parent.setdefault(t.parent_id, []).append(t)
+
+    for track in parent_tracks:
+        subs = sub_by_parent.get(track.pk, [])
+        track_data = {
             'id': track.pk,
             'color': track.color,
-            'events': [
-                {
-                    'id':           ev.pk,
-                    'title':        ev.title,
-                    'description':  ev.description,
-                    'start_time':   ev.start_time.isoformat(),
-                    'end_time':     ev.end_time.isoformat(),
-                    'is_approved':  ev.is_approved,
-                    'actual_start': ev.actual_start.isoformat() if ev.actual_start else None,
-                    'actual_end':   ev.actual_end.isoformat() if ev.actual_end else None,
-                }
-                for ev in track.day_events
-            ],
+            'radio_channel': track.radio_channel,
+            'events': _serialize_events(track),
         }
+        if subs:
+            track_data['subtracks'] = {
+                sub.name: {
+                    'id': sub.pk,
+                    'radio_channel': sub.radio_channel,
+                    'events': _serialize_events(sub),
+                }
+                for sub in sorted(subs, key=lambda s: s.name)
+            }
+        data[track.name] = track_data
 
     return JsonResponse({'date': target_date.isoformat(), 'tracks': data})
 
 
 # ── Analytics ─────────────────────────────────────────────────────────────────
+
+@login_required
+@require_POST
+def set_radio_channel(request, asset_id):
+    """Admin only — set or clear a track's radio channel (11–16)."""
+    if not request.user.is_staff:
+        return JsonResponse({'error': 'Forbidden'}, status=403)
+    track = get_object_or_404(Asset, pk=asset_id, asset_type=Asset.AssetType.TRACK)
+    try:
+        body = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+    channel = body.get('channel')
+    if channel is not None:
+        try:
+            channel = int(channel)
+        except (ValueError, TypeError):
+            return JsonResponse({'error': 'Channel must be an integer (11–16) or null.'}, status=400)
+        if channel < 11 or channel > 16:
+            return JsonResponse({'error': 'Channel must be between 11 and 16.'}, status=400)
+    track.radio_channel = channel
+    track.save(update_fields=['radio_channel'])
+    return JsonResponse({'id': track.pk, 'radio_channel': track.radio_channel})
+
 
 @login_required
 def analytics(request):

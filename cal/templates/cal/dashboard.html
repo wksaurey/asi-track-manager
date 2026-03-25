@@ -88,7 +88,15 @@
       <section class="track-card">
         <div class="track-card__inner">
           <header class="track-card__header">
-            <button class="channel-badge" title="Click to set channel">&#8212;</button>
+            <select class="radio-channel-select" title="Assign radio channel">
+              <option value="">Radio Ch</option>
+              <option value="11">Ch 11</option>
+              <option value="12">Ch 12</option>
+              <option value="13">Ch 13</option>
+              <option value="14">Ch 14</option>
+              <option value="15">Ch 15</option>
+              <option value="16">Ch 16</option>
+            </select>
             <h2 class="track-name"></h2>
             <div class="track-actions">
               <button class="icon-btn add-event-btn" title="Add event">&#xff0b;</button>
@@ -122,17 +130,35 @@
               <ul class="notes-list"></ul>
             </div>
           </div>
+
+          <div class="subtracks-container"></div>
         </div>
       </section>
     </template>
 
-    <!-- Channel badge added to event-main -->
+    <template id="subtrackSectionTemplate">
+      <div class="subtrack-section">
+        <div class="subtrack-header">
+          <select class="radio-channel-select radio-channel-select--sub" title="Assign radio channel">
+            <option value="">Radio Ch</option>
+            <option value="11">Ch 11</option>
+            <option value="12">Ch 12</option>
+            <option value="13">Ch 13</option>
+            <option value="14">Ch 14</option>
+            <option value="15">Ch 15</option>
+            <option value="16">Ch 16</option>
+          </select>
+          <span class="subtrack-name"></span>
+        </div>
+        <ol class="events-list subtrack-events-list"></ol>
+      </div>
+    </template>
+
     <template id="eventItemTemplate">
       <li class="event-item">
         <div class="event-main">
           <span class="time-chip"></span>
           <div class="event-text"></div>
-          <button class="event-channel-badge" title="Click to set channel">&#8212;</button>
         </div>
         <div class="event-actions">
           <button class="btn btn-xxs add-subnote">+ Sub-note</button>

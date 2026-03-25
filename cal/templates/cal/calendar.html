@@ -74,6 +74,12 @@
 {% if view == 'day' %}
 <div class="cal-legend">
   <span class="legend-item">
+    <span class="legend-swatch-actual"></span> Actual Time
+  </span>
+  <span class="legend-item">
+    <span class="legend-swatch-scheduled"></span> Scheduled Time
+  </span>
+  <span class="legend-item">
     <span class="legend-dot legend-dot-pending"></span> Pending Approval
   </span>
   {% if is_today %}

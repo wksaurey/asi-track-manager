@@ -74,6 +74,22 @@
           {% endif %}
         </td>
       </tr>
+      {% if field.html_name == 'end_time' %}
+      <tr>
+        <td><label>Duration</label></td>
+        <td>
+          <div class="duration-row" id="duration-row">
+            <button type="button" class="duration-btn" data-minutes="30">30m</button>
+            <button type="button" class="duration-btn" data-minutes="60">1h</button>
+            <button type="button" class="duration-btn" data-minutes="90">1.5h</button>
+            <button type="button" class="duration-btn" data-minutes="120">2h</button>
+            <button type="button" class="duration-btn" data-minutes="180">3h</button>
+            <button type="button" class="duration-btn" data-minutes="240">4h</button>
+            <span class="duration-custom" id="duration-custom"></span>
+          </div>
+        </td>
+      </tr>
+      {% endif %}
       {% endif %}
       {% endfor %}
     </table>
@@ -373,6 +389,68 @@ document.addEventListener('DOMContentLoaded', function () {
   fpStart.config.onChange.push(function(dates) {
     if (dates[0]) fpEnd.set('minDate', dates[0]);
   });
+
+  // ── Duration quick-select buttons ──────────────────────────────────────
+  const durationRow = document.getElementById('duration-row');
+  if (durationRow) {
+    const durationBtns = durationRow.querySelectorAll('.duration-btn');
+
+    // Highlight the button matching the current start/end difference
+    const customSpan = document.getElementById('duration-custom');
+
+    function formatDuration(mins) {
+      const h = Math.floor(mins / 60);
+      const m = mins % 60;
+      if (h === 0) return m + 'm';
+      if (m === 0) return h + 'h';
+      return h + 'h ' + m + 'm';
+    }
+
+    function updateActiveDuration() {
+      const startDates = fpStart.selectedDates;
+      const endDates   = fpEnd.selectedDates;
+      const diffMs     = (startDates.length && endDates.length)
+                       ? endDates[0].getTime() - startDates[0].getTime()
+                       : null;
+      const diffMins   = diffMs !== null ? Math.round(diffMs / 60000) : null;
+
+      let presetMatch = false;
+      durationBtns.forEach(btn => {
+        const mins = parseInt(btn.getAttribute('data-minutes'), 10);
+        const match = diffMins === mins;
+        btn.classList.toggle('active', match);
+        if (match) presetMatch = true;
+      });
+
+      // Show custom duration text when no preset matches
+      if (!presetMatch && diffMins !== null && diffMins > 0) {
+        customSpan.textContent = formatDuration(diffMins);
+        customSpan.style.display = '';
+      } else {
+        customSpan.textContent = '';
+        customSpan.style.display = 'none';
+      }
+    }
+
+    durationBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const minutes    = parseInt(btn.getAttribute('data-minutes'), 10);
+        const startDates = fpStart.selectedDates;
+        if (!startDates.length) return; // no start time set yet
+
+        const newEnd = new Date(startDates[0].getTime() + minutes * 60000);
+        fpEnd.setDate(newEnd, true);
+        updateActiveDuration();
+      });
+    });
+
+    // Update highlight whenever start or end changes
+    fpStart.config.onChange.push(updateActiveDuration);
+    fpEnd.config.onChange.push(updateActiveDuration);
+
+    // Set initial highlight
+    updateActiveDuration();
+  }
 });
 </script>
 {% endblock %}

@@ -260,30 +260,68 @@ class Calendar(HTMLCalendar):
         )
 
         def _make_block(ev, extra_css='', track_color=None):
-            """Build the HTML for a single Gantt event block."""
+            """Build the HTML for a single Gantt event block.
+
+            When an event has actual_start/actual_end, two blocks are returned:
+            a ghost (scheduled) bar and a solid (actual) bar.  Otherwise a
+            single solid bar is returned for the scheduled time.
+            """
             origin    = ev.start_time.replace(hour=GANTT_START, minute=0, second=0, microsecond=0)
+            edit_url  = reverse('cal:event_edit', args=(ev.id,))
+            base_css  = self._event_classes(ev) + (f' {extra_css}' if extra_css else '')
+            color_style = f'background:{track_color};' if track_color else ''
+            end_iso   = ev.end_time.isoformat()
+
+            has_actual = ev.actual_start or ev.actual_end
+
+            # --- scheduled bar (ghost when actuals exist) ---
             start_off = max(0, int((ev.start_time - origin).total_seconds()) // 60)
             end_off   = min(GANTT_MINS, int((ev.end_time - origin).total_seconds()) // 60)
             width_m   = max(0, end_off - start_off)
-            if width_m == 0:
+            if width_m == 0 and not has_actual:
                 return ''
-            left_pct  = round(start_off / GANTT_MINS * 100, 4)
-            width_pct = round(width_m   / GANTT_MINS * 100, 4)
-            edit_url  = reverse('cal:event_edit', args=(ev.id,))
-            css       = self._event_classes(ev) + (f' {extra_css}' if extra_css else '')
-            t_start   = self._fmt_time(ev.start_time)
-            t_end     = self._fmt_time(ev.end_time)
-            color_style = f'background:{track_color};' if track_color else ''
-            end_iso = ev.end_time.isoformat()
-            return (
-                f'<a class="gantt-block {css}" href="{edit_url}"'
-                f' style="left:{left_pct}%;width:{width_pct}%;{color_style}"'
-                f' title="{escape(ev.title)}"'
-                f' data-end="{end_iso}">'
-                f'<span class="gantt-block-title">{escape(ev.title)}</span>'
-                f'<span class="gantt-block-time">{t_start}&ndash;{t_end}</span>'
-                f'</a>'
-            )
+
+            parts = []
+
+            if width_m > 0:
+                left_pct  = round(start_off / GANTT_MINS * 100, 4)
+                width_pct = round(width_m   / GANTT_MINS * 100, 4)
+                t_start   = self._fmt_time(ev.start_time)
+                t_end     = self._fmt_time(ev.end_time)
+                ghost_cls = ' gantt-block--ghost' if has_actual else ''
+                parts.append(
+                    f'<a class="gantt-block {base_css}{ghost_cls}" href="{edit_url}"'
+                    f' style="left:{left_pct}%;width:{width_pct}%;{color_style}"'
+                    f' title="{escape(ev.title)}"'
+                    f' data-end="{end_iso}">'
+                    f'<span class="gantt-block-title">{escape(ev.title)}</span>'
+                    f'<span class="gantt-block-time">{t_start}&ndash;{t_end}</span>'
+                    f'</a>'
+                )
+
+            # --- actual bar (solid) ---
+            if has_actual:
+                act_start = ev.actual_start or ev.start_time
+                act_end   = ev.actual_end or ev.end_time
+                a_start_off = max(0, int((act_start - origin).total_seconds()) // 60)
+                a_end_off   = min(GANTT_MINS, int((act_end - origin).total_seconds()) // 60)
+                a_width_m   = max(0, a_end_off - a_start_off)
+                if a_width_m > 0:
+                    a_left_pct  = round(a_start_off / GANTT_MINS * 100, 4)
+                    a_width_pct = round(a_width_m   / GANTT_MINS * 100, 4)
+                    a_t_start   = self._fmt_time(act_start)
+                    a_t_end     = self._fmt_time(act_end)
+                    parts.append(
+                        f'<a class="gantt-block gantt-block--actual {base_css}" href="{edit_url}"'
+                        f' style="left:{a_left_pct}%;width:{a_width_pct}%;{color_style}"'
+                        f' title="{escape(ev.title)} (actual)"'
+                        f' data-end="{end_iso}">'
+                        f'<span class="gantt-block-title">{escape(ev.title)}</span>'
+                        f'<span class="gantt-block-time">{a_t_start}&ndash;{a_t_end}</span>'
+                        f'</a>'
+                    )
+
+            return ''.join(parts)
 
         # ── Track rows ───────────────────────────────────────────────
         rows_html = ''

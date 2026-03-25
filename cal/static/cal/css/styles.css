@@ -984,6 +984,79 @@ html.dark-theme .subtrack-panel    { background: rgba(46,168,229,0.07); border-c
   box-shadow: 0 0 0 3px rgba(46,168,229,0.12) !important;
 }
 
+/* ── Flatpickr: time arrow contrast ─────────────────────────── */
+.numInputWrapper span.arrowUp,
+.numInputWrapper span.arrowDown {
+  opacity: 0.6;
+  padding: 0 4px;
+  transition: opacity 150ms ease, background 150ms ease;
+}
+.numInputWrapper span.arrowUp:hover,
+.numInputWrapper span.arrowDown:hover {
+  opacity: 1;
+  background: rgba(46,168,229,0.15);
+}
+.numInputWrapper span.arrowUp::after {
+  border-bottom-color: #023447 !important;
+}
+.numInputWrapper span.arrowDown::after {
+  border-top-color: #023447 !important;
+}
+.flatpickr-am-pm {
+  font-weight: 600 !important;
+}
+
+/* ── Duration quick-select buttons ──────────────────────────── */
+.duration-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+  padding: 2px 0;
+}
+.duration-label {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 500;
+  margin-right: 2px;
+}
+.duration-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--primary-600);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 120ms, border-color 120ms, color 120ms, transform 100ms;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+.duration-btn:hover {
+  border-color: var(--primary);
+  background: rgba(46,168,229,0.08);
+  color: var(--primary);
+  transform: translateY(-1px);
+}
+.duration-btn.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}
+.duration-custom {
+  display: none;
+  font-size: 12px;
+  font-style: italic;
+  color: var(--muted);
+  margin-left: 4px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
 /* ── Asset cards ──────────────────────────────────────────── */
 .asset-section-heading {
   border-left: 4px solid var(--primary);
@@ -1270,6 +1343,14 @@ html.dark-theme .flatpickr-time input,
 html.dark-theme .flatpickr-time .flatpickr-am-pm,
 html.dark-theme .flatpickr-time .flatpickr-time-separator { color: #c0d8e4 !important; background: #152230 !important; }
 html.dark-theme .numInputWrapper:hover     { background: rgba(46,168,229,0.10) !important; }
+html.dark-theme .numInputWrapper span.arrowUp::after   { border-bottom-color: #c0d8e4 !important; }
+html.dark-theme .numInputWrapper span.arrowDown::after  { border-top-color: #c0d8e4 !important; }
+html.dark-theme .numInputWrapper span.arrowUp:hover,
+html.dark-theme .numInputWrapper span.arrowDown:hover   { background: rgba(46,168,229,0.20) !important; }
+html.dark-theme .duration-btn { background: #1a2b38; color: #7dd3fc; border-color: rgba(46,168,229,0.25); }
+html.dark-theme .duration-btn:hover { background: rgba(46,168,229,0.15); color: #93e0ff; border-color: var(--primary); }
+html.dark-theme .duration-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+html.dark-theme .duration-custom { color: #7090a0; }
 html.dark-theme .flatpickr-months .flatpickr-prev-month,
 html.dark-theme .flatpickr-months .flatpickr-next-month   { fill: #7090a0 !important; }
 html.dark-theme .flatpickr-current-month .flatpickr-monthDropdown-months,
@@ -1669,6 +1750,32 @@ html.dark-theme .gantt-subtrack-row  { border-color: rgba(46,168,229,0.08); }
 .gantt-block.event-multi    { background: var(--primary); }
 .gantt-block.event-pending  { opacity: 0.75; }
 .gantt-block.event-past     { opacity: 0.45; filter: saturate(0.5); }
+
+/* Ghost bar (scheduled time when actuals exist) */
+.gantt-block.gantt-block--ghost {
+  opacity: 0.45;
+  border: 1.5px dashed var(--muted);
+  background: rgba(108,117,125,0.08) !important;
+  z-index: 0;
+}
+.gantt-block.gantt-block--ghost .gantt-block-title,
+.gantt-block.gantt-block--ghost .gantt-block-time { color: var(--muted); }
+
+/* Actual bar (solid, rendered on top of ghost) */
+.gantt-block.gantt-block--actual {
+  z-index: 1;
+  border: 1.5px solid rgba(255,255,255,0.35);
+}
+
+/* Legend swatches for the day view */
+.legend-swatch-scheduled {
+  display: inline-block; width: 14px; height: 10px; border-radius: 3px;
+  border: 1.5px dashed var(--muted); opacity: 0.45;
+}
+.legend-swatch-actual {
+  display: inline-block; width: 14px; height: 10px; border-radius: 3px;
+  background: var(--primary); border: 1.5px solid rgba(255,255,255,0.35);
+}
 
 .gantt-block-title {
   overflow: hidden;

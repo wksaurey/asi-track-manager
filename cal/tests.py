@@ -684,6 +684,8 @@ class TrackViewEmptyTracksTest(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username='employee', password='Testpass123!')
         self.client.force_login(self.user)
+        # Remove tracks seeded by migration so we can test the empty state
+        Asset.objects.filter(asset_type=Asset.AssetType.TRACK).delete()
 
     def test_track_view_shows_empty_message(self):
         response = self.client.get(reverse('cal:calendar') + '?view=week')

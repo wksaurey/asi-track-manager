@@ -30,93 +30,17 @@ from .utils import Calendar
 from .forms import EventForm, AssetForm, get_asset_tree
 
 
-# ── Auth helpers ──────────────────────────────────────────────────────────────
-# The app supports two authentication modes:
-# 1. "User" login — stores a plain name in the session (no password).
-# 2. "Admin" login — uses Django's built-in auth, restricted to is_staff.
-
-def is_logged_in(request):
-    """Return True if the user has a session name OR is a logged-in Django admin."""
-    return request.user.is_authenticated or bool(request.session.get('user_name'))
-
-def is_admin(request):
-    """Return True only for authenticated Django staff/superusers."""
-    return request.user.is_authenticated and request.user.is_staff
-
-def current_user_name(request):
-    """
-    Return a display name for the current user.
-
-    For Django-authenticated users this is the username; for session-based
-    users it is the name they entered on the login form.
-    """
-    if request.user.is_authenticated:
-        return request.user.username
-    return request.session.get('user_name', '')
-
-
-# ── Login / logout ────────────────────────────────────────────────────────────
-
-def login_view(request):
-    """
-    Dual-mode login page.
-
-    Supports two POST flows via a hidden ``login_type`` field:
-    - 'user'  — stores the entered name in the session (no password).
-    - 'admin' — authenticates against Django's auth backend and checks
-                ``is_staff`` before granting access.
-
-    Already-authenticated visitors are redirected straight to the calendar.
-    """
-    if is_logged_in(request):
-        return HttpResponseRedirect(reverse('cal:calendar'))
-
-    error = None
-    if request.method == 'POST':
-        login_type = request.POST.get('login_type')
-
-        if login_type == 'user':
-            name = request.POST.get('user_name', '').strip()
-            if name:
-                request.session['user_name'] = name
-                return HttpResponseRedirect(reverse('cal:calendar'))
-            else:
-                error = 'Please enter your name.'
-
-        elif login_type == 'admin':
-            username = request.POST.get('username', '')
-            password = request.POST.get('password', '')
-            user = authenticate(request, username=username, password=password)
-            if user and user.is_staff:
-                login(request, user)
-                return HttpResponseRedirect(reverse('cal:calendar'))
-            else:
-                error = 'Invalid admin credentials.'
-
-    return render(request, 'cal/login.html', {'error': error})
-
-
-def logout_view(request):
-    """Log out the current user (Django auth + session) and redirect to login."""
-    logout(request)
-    request.session.flush()
-    return HttpResponseRedirect(reverse('cal:login'))
-
-
 # ── Index ─────────────────────────────────────────────────────────────────────
-
 
 @login_required
 def index(request):
-    """Root URL — redirect to the calendar (or to login if unauthenticated)."""
-    if not is_logged_in(request):
-        return HttpResponseRedirect(reverse('cal:login'))
+    """Root URL — redirect to the calendar."""
     return HttpResponseRedirect(reverse('cal:calendar'))
 
 
 # ── Calendar ──────────────────────────────────────────────────────────────────
 
-class CalendarView(generic.ListView):
+class CalendarView(LoginRequiredMixin, generic.ListView):
     """
     Main calendar page supporting month, week, and day views.
 
@@ -137,11 +61,6 @@ class CalendarView(generic.ListView):
 
     model = Event
     template_name = 'cal/calendar.html'
-
-    def dispatch(self, request, *args, **kwargs):
-        if not is_logged_in(request):
-            return HttpResponseRedirect(reverse('cal:login'))
-        return super().dispatch(request, *args, **kwargs)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -266,17 +185,15 @@ def event(request, event_id=None):
     - If ``event_id`` is provided, loads an existing event for editing.
       Regular users may only edit events they created; admins can edit any.
     - On POST with valid data, saves the event.  New events record the
-      creator's name and are auto-approved only when the creator is an admin.
+      creator (request.user) and are auto-approved only when the creator
+      is staff.
     - ``form.save_m2m()`` is called separately because we use
       ``commit=False`` to set fields before the initial save.
     """
-    if not is_logged_in(request):
-        return HttpResponseRedirect(reverse('cal:login'))
-
     if event_id:
         instance = get_object_or_404(Event, pk=event_id)
         # Regular users can only edit their own events
-        if not is_admin(request) and instance.created_by != current_user_name(request):
+        if not request.user.is_staff and instance.created_by != request.user:
             return HttpResponseRedirect(reverse('cal:calendar'))
     else:
         instance = Event()
@@ -288,8 +205,8 @@ def event(request, event_id=None):
     if request.POST and form.is_valid():
         ev = form.save(commit=False)
         if not event_id:
-            ev.created_by  = current_user_name(request)
-            ev.is_approved = is_admin(request)  # admin = auto-approve; user = pending
+            ev.created_by  = request.user
+            ev.is_approved = request.user.is_staff  # admin = auto-approve; user = pending
         ev.save()
         form.save_m2m()   # persist ManyToMany (assets) after the instance is saved
         default = reverse('cal:calendar')
@@ -306,10 +223,11 @@ def event(request, event_id=None):
     })
 
 
+@login_required
 @require_POST
 def event_delete(request, event_id):
     """Admin only — delete an event.  Requires POST to prevent accidental deletion."""
-    if not is_admin(request):
+    if not request.user.is_staff:
         return HttpResponseRedirect(reverse('cal:calendar'))
     event_obj = get_object_or_404(Event, pk=event_id)
     event_obj.delete()
@@ -346,7 +264,7 @@ def event_unapprove(request, event_id):
 @login_required
 def pending_events(request):
     """Admin only — list all events awaiting approval."""
-    if not is_admin(request):
+    if not request.user.is_staff:
         return HttpResponseRedirect(reverse('cal:calendar'))
     events = Event.objects.filter(is_approved=False).order_by('start_time').prefetch_related('assets')
     return render(request, 'cal/pending_events.html', {'events': events})
@@ -354,6 +272,7 @@ def pending_events(request):
 
 # ── Asset management ──────────────────────────────────────────────────────────
 
+@login_required
 def asset_list(request):
     """Display all assets grouped by type. Requires login."""
     assets = Asset.objects.prefetch_related('subtracks').all()
@@ -368,9 +287,10 @@ def asset_list(request):
     })
 
 
+@login_required
 def asset_create(request):
     """Admin only — show a form to create a new asset."""
-    if not is_admin(request):
+    if not request.user.is_staff:
         return HttpResponseRedirect(reverse('cal:calendar'))
     initial = {}
     parent_id = request.GET.get('parent')
@@ -385,9 +305,10 @@ def asset_create(request):
     return render(request, 'cal/asset_form.html', {'form': form, 'page_title': 'New Asset'})
 
 
+@login_required
 def asset_edit(request, asset_id):
     """Admin only — edit an existing asset's details."""
-    if not is_admin(request):
+    if not request.user.is_staff:
         return HttpResponseRedirect(reverse('cal:calendar'))
     instance = get_object_or_404(Asset, pk=asset_id)
     form = AssetForm(request.POST or None, instance=instance)
@@ -405,6 +326,7 @@ def asset_edit(request, asset_id):
     })
 
 
+@login_required
 @require_POST
 def asset_delete(request, asset_id):
     """Admin only — delete an asset.  Requires POST for safety."""
@@ -420,6 +342,7 @@ def asset_delete(request, asset_id):
 
 # ── Asset availability / schedule ─────────────────────────────────────────────
 
+@login_required
 def asset_detail(request, asset_id):
     """
     Show an asset's schedule page.
@@ -428,8 +351,6 @@ def asset_detail(request, asset_id):
     - Upcoming events within the next 30 days.
     - The 10 most recent past events for historical reference.
     """
-    if not is_logged_in(request):
-        return HttpResponseRedirect(reverse('cal:login'))
     asset   = get_object_or_404(Asset, pk=asset_id)
     today   = timezone.now().date()
     horizon = today + timedelta(days=30)

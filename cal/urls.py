@@ -11,10 +11,6 @@ from . import views
 
 app_name = 'cal'
 urlpatterns = [
-    # ── Authentication ─────────────────────────────────────────────────────
-    path('login/',  views.login_view,  name='login'),
-    path('logout/', views.logout_view, name='logout'),
-
     # ── Root redirect ──────────────────────────────────────────────────────
     path('', views.index, name='index'),
 

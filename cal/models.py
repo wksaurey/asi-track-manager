@@ -6,6 +6,7 @@ Defines two core models:
 - Event: a scheduled reservation that can reference one or more assets.
 """
 
+from django.conf import settings
 from django.db import models
 from django.urls import reverse
 from django.utils.html import escape

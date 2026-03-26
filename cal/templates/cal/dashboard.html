@@ -1,0 +1,177 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}ASI Control Center{% endblock %}
+
+{% block extra_css %}
+  <link rel="stylesheet" href="{% static 'cal/css/dashboard.css' %}" />
+{% endblock %}
+
+{% block extra_head %}
+  <meta name="csrf-token" content="{{ csrf_token }}" />
+  <link rel="icon" type="image/x-icon" href="{% static 'cal/img/ASI_Logo.svg' %}" />
+{% endblock %}
+
+{% block content %}
+
+    <header class="app-header">
+      <div class="title-row">
+        <h1 class="brand-title">ASI Control Center</h1>
+      </div>
+    </header>
+
+    <!-- Date navigation bar -->
+    <div id="dateNav">
+      <button id="datePrevBtn" class="date-nav-arrow" aria-label="Previous day">&#9664;</button>
+      <div class="date-nav-center">
+        <span id="dateDisplay" class="date-display"></span>
+        <input id="dateInput" type="date" class="date-input" aria-label="Pick a date" />
+      </div>
+      <button id="dateNextBtn" class="date-nav-arrow" aria-label="Next day">&#9654;</button>
+      <button id="dateTodayBtn" class="date-today-btn">Today</button>
+    </div>
+
+    <main>
+      <div id="tracksView">
+        <div id="tracksGrid" class="grid"></div>
+      </div>
+    </main>
+
+    <footer class="app-footer">
+      <small>Track data is loaded from the server and updates automatically.</small>
+    </footer>
+
+
+    <!-- ================================================================
+         TEMPLATES
+         ================================================================ -->
+
+    <template id="trackCardTemplate">
+      <section class="track-card">
+        <div class="track-card__inner">
+          <header class="track-card__header">
+            <select class="radio-channel-select" title="Assign radio channel">
+              <option value="">Radio Ch</option>
+              <option value="11">Ch 11</option>
+              <option value="12">Ch 12</option>
+              <option value="13">Ch 13</option>
+              <option value="14">Ch 14</option>
+              <option value="15">Ch 15</option>
+              <option value="16">Ch 16</option>
+            </select>
+            <h2 class="track-name"></h2>
+            <div class="track-actions">
+              <button class="icon-btn add-event-btn" title="Add event">&#xff0b;</button>
+              <div class="menu-wrap">
+                <button class="menu-btn">&#8942;</button>
+                <div class="menu">
+                  <button class="menu-item add-note-toggle">Add Note</button>
+                  <button class="menu-item delete-track">Delete Track</button>
+                </div>
+              </div>
+            </div>
+          </header>
+
+          <div class="track-add-forms">
+            <form class="note-form hidden" autocomplete="off">
+              <div class="row">
+                <label>Note</label>
+                <input name="note" type="text" placeholder="Quick note for this track..." required />
+              </div>
+              <div class="row form-actions">
+                <button type="submit" class="btn">Add Note</button>
+                <button type="button" class="btn btn-outline cancel-note">Cancel</button>
+              </div>
+            </form>
+          </div>
+
+          <div class="track-content">
+            <ol class="events-list"></ol>
+            <div class="notes-section">
+              <h3>Notes</h3>
+              <ul class="notes-list"></ul>
+            </div>
+            <div class="subtracks-container"></div>
+          </div>
+        </div>
+      </section>
+    </template>
+
+    <template id="subtrackSectionTemplate">
+      <div class="subtrack-section">
+        <div class="subtrack-header">
+          <select class="radio-channel-select radio-channel-select--sub" title="Assign radio channel">
+            <option value="">Radio Ch</option>
+            <option value="11">Ch 11</option>
+            <option value="12">Ch 12</option>
+            <option value="13">Ch 13</option>
+            <option value="14">Ch 14</option>
+            <option value="15">Ch 15</option>
+            <option value="16">Ch 16</option>
+          </select>
+          <span class="subtrack-name"></span>
+          <button class="icon-btn icon-btn--sm subtrack-add-btn" title="Add event to this subtrack">&#xff0b;</button>
+        </div>
+        <ol class="events-list subtrack-events-list"></ol>
+      </div>
+    </template>
+
+    <template id="eventItemTemplate">
+      <li class="event-item">
+        <div class="event-main">
+          <span class="time-chip"></span>
+          <div class="event-text"></div>
+        </div>
+        <div class="event-actions">
+          <button class="btn btn-xxs add-subnote">+ Sub-note</button>
+          <button class="btn btn-xxs btn-outline edit-event">Edit</button>
+          <button class="btn btn-xxs btn-danger delete-event">Delete</button>
+        </div>
+        <ul class="subnotes-list"></ul>
+      </li>
+    </template>
+
+    <template id="noteItemTemplate">
+      <li class="note-item">
+        <span class="note-text"></span>
+        <div class="note-actions">
+          <button class="btn btn-xxs btn-outline edit-note">Edit</button>
+          <button class="btn btn-xxs btn-danger delete-note">Delete</button>
+        </div>
+      </li>
+    </template>
+
+    <input type="hidden" id="currentUserName" value="{{ request.user.username }}" />
+
+    <!-- Event add / edit popup -->
+    <div id="eventPopup" class="event-popup-overlay" hidden>
+      <div class="event-popup-box" id="eventPopupBox">
+        <div class="event-popup__header">
+          <div>
+            <h2 class="event-popup__title" id="eventModalTitle">Add Event</h2>
+            <div class="event-popup__track" id="eventModalTrackName"></div>
+          </div>
+          <button type="button" class="event-popup__close" aria-label="Close">&times;</button>
+        </div>
+        <form id="eventModalForm" autocomplete="off">
+          <div class="modal-field">
+            <label for="modalTime">Time</label>
+            <input id="modalTime" name="time" type="text" placeholder="e.g., 9:01-~11:30 or 10:21" required />
+          </div>
+          <div class="modal-field">
+            <label for="modalDesc">Description</label>
+            <input id="modalDesc" name="desc" type="text" placeholder="What is happening?" required />
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-outline" id="eventModalCancel">Cancel</button>
+            <button type="submit" class="btn">Save Event</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+{% endblock %}
+
+{% block script %}
+  <script src="{% static 'cal/js/dashboard.js' %}"></script>
+{% endblock %}

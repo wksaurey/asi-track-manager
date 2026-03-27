@@ -1570,7 +1570,13 @@ html.dark-theme .wk-today-num    { background: var(--primary); color: #fff; }
 /* ── Gantt day view ─────────────────────────────────────────── */
 
 .calendar.gantt-view {
-  overflow-x: hidden;
+  overflow: visible;
+}
+
+.gantt-scroll-container {
+  overflow-x: auto;
+  overflow-y: visible;
+  -webkit-overflow-scrolling: touch;
 }
 
 .gantt-axis-row {
@@ -1578,10 +1584,15 @@ html.dark-theme .wk-today-num    { background: var(--primary); color: #fff; }
   align-items: flex-end;
   padding-bottom: 4px;
   border-bottom: 2px solid var(--border);
+  min-width: 2640px; /* 240px labels + 2400px timeline */
 }
 .gantt-track-label-spacer {
   width: 140px;
   flex-shrink: 0;
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  background: var(--bg, #fff);
 }
 .gantt-axis {
   flex: 1;
@@ -1609,6 +1620,7 @@ html.dark-theme .wk-today-num    { background: var(--primary); color: #fff; }
 .gantt-body {
   display: flex;
   flex-direction: column;
+  min-width: 2640px; /* 240px labels + 2400px timeline */
 }
 
 .gantt-row {
@@ -1628,10 +1640,17 @@ html.dark-theme .wk-today-num    { background: var(--primary); color: #fff; }
   align-items: center;
   border-right: 1px solid var(--border);
   background: rgba(46,168,229,0.03);
+  position: sticky;
+  left: 0;
+  z-index: 2;
 }
 .gantt-sublabel-spacer {
   width: 100px;
   flex-shrink: 0;
+  position: sticky;
+  left: 140px;
+  z-index: 3;
+  background: var(--bg, #fff);
 }
 .gantt-sublabel-col {
   width: 100px;
@@ -1640,6 +1659,9 @@ html.dark-theme .wk-today-num    { background: var(--primary); color: #fff; }
   flex-direction: column;
   border-right: 1px solid var(--border);
   background: rgba(46,168,229,0.015);
+  position: sticky;
+  left: 140px;
+  z-index: 2;
 }
 .gantt-subtrack-name {
   height: 36px;
@@ -1668,7 +1690,7 @@ html.dark-theme .wk-today-num    { background: var(--primary); color: #fff; }
     var(--border) 0,
     var(--border) 1px,
     transparent 1px,
-    transparent calc(100% / 14)
+    transparent calc(100% / 24)
   );
 }
 
@@ -1824,9 +1846,12 @@ html.dark-theme .gantt-subtrack-row  { border-color: rgba(46,168,229,0.08); }
 /* Dark theme — Gantt */
 html.dark-theme .gantt-track-label {
   color: #c0d8e4;
-  background: rgba(46,168,229,0.04);
+  background: #1a2332;
   border-color: rgba(46,168,229,0.15);
 }
+html.dark-theme .gantt-track-label-spacer,
+html.dark-theme .gantt-sublabel-spacer { background: #1a2332; }
+html.dark-theme .gantt-sublabel-col { background: #1a2838; }
 html.dark-theme .gantt-row    { border-color: rgba(46,168,229,0.12); }
 html.dark-theme .gantt-lane   {
   background-image: repeating-linear-gradient(
@@ -1834,7 +1859,7 @@ html.dark-theme .gantt-lane   {
     rgba(46,168,229,0.15) 0,
     rgba(46,168,229,0.15) 1px,
     transparent 1px,
-    transparent calc(100% / 14)
+    transparent calc(100% / 24)
   );
 }
 html.dark-theme .gantt-axis-row { border-color: rgba(46,168,229,0.15); }

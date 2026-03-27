@@ -283,3 +283,29 @@ class Event(models.Model):
             f'{self.asset_badge_html}'
             f'</a>'
         )
+
+
+class Feedback(models.Model):
+    class Category(models.TextChoices):
+        BUG = 'bug', 'Bug Report'
+        FEATURE = 'feature', 'Feature Request'
+        OTHER = 'other', 'Other'
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='feedback',
+    )
+    category = models.CharField(max_length=20, choices=Category.choices, default=Category.BUG)
+    subject = models.CharField(max_length=200)
+    message = models.TextField()
+    page_url = models.URLField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    is_resolved = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'[{self.get_category_display()}] {self.subject}'

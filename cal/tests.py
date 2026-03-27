@@ -826,28 +826,28 @@ class GanttDayViewTest(TestCase):
         self.assertContains(response, 'gantt-block')
 
     def test_day_view_event_position_in_html(self):
-        """9am start = 180 min after 6am; 180/840*100 = 21.4286%."""
-        start = datetime(2026, 3, 9, 9, 0, tzinfo=_local_tz)
-        end   = datetime(2026, 3, 9, 11, 0, tzinfo=_local_tz)
+        """9am start = 540 min after midnight; 540/1440*100 = 37.5%."""
+        start = datetime(2026, 3, 9, 9, 0, tzinfo=dt_timezone.utc)
+        end   = datetime(2026, 3, 9, 11, 0, tzinfo=dt_timezone.utc)
         ev = Event.objects.create(
             title='Position Test', description='', start_time=start, end_time=end,
             created_by=self.user, is_approved=True,
         )
         ev.assets.add(self.track)
         response = self.client.get(reverse('cal:calendar') + '?view=day&date=2026-3-9')
-        self.assertContains(response, 'left:21.4286%')
+        self.assertContains(response, 'left:37.5%')
 
-    def test_day_view_event_outside_range_not_rendered(self):
-        """Event entirely before 6am (4am-5am) must not produce a gantt-block."""
-        start = datetime(2026, 3, 9, 4, 0, tzinfo=_local_tz)
-        end   = datetime(2026, 3, 9, 5, 0, tzinfo=_local_tz)
+    def test_day_view_early_morning_event_rendered(self):
+        """Event at 4am-5am is rendered in the full 24-hour gantt view."""
+        start = datetime(2026, 3, 9, 4, 0, tzinfo=dt_timezone.utc)
+        end   = datetime(2026, 3, 9, 5, 0, tzinfo=dt_timezone.utc)
         ev = Event.objects.create(
             title='Pre-Dawn Test', description='', start_time=start, end_time=end,
             created_by=self.user, is_approved=True,
         )
         ev.assets.add(self.track)
         response = self.client.get(reverse('cal:calendar') + '?view=day&date=2026-3-9')
-        self.assertNotContains(response, 'Pre-Dawn Test')
+        self.assertContains(response, 'Pre-Dawn Test')
 
     def test_day_view_asset_filter_hidden(self):
         response = self.client.get(reverse('cal:calendar') + '?view=day&date=2026-3-9')

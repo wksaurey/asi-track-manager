@@ -188,7 +188,7 @@ class Calendar(HTMLCalendar):
         Render the day view as a horizontal Gantt timeline.
 
         Rows    = all Track assets (asset_type='track'), ordered by name.
-        Columns = fixed 6:00 AM to 8:00 PM time axis (840 minutes).
+        Columns = full 24-hour time axis (midnight to midnight, 1440 minutes).
 
         Subtrack support:
         - Tracks with subtracks render one Gantt row per subtrack.
@@ -196,14 +196,16 @@ class Calendar(HTMLCalendar):
           rows using a CSS variable (--subtrack-span) and absolute positioning.
         - Tracks without subtracks render as a single row (unchanged).
 
-        Events are rendered as proportional blocks: left% = (start - 6am) / 840 * 100,
-        width% = duration / 840 * 100. Events partially outside the range are clamped.
-        Events entirely outside 6am-8pm are skipped (zero-width after clamping).
-        Overlapping events on the same sub-row are stacked further via _assign_rows.
+        Events are rendered as proportional blocks: left% = start_min / 1440 * 100,
+        width% = duration / 1440 * 100. Overlapping events on the same sub-row
+        are stacked further via _assign_rows.
         Only track-type assets are shown; vehicle/operator events are not shown.
+
+        The wrapper div includes data attributes (data-gantt-start, data-gantt-mins,
+        data-event-earliest, data-event-latest) used by the JS auto-scroll logic.
         """
-        GANTT_START = 6    # 6:00 AM
-        GANTT_MINS  = 840  # 14 hours × 60
+        GANTT_START = 0    # midnight
+        GANTT_MINS  = 1440  # 24 hours × 60
 
         is_today  = (day_date == self.today)
         today_pfx = 'Today &mdash; ' if is_today else ''
@@ -242,9 +244,19 @@ class Calendar(HTMLCalendar):
             for ev in all_events
         }
 
+        # Compute earliest/latest event times (minutes from midnight) for JS auto-scroll
+        if all_events:
+            earliest_dt = min(ev.start_time for ev in all_events)
+            latest_dt = max(ev.end_time for ev in all_events)
+            data_earliest = earliest_dt.hour * 60 + earliest_dt.minute
+            data_latest = latest_dt.hour * 60 + latest_dt.minute
+        else:
+            data_earliest = None
+            data_latest = None
+
         # ── Time axis ────────────────────────────────────────────────
         axis_markers = ''
-        for h in range(GANTT_START, GANTT_START + 15):  # 6am through 8pm inclusive
+        for h in range(0, 24):  # midnight through 11pm
             pct   = round((h - GANTT_START) * 60 / GANTT_MINS * 100, 4)
             label = f'{h % 12 or 12}{"am" if h < 12 else "pm"}'
             axis_markers += (
@@ -414,11 +426,17 @@ class Calendar(HTMLCalendar):
                     f'</div>'
                 )
 
+        data_attrs = f' data-gantt-start="{GANTT_START}" data-gantt-mins="{GANTT_MINS}"'
+        if data_earliest is not None:
+            data_attrs += f' data-event-earliest="{data_earliest}" data-event-latest="{data_latest}"'
+
         return (
-            f'<div class="calendar day-view gantt-view">'
+            f'<div class="calendar day-view gantt-view"{data_attrs}>'
             f'<div class="day-view-title">{title}</div>'
+            f'<div class="gantt-scroll-container">'
             f'{axis_row}'
             f'<div class="gantt-body">{rows_html}</div>'
+            f'</div>'
             f'</div>'
         )
 

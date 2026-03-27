@@ -11,7 +11,7 @@ from datetime import timedelta
 from django import forms
 from django.forms import ModelForm, TextInput, CheckboxSelectMultiple, ValidationError
 from django.utils.timezone import localtime
-from cal.models import Event, Asset
+from cal.models import Event, Asset, Feedback
 
 
 class AssetForm(ModelForm):
@@ -216,3 +216,13 @@ class EventForm(ModelForm):
                     )
 
         return cleaned
+
+
+class FeedbackForm(ModelForm):
+    class Meta:
+        model = Feedback
+        fields = ['category', 'subject', 'message', 'page_url']
+        widgets = {
+            'page_url': forms.HiddenInput(),
+            'message': forms.Textarea(attrs={'rows': 4}),
+        }

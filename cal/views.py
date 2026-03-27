@@ -27,7 +27,7 @@ from django.views.decorators.http import require_POST
 
 from .models import Asset, Event
 from .utils import Calendar
-from .forms import EventForm, AssetForm, get_asset_tree
+from .forms import EventForm, AssetForm, FeedbackForm, get_asset_tree
 
 
 # ── Index ─────────────────────────────────────────────────────────────────────
@@ -800,3 +800,17 @@ def dashboard_stamp_actual(request, event_id):
         'actual_start': event.actual_start.isoformat() if event.actual_start else None,
         'actual_end':   event.actual_end.isoformat() if event.actual_end else None,
     })
+
+
+# ── Feedback ─────────────────────────────────────────────────────────────────
+
+@login_required
+@require_POST
+def submit_feedback(request):
+    form = FeedbackForm(request.POST)
+    if form.is_valid():
+        fb = form.save(commit=False)
+        fb.user = request.user
+        fb.save()
+        return JsonResponse({'success': True})
+    return JsonResponse({'success': False, 'errors': form.errors}, status=400)

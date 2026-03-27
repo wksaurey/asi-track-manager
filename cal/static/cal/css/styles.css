@@ -1871,3 +1871,79 @@ html.dark-theme .gantt-axis-row { border-color: rgba(46,168,229,0.15); }
   top: 0;
   bottom: 0;
 }
+
+/* ── Feedback FAB + modal ──────────────────────────────────── */
+.feedback-fab {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 900;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: none;
+  background: linear-gradient(180deg, #023447, #034259);
+  color: #fff;
+  font-size: 20px;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(2,40,54,0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 150ms ease, box-shadow 150ms ease;
+}
+.feedback-fab:hover {
+  transform: translateY(-2px) scale(1.05);
+  box-shadow: 0 8px 24px rgba(2,40,54,0.45);
+}
+
+.feedback-modal-overlay {
+  position: fixed; inset: 0; z-index: 9999;
+  background: rgba(0,0,0,0.45);
+  display: flex; align-items: center; justify-content: center;
+  animation: fadeIn .15s;
+}
+.feedback-modal {
+  background: var(--card, #fff);
+  border-radius: 12px;
+  padding: 24px 28px;
+  max-width: 440px;
+  width: 90%;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+}
+.feedback-modal h5 {
+  color: var(--text, #023447);
+}
+.feedback-modal .form-control {
+  background: var(--card, #fff);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text, #073242);
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+.feedback-modal .form-control:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(46,168,229,0.12);
+  outline: none;
+}
+
+.feedback-toast {
+  position: fixed;
+  bottom: 84px;
+  right: 24px;
+  z-index: 10000;
+  background: linear-gradient(180deg, #023447, #034259);
+  color: #fff;
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  box-shadow: 0 4px 16px rgba(2,40,54,0.35);
+  animation: fadeIn .15s;
+}
+
+/* Dark theme overrides for feedback */
+html.dark-theme .feedback-modal { background: var(--card); }
+html.dark-theme .feedback-modal h5 { color: #e2e8f0; }
+html.dark-theme .feedback-modal .form-control { background: rgba(255,255,255,0.05); border-color: rgba(46,168,229,0.25); color: #e2e8f0; }
+html.dark-theme .feedback-modal label { color: #c0d8e4; }

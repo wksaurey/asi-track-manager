@@ -7,7 +7,7 @@ search, and a bulk "approve" action for events.
 
 from django.contrib import admin
 from cal.forms import EventForm
-from cal.models import Asset, Event
+from cal.models import Asset, Event, Feedback
 
 
 @admin.register(Asset)
@@ -47,3 +47,11 @@ class EventAdmin(admin.ModelAdmin):
         """Bulk action — mark all selected events as approved."""
         queryset.update(is_approved=True)
     approve_events.short_description = 'Approve selected events'
+
+
+@admin.register(Feedback)
+class FeedbackAdmin(admin.ModelAdmin):
+    list_display = ('subject', 'category', 'user', 'created_at', 'is_resolved')
+    list_filter = ('category', 'is_resolved')
+    search_fields = ('subject', 'message')
+    readonly_fields = ('user', 'page_url', 'created_at')

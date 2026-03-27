@@ -209,7 +209,7 @@ class PendingEventsAdminOnlyTest(TestCase):
 
 
 class EventEditOwnershipTest(TestCase):
-    """Regular users must not be able to edit another user's event."""
+    """Regular users can view (read-only) but not edit another user's event."""
 
     def setUp(self):
         self.owner = User.objects.create_user(username='owner', password='Testpass123!')
@@ -225,19 +225,34 @@ class EventEditOwnershipTest(TestCase):
             is_approved=True,
         )
 
-    def test_event_edit_ownership(self):
-        """Regular user cannot edit another user's event — must be redirected."""
+    def test_event_view_other_user_readonly(self):
+        """Regular user can view another user's event in read-only mode."""
         self.client.login(username='other', password='Testpass123!')
         url = reverse('cal:event_edit', args=[self.event.pk])
         response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.context['can_edit'])
+
+    def test_event_post_other_user_blocked(self):
+        """Regular user cannot POST to another user's event."""
+        self.client.login(username='other', password='Testpass123!')
+        url = reverse('cal:event_edit', args=[self.event.pk])
+        response = self.client.post(url, {
+            'title': 'Hacked',
+            'start_time': self.start.strftime('%Y-%m-%dT%H:%M'),
+            'end_time': self.end.strftime('%Y-%m-%dT%H:%M'),
+        })
         self.assertEqual(response.status_code, 302)
+        self.event.refresh_from_db()
+        self.assertEqual(self.event.title, 'Owner Event')
 
     def test_event_edit_owner_can_edit(self):
-        """Event owner can access the edit view (200)."""
+        """Event owner can access the edit view with full edit rights."""
         self.client.login(username='owner', password='Testpass123!')
         url = reverse('cal:event_edit', args=[self.event.pk])
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context['can_edit'])
 
 
 class AssetListLoginRequiredTest(TestCase):

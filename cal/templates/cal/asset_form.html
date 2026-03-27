@@ -177,7 +177,7 @@ document.addEventListener('DOMContentLoaded', function () {
       {% for sub in subtracks %}
       <div class="asset-card">
         <form class="asset-card-delete-form" method="post" action="{% url 'cal:asset_delete' sub.id %}"
-              onsubmit="return confirmDelete(this, 'Delete {{ sub.name|escapejs }}? This cannot be undone.')">
+              onsubmit="return confirmDelete(this, 'Delete subtrack &quot;{{ sub.name|escapejs }}&quot;? This cannot be undone.')">
           {% csrf_token %}
           <button type="submit" class="asset-card-delete-btn" title="Delete {{ sub.name|escapejs }}">&times;</button>
         </form>

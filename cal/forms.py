@@ -188,9 +188,6 @@ class EventForm(ModelForm):
         if start_time and end_time and start_time >= end_time:
             raise ValidationError('End time must be after start time.')
 
-        # Minimum duration of 1 hour
-        if start_time and end_time and (end_time - start_time) < timedelta(hours=1):
-            raise ValidationError('Reservations must be at least 1 hour long.')
 
         # Conflict check — delegates to Asset.conflicting_asset_ids() for
         # parent/subtrack rules.

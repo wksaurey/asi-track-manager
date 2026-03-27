@@ -51,7 +51,7 @@
           <i class="fas fa-edit"></i> Edit
         </a>
         <form method="post" action="{% url 'cal:event_delete' ev.id %}"
-              onsubmit="return confirmDelete(this, 'Delete this event? This cannot be undone.')">
+              onsubmit="return confirmDelete(this, 'Delete &quot;{{ ev.title|escapejs }}&quot;? This cannot be undone.')">
           {% csrf_token %}
           <input type="hidden" name="next" value="{% url 'cal:pending_events' %}">
           <button type="submit"

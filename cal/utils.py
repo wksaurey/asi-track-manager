@@ -205,7 +205,7 @@ class Calendar(HTMLCalendar):
         data-event-earliest, data-event-latest) used by the JS auto-scroll logic.
         """
         GANTT_START = 0    # midnight
-        GANTT_MINS  = 1440  # 24 hours × 60
+        GANTT_MINS  = 1440  # 24 hours
 
         is_today  = (day_date == self.today)
         today_pfx = 'Today &mdash; ' if is_today else ''
@@ -244,10 +244,9 @@ class Calendar(HTMLCalendar):
             for ev in all_events
         }
 
-        # Compute earliest/latest event times (minutes from midnight) for JS auto-scroll
         if all_events:
-            earliest_dt = min(ev.start_time for ev in all_events)
-            latest_dt = max(ev.end_time for ev in all_events)
+            earliest_dt = localtime(min(ev.start_time for ev in all_events))
+            latest_dt = localtime(max(ev.end_time for ev in all_events))
             data_earliest = earliest_dt.hour * 60 + earliest_dt.minute
             data_latest = latest_dt.hour * 60 + latest_dt.minute
         else:
@@ -256,18 +255,18 @@ class Calendar(HTMLCalendar):
 
         # ── Time axis ────────────────────────────────────────────────
         axis_markers = ''
-        for h in range(0, 24):  # midnight through 11pm
+        for h in range(0, 24):
             pct   = round((h - GANTT_START) * 60 / GANTT_MINS * 100, 4)
             label = f'{h % 12 or 12}{"am" if h < 12 else "pm"}'
             axis_markers += (
-                f'<div class="gantt-hour-marker">'
+                f'<div class="gantt-hour-marker" style="left:{pct}%">'
                 f'<span class="gantt-hour-label">{label}</span>'
                 f'</div>'
             )
         axis_row = (
             f'<div class="gantt-axis-row">'
-            f'<div class="gantt-track-label-spacer"></div>'
-            f'<div class="gantt-sublabel-spacer"></div>'
+            f'<div class="gantt-track-label gantt-axis-label" style="border-left:none;"></div>'
+            f'<div class="gantt-sublabel-col gantt-axis-sublabel"></div>'
             f'<div class="gantt-axis">{axis_markers}</div>'
             f'</div>'
         )

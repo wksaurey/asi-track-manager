@@ -10,5 +10,6 @@ urlpatterns = [
     path('register/', views.register, name='register'),
     path('management/', views.user_management, name='user_management'),
     path('toggle-admin/<int:user_id>/', views.toggle_admin, name='toggle_admin'),
+    path('set-role/<int:user_id>/', views.set_role, name='set_role'),
     path('delete-user/<int:user_id>/', views.delete_user, name='delete_user'),
 ]

@@ -254,26 +254,17 @@
     })();
     {% endif %}
 
-    // ── Smart auto-scroll ────────────────────────────────────────
+    // ── Auto-scroll: center viewport on current time ──────────────
     (function() {
       var container = document.querySelector('.gantt-scroll-container');
       if (!container) return;
 
-      var earliest = gantt.dataset.eventEarliest;
-      var latest = gantt.dataset.eventLatest;
-
-      var centerMin;
-      if (earliest && latest) {
-        centerMin = (parseInt(earliest) + parseInt(latest)) / 2;
-      } else {
-        var now = new Date();
-        centerMin = now.getHours() * 60 + now.getMinutes();
-      }
-
+      var now = new Date();
+      var nowMin = now.getHours() * 60 + now.getMinutes();
       var scrollableWidth = container.scrollWidth;
       var viewportWidth = container.clientWidth;
-      var centerPx = ((centerMin - ganttStart * 60) / ganttMins) * scrollableWidth;
-      container.scrollLeft = Math.max(0, centerPx - viewportWidth / 2);
+      var nowPx = ((nowMin - ganttStart * 60) / ganttMins) * scrollableWidth;
+      container.scrollLeft = Math.max(0, nowPx - viewportWidth / 2);
     })();
   });
 </script>

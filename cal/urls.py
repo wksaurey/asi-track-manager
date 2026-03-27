@@ -41,4 +41,6 @@ urlpatterns = [
     path('analytics/',                              views.analytics,              name='analytics'),
     path('api/analytics/',                          views.analytics_api,          name='analytics_api'),
     path('api/feedback/',                           views.submit_feedback,        name='submit_feedback'),
+    path('feedback/',                               views.feedback_list,          name='feedback_list'),
+    path('feedback/<int:feedback_id>/resolve/',     views.feedback_resolve,       name='feedback_resolve'),
 ]

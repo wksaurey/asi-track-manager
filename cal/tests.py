@@ -826,7 +826,7 @@ class GanttDayViewTest(TestCase):
         self.assertContains(response, 'gantt-block')
 
     def test_day_view_event_position_in_html(self):
-        """9am start = 540 min after midnight; 540/1440*100 = 37.5%."""
+        """9am start in 24h range: 540/1440*100 = 37.5%."""
         start = datetime(2026, 3, 9, 9, 0, tzinfo=_local_tz)
         end   = datetime(2026, 3, 9, 11, 0, tzinfo=_local_tz)
         ev = Event.objects.create(
@@ -838,7 +838,7 @@ class GanttDayViewTest(TestCase):
         self.assertContains(response, 'left:37.5%')
 
     def test_day_view_early_morning_event_rendered(self):
-        """Event at 4am-5am is rendered in the full 24-hour gantt view."""
+        """Event at 4am-5am is visible in the 24h gantt view."""
         start = datetime(2026, 3, 9, 4, 0, tzinfo=_local_tz)
         end   = datetime(2026, 3, 9, 5, 0, tzinfo=_local_tz)
         ev = Event.objects.create(

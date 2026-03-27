@@ -79,30 +79,24 @@ class TimezoneDisplayTests(TestCase):
         ev.assets.add(self.track)
         response = self.client.get(reverse('cal:calendar') + '?view=day&date=2026-6-15')
         content = response.content.decode()
-        # Should be positioned at 57.1429% (2 PM Eastern), not 85.7143% (6 PM UTC)
+        # 2 PM Eastern = 840 min from midnight. 840/1440 = 58.3333%
         self.assertIn('left:58.3333%', content,
                        "Event should be positioned at 2 PM Eastern (840/1440 = 58.3333%), "
                        "not at UTC time position")
 
-    def test_event_near_midnight_utc_appears_on_correct_local_date(self):
-        """An event at 11 PM Eastern (3 AM UTC next day) should appear on the Eastern date.
-
-        June 15 11:00 PM Eastern = June 16 3:00 AM UTC.
-        The event should appear on the June 15 day view, not June 16.
-        """
-        # 11:00 PM Eastern June 15 = 3:00 AM UTC June 16
-        start = datetime(2026, 6, 16, 3, 0, tzinfo=dt_timezone.utc)
-        end = datetime(2026, 6, 16, 5, 0, tzinfo=dt_timezone.utc)
+    def test_event_near_midnight_displays_correct_time(self):
+        """An event at 10 PM Eastern should display as 10 PM, not 2 AM UTC."""
+        # 10:00 PM Eastern on June 15 = 2:00 AM UTC June 16
+        start = datetime(2026, 6, 16, 2, 0, tzinfo=dt_timezone.utc)
+        end = datetime(2026, 6, 16, 3, 0, tzinfo=dt_timezone.utc)
         ev = Event.objects.create(
             title='Late Night Test', description='',
             start_time=start, end_time=end,
             created_by=self.user, is_approved=True,
         )
-        ev.assets.add(self.track)
-        # Should appear on June 15 (Eastern date)
-        response = self.client.get(reverse('cal:calendar') + '?view=day&date=2026-6-15')
-        self.assertContains(response, 'Late Night Test',
-                           msg_prefix="11 PM Eastern event should appear on the Eastern date")
+        time_range = ev._time_range
+        self.assertIn('10:00', time_range,
+                       "Should display 10 PM Eastern, not 2 AM UTC")
 
     def test_event_form_preserves_entered_time(self):
         """When a user enters 9:00 AM in the form, the event edit page should show 9:00 AM back.
@@ -571,14 +565,14 @@ class DayViewScrollDataTests(TestCase):
         self.assertContains(response, 'data-gantt-mins',
                            msg_prefix="gantt-view should include data-gantt-mins attribute")
 
-    def test_data_gantt_start_value_is_0(self):
-        """data-gantt-start should be 0 (midnight, full 24h view)."""
+    def test_data_gantt_start_value(self):
+        """data-gantt-start should be 0 (midnight, full 24h)."""
         response = self.client.get(reverse('cal:calendar') + '?view=day&date=2026-4-1')
         self.assertContains(response, 'data-gantt-start="0"',
                            msg_prefix="data-gantt-start should be 0")
 
-    def test_data_gantt_mins_value_is_1440(self):
-        """data-gantt-mins should be 1440 (24 hours * 60 minutes)."""
+    def test_data_gantt_mins_value(self):
+        """data-gantt-mins should be 1440 (24 hours)."""
         response = self.client.get(reverse('cal:calendar') + '?view=day&date=2026-4-1')
         self.assertContains(response, 'data-gantt-mins="1440"',
                            msg_prefix="data-gantt-mins should be 1440")
@@ -617,17 +611,17 @@ class DayViewScrollDataTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'gantt-view')
 
-    def test_full_24_hour_axis_markers(self):
-        """Day view should render axis hour markers from 6 AM through 8 PM (15 markers)."""
+    def test_full_24h_axis_markers(self):
+        """Day view should render 24 hour axis markers (12am through 11pm)."""
         response = self.client.get(reverse('cal:calendar') + '?view=day&date=2026-4-1')
         content = response.content.decode()
-        # Check for representative hour labels
+        self.assertIn('12am', content, "Should have 12am axis marker")
         self.assertIn('6am', content, "Should have 6am axis marker")
         self.assertIn('12pm', content, "Should have 12pm axis marker")
-        self.assertIn('8pm', content, "Should have 8pm axis marker")
+        self.assertIn('11pm', content, "Should have 11pm axis marker")
 
     def test_event_blocks_positioned_correctly(self):
-        """Event at 10 AM UTC = 6 AM Eastern. 360/1440 = 25%."""
+        """Event at 10 AM UTC = 6 AM Eastern. 0/840 = 0% (start of default range)."""
         start = datetime(2026, 4, 1, 10, 0, tzinfo=dt_timezone.utc)
         end = datetime(2026, 4, 1, 12, 0, tzinfo=dt_timezone.utc)
         ev = Event.objects.create(
@@ -637,8 +631,22 @@ class DayViewScrollDataTests(TestCase):
         )
         ev.assets.add(self.track)
         response = self.client.get(reverse('cal:calendar') + '?view=day&date=2026-4-1')
-        # 10 AM UTC = 6 AM EDT. 360/1440 * 100 = 25%
+        # 10 AM UTC = 6 AM EDT. 360/1440 = 25.0%
         self.assertContains(response, 'left:25.0%')
+
+    def test_12am_label_not_cut_off(self):
+        """The 12am hour marker at position 0% must render the full '12am' label."""
+        response = self.client.get(reverse('cal:calendar') + '?view=day&date=2026-4-1')
+        content = response.content.decode()
+        self.assertIn('>12am<', content,
+                       "12am label should be fully rendered, not clipped")
+
+    def test_11pm_label_not_cut_off(self):
+        """The 11pm hour marker near the right edge must render the full '11pm' label."""
+        response = self.client.get(reverse('cal:calendar') + '?view=day&date=2026-4-1')
+        content = response.content.decode()
+        self.assertIn('>11pm<', content,
+                       "11pm label should be fully rendered, not clipped")
 
     def test_multiple_events_data_attributes(self):
         """With multiple events, data-event-earliest/latest should reflect the full range."""

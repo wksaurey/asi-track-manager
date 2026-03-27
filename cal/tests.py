@@ -6,9 +6,12 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.timezone import get_current_timezone
 
 from .models import Asset, Event
 from .forms import EventForm
+
+_local_tz = get_current_timezone()
 
 User = get_user_model()
 
@@ -701,8 +704,8 @@ class TrackViewEventAssignmentTest(TestCase):
         self.client.force_login(self.user)
         self.track = Asset.objects.create(name='Test Track', asset_type='track')
         # Monday 2026-03-09 10:00 UTC
-        start = datetime(2026, 3, 9, 10, 0, tzinfo=dt_timezone.utc)
-        end = datetime(2026, 3, 9, 12, 0, tzinfo=dt_timezone.utc)
+        start = datetime(2026, 3, 9, 10, 0, tzinfo=_local_tz)
+        end = datetime(2026, 3, 9, 12, 0, tzinfo=_local_tz)
         event = Event.objects.create(
             title='Sprint Test',
             description='desc',
@@ -796,8 +799,8 @@ class GanttDayViewTest(TestCase):
         self.assertContains(response, 'North Loop')
 
     def test_day_view_shows_event_in_gantt(self):
-        start = datetime(2026, 3, 9, 9, 0, tzinfo=dt_timezone.utc)
-        end   = datetime(2026, 3, 9, 11, 0, tzinfo=dt_timezone.utc)
+        start = datetime(2026, 3, 9, 9, 0, tzinfo=_local_tz)
+        end   = datetime(2026, 3, 9, 11, 0, tzinfo=_local_tz)
         ev = Event.objects.create(
             title='Morning Test', description='', start_time=start, end_time=end,
             created_by=self.user, is_approved=True,
@@ -809,8 +812,8 @@ class GanttDayViewTest(TestCase):
 
     def test_day_view_event_position_in_html(self):
         """9am start = 180 min after 6am; 180/840*100 = 21.4286%."""
-        start = datetime(2026, 3, 9, 9, 0, tzinfo=dt_timezone.utc)
-        end   = datetime(2026, 3, 9, 11, 0, tzinfo=dt_timezone.utc)
+        start = datetime(2026, 3, 9, 9, 0, tzinfo=_local_tz)
+        end   = datetime(2026, 3, 9, 11, 0, tzinfo=_local_tz)
         ev = Event.objects.create(
             title='Position Test', description='', start_time=start, end_time=end,
             created_by=self.user, is_approved=True,
@@ -821,8 +824,8 @@ class GanttDayViewTest(TestCase):
 
     def test_day_view_event_outside_range_not_rendered(self):
         """Event entirely before 6am (4am-5am) must not produce a gantt-block."""
-        start = datetime(2026, 3, 9, 4, 0, tzinfo=dt_timezone.utc)
-        end   = datetime(2026, 3, 9, 5, 0, tzinfo=dt_timezone.utc)
+        start = datetime(2026, 3, 9, 4, 0, tzinfo=_local_tz)
+        end   = datetime(2026, 3, 9, 5, 0, tzinfo=_local_tz)
         ev = Event.objects.create(
             title='Pre-Dawn Test', description='', start_time=start, end_time=end,
             created_by=self.user, is_approved=True,
@@ -837,10 +840,10 @@ class GanttDayViewTest(TestCase):
 
     def test_day_view_overlapping_events_use_multiple_sub_rows(self):
         """Two overlapping events on the same track appear in separate sub-rows."""
-        start1 = datetime(2026, 3, 9, 9, 0, tzinfo=dt_timezone.utc)
-        end1   = datetime(2026, 3, 9, 12, 0, tzinfo=dt_timezone.utc)
-        start2 = datetime(2026, 3, 9, 10, 0, tzinfo=dt_timezone.utc)
-        end2   = datetime(2026, 3, 9, 13, 0, tzinfo=dt_timezone.utc)
+        start1 = datetime(2026, 3, 9, 9, 0, tzinfo=_local_tz)
+        end1   = datetime(2026, 3, 9, 12, 0, tzinfo=_local_tz)
+        start2 = datetime(2026, 3, 9, 10, 0, tzinfo=_local_tz)
+        end2   = datetime(2026, 3, 9, 13, 0, tzinfo=_local_tz)
         for t, s, e in [('Event A', start1, end1), ('Event B', start2, end2)]:
             ev = Event.objects.create(
                 title=t, description='', start_time=s, end_time=e,
@@ -926,8 +929,8 @@ class SubtrackConflictDetectionTest(TestCase):
         self.sub_south = Asset.objects.create(
             name='South', asset_type=Asset.AssetType.TRACK, parent=self.parent
         )
-        self.start = datetime(2026, 4, 1, 9, 0, tzinfo=dt_timezone.utc)
-        self.end   = datetime(2026, 4, 1, 11, 0, tzinfo=dt_timezone.utc)
+        self.start = datetime(2026, 4, 1, 9, 0, tzinfo=_local_tz)
+        self.end   = datetime(2026, 4, 1, 11, 0, tzinfo=_local_tz)
 
     def _make_event(self, asset, title='Existing Event'):
         ev = Event.objects.create(
@@ -985,8 +988,8 @@ class SubtrackConflictDetectionTest(TestCase):
     def test_no_conflict_non_overlapping_times(self):
         """Even with parent/subtrack relationship, non-overlapping times must not conflict."""
         self._make_event(self.parent, 'Morning Full Event')
-        afternoon_start = datetime(2026, 4, 1, 14, 0, tzinfo=dt_timezone.utc)
-        afternoon_end   = datetime(2026, 4, 1, 16, 0, tzinfo=dt_timezone.utc)
+        afternoon_start = datetime(2026, 4, 1, 14, 0, tzinfo=_local_tz)
+        afternoon_end   = datetime(2026, 4, 1, 16, 0, tzinfo=_local_tz)
         form = EventForm(data=self._form_data(self.sub_north, afternoon_start, afternoon_end))
         self.assertTrue(form.is_valid(), f"Non-overlapping time should not conflict. Errors: {form.errors}")
 
@@ -1016,8 +1019,8 @@ class SubtrackDayViewTest(TestCase):
 
     def test_day_view_subtrack_event_appears_in_correct_row(self):
         """An event booked on a subtrack must appear in the day view."""
-        start = datetime(2026, 4, 1, 9, 0, tzinfo=dt_timezone.utc)
-        end   = datetime(2026, 4, 1, 11, 0, tzinfo=dt_timezone.utc)
+        start = datetime(2026, 4, 1, 9, 0, tzinfo=_local_tz)
+        end   = datetime(2026, 4, 1, 11, 0, tzinfo=_local_tz)
         ev = Event.objects.create(
             title='North Test', description='', start_time=start, end_time=end,
             created_by=self.user, is_approved=True,
@@ -1029,8 +1032,8 @@ class SubtrackDayViewTest(TestCase):
 
     def test_day_view_full_track_event_shows_fulltrack_overlay(self):
         """A full-track (parent) event must render with the gantt-fulltrack-overlay class."""
-        start = datetime(2026, 4, 1, 9, 0, tzinfo=dt_timezone.utc)
-        end   = datetime(2026, 4, 1, 11, 0, tzinfo=dt_timezone.utc)
+        start = datetime(2026, 4, 1, 9, 0, tzinfo=_local_tz)
+        end   = datetime(2026, 4, 1, 11, 0, tzinfo=_local_tz)
         ev = Event.objects.create(
             title='Full Track Event', description='', start_time=start, end_time=end,
             created_by=self.user, is_approved=True,
@@ -1075,8 +1078,8 @@ class SubtrackWeekViewTest(TestCase):
 
     def test_week_view_subtrack_event_appears(self):
         """An event booked on a subtrack must appear in the week view."""
-        start = datetime(2026, 3, 30, 9, 0, tzinfo=dt_timezone.utc)
-        end   = datetime(2026, 3, 30, 11, 0, tzinfo=dt_timezone.utc)
+        start = datetime(2026, 3, 30, 9, 0, tzinfo=_local_tz)
+        end   = datetime(2026, 3, 30, 11, 0, tzinfo=_local_tz)
         ev = Event.objects.create(
             title='North Week Test', description='', start_time=start, end_time=end,
             created_by=self.user, is_approved=True,
@@ -1087,8 +1090,8 @@ class SubtrackWeekViewTest(TestCase):
 
     def test_week_view_full_track_event_appears(self):
         """A full-track (parent) event must appear in the single parent-track row."""
-        start = datetime(2026, 3, 30, 9, 0, tzinfo=dt_timezone.utc)
-        end   = datetime(2026, 3, 30, 11, 0, tzinfo=dt_timezone.utc)
+        start = datetime(2026, 3, 30, 9, 0, tzinfo=_local_tz)
+        end   = datetime(2026, 3, 30, 11, 0, tzinfo=_local_tz)
         ev = Event.objects.create(
             title='Full Track Week Event', description='', start_time=start, end_time=end,
             created_by=self.user, is_approved=True,
@@ -1106,8 +1109,8 @@ class SubtrackWeekViewTest(TestCase):
 
     def test_week_view_sibling_events_both_appear(self):
         """Two events on sibling subtracks on the same day must both appear."""
-        start = datetime(2026, 3, 30, 9, 0, tzinfo=dt_timezone.utc)
-        end   = datetime(2026, 3, 30, 11, 0, tzinfo=dt_timezone.utc)
+        start = datetime(2026, 3, 30, 9, 0, tzinfo=_local_tz)
+        end   = datetime(2026, 3, 30, 11, 0, tzinfo=_local_tz)
         ev1 = Event.objects.create(
             title='North Event', description='', start_time=start, end_time=end,
             created_by=self.user, is_approved=True,
@@ -1572,15 +1575,16 @@ class GanttDataEndAttributeTest(TestCase):
 
     def test_gantt_block_has_data_end_attribute(self):
         """Day view Gantt blocks include data-end with the event end time."""
-        start = datetime(2026, 3, 9, 9, 0, tzinfo=dt_timezone.utc)
-        end = datetime(2026, 3, 9, 11, 0, tzinfo=dt_timezone.utc)
+        start = datetime(2026, 3, 9, 9, 0, tzinfo=_local_tz)
+        end = datetime(2026, 3, 9, 11, 0, tzinfo=_local_tz)
         ev = Event.objects.create(
             title='Data End Test', description='', start_time=start, end_time=end,
             created_by=self.user, is_approved=True,
         )
         ev.assets.add(self.track)
         response = self.client.get(reverse('cal:calendar') + '?view=day&date=2026-3-9')
-        self.assertContains(response, 'data-end="2026-03-09T11:00:00')
+        ev.refresh_from_db()
+        self.assertContains(response, f'data-end="{ev.end_time.isoformat()}"')
 
     def test_event_past_css_rule_exists(self):
         """styles.css must contain the .event-past rule with opacity."""
@@ -1672,10 +1676,10 @@ class EventTouchingTimesTest(TestCase):
         self.asset = Asset.objects.create(
             name='Touch Track', asset_type=Asset.AssetType.TRACK
         )
-        self.nine_am = datetime(2026, 5, 1, 9, 0, tzinfo=dt_timezone.utc)
-        self.ten_am = datetime(2026, 5, 1, 10, 0, tzinfo=dt_timezone.utc)
-        self.eleven_am = datetime(2026, 5, 1, 11, 0, tzinfo=dt_timezone.utc)
-        self.noon = datetime(2026, 5, 1, 12, 0, tzinfo=dt_timezone.utc)
+        self.nine_am = datetime(2026, 5, 1, 9, 0, tzinfo=_local_tz)
+        self.ten_am = datetime(2026, 5, 1, 10, 0, tzinfo=_local_tz)
+        self.eleven_am = datetime(2026, 5, 1, 11, 0, tzinfo=_local_tz)
+        self.noon = datetime(2026, 5, 1, 12, 0, tzinfo=_local_tz)
         # Existing event: 9 AM - 10 AM
         ev = Event.objects.create(
             title='First Block', description='',
@@ -1785,8 +1789,8 @@ class AnalyticsComputationTest(TestCase):
 
     def test_track_utilization_computation(self):
         """Create a 2h approved event -> scheduled_hours matches expected value."""
-        start = datetime(2026, 5, 4, 9, 0, tzinfo=dt_timezone.utc)
-        end = datetime(2026, 5, 4, 11, 0, tzinfo=dt_timezone.utc)
+        start = datetime(2026, 5, 4, 9, 0, tzinfo=_local_tz)
+        end = datetime(2026, 5, 4, 11, 0, tzinfo=_local_tz)
         ev = Event.objects.create(
             title='Util Test', description='',
             start_time=start, end_time=end,
@@ -1805,10 +1809,10 @@ class AnalyticsComputationTest(TestCase):
 
     def test_schedule_accuracy_computation(self):
         """Create event with actual_start 15 min late -> avg_start_delta_minutes is 15."""
-        start = datetime(2026, 5, 4, 9, 0, tzinfo=dt_timezone.utc)
-        end = datetime(2026, 5, 4, 11, 0, tzinfo=dt_timezone.utc)
-        actual_start = datetime(2026, 5, 4, 9, 15, tzinfo=dt_timezone.utc)
-        actual_end = datetime(2026, 5, 4, 11, 0, tzinfo=dt_timezone.utc)
+        start = datetime(2026, 5, 4, 9, 0, tzinfo=_local_tz)
+        end = datetime(2026, 5, 4, 11, 0, tzinfo=_local_tz)
+        actual_start = datetime(2026, 5, 4, 9, 15, tzinfo=_local_tz)
+        actual_end = datetime(2026, 5, 4, 11, 0, tzinfo=_local_tz)
         ev = Event.objects.create(
             title='Accuracy Test', description='',
             start_time=start, end_time=end,

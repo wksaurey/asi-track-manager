@@ -9,11 +9,12 @@ Usage:
 """
 
 import random
-from datetime import datetime, timedelta, timezone as dt_tz
+from datetime import datetime, timedelta
 
 from django.core.management import call_command
 from django.core.management.base import BaseCommand
 from django.utils import timezone
+from django.utils.timezone import get_current_timezone
 
 from cal.models import Asset, Event
 from users.models import User
@@ -248,13 +249,14 @@ class Command(BaseCommand):
                 event_assets.append(random.choice(vehicles))
 
             # Create event
+            local_tz = get_current_timezone()
             start_dt = datetime(
                 date.year, date.month, date.day,
-                start_hour, start_minute, tzinfo=dt_tz.utc,
+                start_hour, start_minute, tzinfo=local_tz,
             )
             end_dt = datetime(
                 date.year, date.month, date.day,
-                end_hour, end_minute, tzinfo=dt_tz.utc,
+                end_hour, end_minute, tzinfo=local_tz,
             )
 
             user = random.choice(users)

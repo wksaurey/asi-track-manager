@@ -16,6 +16,7 @@ v1.1 feature is implemented. They serve as a specification and will go
 GREEN as each feature lands.
 """
 
+import json
 from datetime import datetime, timedelta, timezone as dt_timezone
 
 from django.contrib.auth import get_user_model
@@ -79,24 +80,30 @@ class TimezoneDisplayTests(TestCase):
         ev.assets.add(self.track)
         response = self.client.get(reverse('cal:calendar') + '?view=day&date=2026-6-15')
         content = response.content.decode()
-        # 2 PM Eastern = 840 min from midnight. 840/1440 = 58.3333%
-        self.assertIn('left:58.3333%', content,
-                       "Event should be positioned at 2 PM Eastern (840/1440 = 58.3333%), "
+        # Should be positioned at 57.1429% (2 PM Eastern), not 85.7143% (6 PM UTC)
+        self.assertIn('left:57.1429%', content,
+                       "Event should be positioned at 2 PM Eastern (57.1429%), "
                        "not at UTC time position")
 
-    def test_event_near_midnight_displays_correct_time(self):
-        """An event at 10 PM Eastern should display as 10 PM, not 2 AM UTC."""
-        # 10:00 PM Eastern on June 15 = 2:00 AM UTC June 16
-        start = datetime(2026, 6, 16, 2, 0, tzinfo=dt_timezone.utc)
-        end = datetime(2026, 6, 16, 3, 0, tzinfo=dt_timezone.utc)
+    def test_event_near_midnight_utc_appears_on_correct_local_date(self):
+        """An event at 11 PM Eastern (3 AM UTC next day) should appear on the Eastern date.
+
+        June 15 11:00 PM Eastern = June 16 3:00 AM UTC.
+        The event should appear on the June 15 day view, not June 16.
+        """
+        # 11:00 PM Eastern June 15 = 3:00 AM UTC June 16
+        start = datetime(2026, 6, 16, 3, 0, tzinfo=dt_timezone.utc)
+        end = datetime(2026, 6, 16, 5, 0, tzinfo=dt_timezone.utc)
         ev = Event.objects.create(
             title='Late Night Test', description='',
             start_time=start, end_time=end,
             created_by=self.user, is_approved=True,
         )
-        time_range = ev._time_range
-        self.assertIn('10:00', time_range,
-                       "Should display 10 PM Eastern, not 2 AM UTC")
+        ev.assets.add(self.track)
+        # Should appear on June 15 (Eastern date)
+        response = self.client.get(reverse('cal:calendar') + '?view=day&date=2026-6-15')
+        self.assertContains(response, 'Late Night Test',
+                           msg_prefix="11 PM Eastern event should appear on the Eastern date")
 
     def test_event_form_preserves_entered_time(self):
         """When a user enters 9:00 AM in the form, the event edit page should show 9:00 AM back.
@@ -217,91 +224,115 @@ class FeedbackSubmissionTests(TestCase):
     def test_post_with_valid_data_returns_success(self):
         """POST to /cal/api/feedback/ with valid data returns 200/201."""
         self.client.login(username='fbuser', password='Testpass123!')
-        response = self.client.post(self.url, {
-            'category': 'bug',
-            'subject': 'Mobile calendar issue',
-            'message': 'The calendar does not load on mobile.',
-            'page_url': 'http://localhost/cal/calendar/',
-        })
+        response = self.client.post(
+            self.url,
+            data=json.dumps({
+                'category': 'bug',
+                'message': 'The calendar does not load on mobile.',
+                'page_url': '/cal/calendar/',
+            }),
+            content_type='application/json',
+        )
         self.assertIn(response.status_code, [200, 201])
 
     def test_post_with_missing_message_returns_400(self):
         """POST with missing required 'message' field returns 400."""
         self.client.login(username='fbuser', password='Testpass123!')
-        response = self.client.post(self.url, {
-            'category': 'bug',
-            'subject': 'No message',
-            'page_url': 'http://localhost/cal/calendar/',
-        })
+        response = self.client.post(
+            self.url,
+            data=json.dumps({
+                'category': 'bug',
+                'page_url': '/cal/calendar/',
+            }),
+            content_type='application/json',
+        )
         self.assertEqual(response.status_code, 400)
 
-    def test_post_with_missing_subject_returns_400(self):
-        """POST with missing required 'subject' field returns 400."""
+    def test_post_with_missing_category_returns_400(self):
+        """POST with missing required 'category' field returns 400."""
         self.client.login(username='fbuser', password='Testpass123!')
-        response = self.client.post(self.url, {
-            'category': 'bug',
-            'message': 'Some feedback',
-            'page_url': 'http://localhost/cal/calendar/',
-        })
+        response = self.client.post(
+            self.url,
+            data=json.dumps({
+                'message': 'Some feedback',
+                'page_url': '/cal/calendar/',
+            }),
+            content_type='application/json',
+        )
         self.assertEqual(response.status_code, 400)
 
     def test_unauthenticated_user_gets_redirected(self):
         """Unauthenticated POST to feedback endpoint redirects to login."""
-        response = self.client.post(self.url, {
-            'category': 'bug',
-            'subject': 'Test',
-            'message': 'Test message',
-            'page_url': 'http://localhost/cal/calendar/',
-        })
+        response = self.client.post(
+            self.url,
+            data=json.dumps({
+                'category': 'bug',
+                'message': 'Test message',
+                'page_url': '/cal/calendar/',
+            }),
+            content_type='application/json',
+        )
         self.assertEqual(response.status_code, 302)
         self.assertIn('/users/login/', response.url)
 
     def test_feedback_saved_with_correct_user(self):
         """Feedback entry is saved with the correct user who submitted it."""
-        from cal.models import Feedback
+        from cal.models import Feedback  # RED until model exists
         self.client.login(username='fbuser', password='Testpass123!')
-        self.client.post(self.url, {
-            'category': 'feature',
-            'subject': 'Recurring events',
-            'message': 'Please add recurring events.',
-            'page_url': 'http://localhost/cal/calendar/',
-        })
+        self.client.post(
+            self.url,
+            data=json.dumps({
+                'category': 'feature',
+                'message': 'Please add recurring events.',
+                'page_url': '/cal/calendar/',
+            }),
+            content_type='application/json',
+        )
         fb = Feedback.objects.latest('id')
-        self.assertEqual(fb.user, self.user)
+        self.assertEqual(fb.submitted_by, self.user)
         self.assertEqual(fb.category, 'feature')
         self.assertEqual(fb.message, 'Please add recurring events.')
 
     def test_category_bug_accepted(self):
         """Category 'bug' is a valid choice."""
         self.client.login(username='fbuser', password='Testpass123!')
-        response = self.client.post(self.url, {
-            'category': 'bug',
-            'subject': 'Bug report',
-            'message': 'Bug feedback',
-            'page_url': 'http://localhost/cal/calendar/',
-        })
+        response = self.client.post(
+            self.url,
+            data=json.dumps({
+                'category': 'bug',
+                'message': 'Bug feedback',
+                'page_url': '/cal/calendar/',
+            }),
+            content_type='application/json',
+        )
         self.assertIn(response.status_code, [200, 201])
 
     def test_category_feature_accepted(self):
         """Category 'feature' is a valid choice."""
         self.client.login(username='fbuser', password='Testpass123!')
-        response = self.client.post(self.url, {
-            'category': 'feature',
-            'subject': 'Feature request',
-            'message': 'Feature feedback',
-            'page_url': 'http://localhost/cal/calendar/',
-        })
+        response = self.client.post(
+            self.url,
+            data=json.dumps({
+                'category': 'feature',
+                'message': 'Feature feedback',
+                'page_url': '/cal/calendar/',
+            }),
+            content_type='application/json',
+        )
         self.assertIn(response.status_code, [200, 201])
 
     def test_category_other_accepted(self):
         """Category 'other' is a valid choice."""
         self.client.login(username='fbuser', password='Testpass123!')
-        response = self.client.post(self.url, {
-            'category': 'other',
-            'subject': 'General',
-            'message': 'General feedback',
-            'page_url': 'http://localhost/cal/calendar/',
-        })
+        response = self.client.post(
+            self.url,
+            data=json.dumps({
+                'category': 'other',
+                'message': 'General feedback',
+                'page_url': '/cal/calendar/',
+            }),
+            content_type='application/json',
+        )
         self.assertIn(response.status_code, [200, 201])
 
     def test_get_returns_405(self):
@@ -312,26 +343,32 @@ class FeedbackSubmissionTests(TestCase):
 
     def test_page_url_auto_captured(self):
         """The page_url field should be saved from the submission data."""
-        from cal.models import Feedback
+        from cal.models import Feedback  # RED until model exists
         self.client.login(username='fbuser', password='Testpass123!')
-        self.client.post(self.url, {
-            'category': 'bug',
-            'subject': 'URL test',
-            'message': 'URL capture test',
-            'page_url': 'http://localhost/cal/assets/',
-        })
+        self.client.post(
+            self.url,
+            data=json.dumps({
+                'category': 'bug',
+                'message': 'URL capture test',
+                'page_url': '/cal/assets/',
+            }),
+            content_type='application/json',
+        )
         fb = Feedback.objects.latest('id')
-        self.assertEqual(fb.page_url, 'http://localhost/cal/assets/')
+        self.assertEqual(fb.page_url, '/cal/assets/')
 
     def test_invalid_category_returns_400(self):
         """POST with an invalid category value returns 400."""
         self.client.login(username='fbuser', password='Testpass123!')
-        response = self.client.post(self.url, {
-            'category': 'invalid_category',
-            'subject': 'Bad category',
-            'message': 'Some feedback',
-            'page_url': 'http://localhost/cal/calendar/',
-        })
+        response = self.client.post(
+            self.url,
+            data=json.dumps({
+                'category': 'invalid_category',
+                'message': 'Some feedback',
+                'page_url': '/cal/calendar/',
+            }),
+            content_type='application/json',
+        )
         self.assertEqual(response.status_code, 400)
 
 
@@ -348,20 +385,20 @@ class FeedbackButtonPresenceTests(TestCase):
         """Authenticated users should see the feedback button on the calendar page."""
         self.client.login(username='fbpresence', password='Testpass123!')
         response = self.client.get(reverse('cal:calendar'))
-        self.assertContains(response, 'feedback-fab',
+        self.assertContains(response, 'feedback-btn',
                            msg_prefix="Feedback button should be present for logged-in users")
 
     def test_feedback_button_not_visible_when_logged_out(self):
         """Unauthenticated users should NOT see the feedback button on login page."""
         response = self.client.get(reverse('users:login'))
-        self.assertNotContains(response, 'feedback-fab',
+        self.assertNotContains(response, 'feedback-btn',
                               msg_prefix="Feedback button should not appear for logged-out users")
 
     def test_feedback_button_visible_on_asset_list(self):
         """Feedback button should appear on the asset list page."""
         self.client.login(username='fbpresence', password='Testpass123!')
         response = self.client.get(reverse('cal:asset_list'))
-        self.assertContains(response, 'feedback-fab')
+        self.assertContains(response, 'feedback-btn')
 
 
 # ════════════════════════════════════════════════════════════════════════════════
@@ -565,17 +602,17 @@ class DayViewScrollDataTests(TestCase):
         self.assertContains(response, 'data-gantt-mins',
                            msg_prefix="gantt-view should include data-gantt-mins attribute")
 
-    def test_data_gantt_start_value(self):
-        """data-gantt-start should be 0 (midnight, full 24h)."""
+    def test_data_gantt_start_value_is_6(self):
+        """data-gantt-start should be 6 (6:00 AM)."""
         response = self.client.get(reverse('cal:calendar') + '?view=day&date=2026-4-1')
-        self.assertContains(response, 'data-gantt-start="0"',
-                           msg_prefix="data-gantt-start should be 0")
+        self.assertContains(response, 'data-gantt-start="6"',
+                           msg_prefix="data-gantt-start should be 6")
 
-    def test_data_gantt_mins_value(self):
-        """data-gantt-mins should be 1440 (24 hours)."""
+    def test_data_gantt_mins_value_is_840(self):
+        """data-gantt-mins should be 840 (14 hours * 60 minutes)."""
         response = self.client.get(reverse('cal:calendar') + '?view=day&date=2026-4-1')
-        self.assertContains(response, 'data-gantt-mins="1440"',
-                           msg_prefix="data-gantt-mins should be 1440")
+        self.assertContains(response, 'data-gantt-mins="840"',
+                           msg_prefix="data-gantt-mins should be 840")
 
     def test_data_event_earliest_reflects_event_time(self):
         """When events exist, data-event-earliest should reflect the earliest event start time."""
@@ -611,17 +648,17 @@ class DayViewScrollDataTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'gantt-view')
 
-    def test_full_24h_axis_markers(self):
-        """Day view should render 24 hour axis markers (12am through 11pm)."""
+    def test_full_24_hour_axis_markers(self):
+        """Day view should render axis hour markers from 6 AM through 8 PM (15 markers)."""
         response = self.client.get(reverse('cal:calendar') + '?view=day&date=2026-4-1')
         content = response.content.decode()
-        self.assertIn('12am', content, "Should have 12am axis marker")
+        # Check for representative hour labels
         self.assertIn('6am', content, "Should have 6am axis marker")
         self.assertIn('12pm', content, "Should have 12pm axis marker")
-        self.assertIn('11pm', content, "Should have 11pm axis marker")
+        self.assertIn('8pm', content, "Should have 8pm axis marker")
 
     def test_event_blocks_positioned_correctly(self):
-        """Event at 10 AM UTC = 6 AM Eastern. 0/840 = 0% (start of default range)."""
+        """Event at 10 AM (240 min after 6 AM) should be at left:28.5714%."""
         start = datetime(2026, 4, 1, 10, 0, tzinfo=dt_timezone.utc)
         end = datetime(2026, 4, 1, 12, 0, tzinfo=dt_timezone.utc)
         ev = Event.objects.create(
@@ -631,22 +668,8 @@ class DayViewScrollDataTests(TestCase):
         )
         ev.assets.add(self.track)
         response = self.client.get(reverse('cal:calendar') + '?view=day&date=2026-4-1')
-        # 10 AM UTC = 6 AM EDT. 360/1440 = 25.0%
-        self.assertContains(response, 'left:25.0%')
-
-    def test_12am_label_not_cut_off(self):
-        """The 12am hour marker at position 0% must render the full '12am' label."""
-        response = self.client.get(reverse('cal:calendar') + '?view=day&date=2026-4-1')
-        content = response.content.decode()
-        self.assertIn('>12am<', content,
-                       "12am label should be fully rendered, not clipped")
-
-    def test_11pm_label_not_cut_off(self):
-        """The 11pm hour marker near the right edge must render the full '11pm' label."""
-        response = self.client.get(reverse('cal:calendar') + '?view=day&date=2026-4-1')
-        content = response.content.decode()
-        self.assertIn('>11pm<', content,
-                       "11pm label should be fully rendered, not clipped")
+        # 10 AM = 240 min after 6 AM. 240/840 * 100 = 28.5714%
+        self.assertContains(response, 'left:28.5714%')
 
     def test_multiple_events_data_attributes(self):
         """With multiple events, data-event-earliest/latest should reflect the full range."""

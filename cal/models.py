@@ -10,6 +10,7 @@ from django.conf import settings
 from django.db import models
 from django.urls import reverse
 from django.utils.html import escape
+from django.utils.timezone import localtime
 
 # Predefined palette for track colors.  New tracks auto-pick the first unused
 # color; all 16 are available for manual override via the asset edit form.
@@ -253,13 +254,15 @@ class Event(models.Model):
         same period, e.g. '8:30-10:00 AM' instead of '8:30 AM-10:00 AM'.
         Uses an en-dash and non-breaking spaces for clean rendering.
         """
-        t_s = self.start_time.strftime('%I:%M').lstrip('0') or '12:00'
-        t_e = self.end_time.strftime('%I:%M').lstrip('0') or '12:00'
-        if self.start_time.strftime('%p') == self.end_time.strftime('%p'):
-            return f'{t_s}\u2013{t_e}\u00a0{self.end_time.strftime("%p")}'
+        local_s = localtime(self.start_time)
+        local_e = localtime(self.end_time)
+        t_s = local_s.strftime('%I:%M').lstrip('0') or '12:00'
+        t_e = local_e.strftime('%I:%M').lstrip('0') or '12:00'
+        if local_s.strftime('%p') == local_e.strftime('%p'):
+            return f'{t_s}\u2013{t_e}\u00a0{local_e.strftime("%p")}'
         return (
-            f'{t_s}\u00a0{self.start_time.strftime("%p")}'
-            f'\u2013{t_e}\u00a0{self.end_time.strftime("%p")}'
+            f'{t_s}\u00a0{local_s.strftime("%p")}'
+            f'\u2013{t_e}\u00a0{local_e.strftime("%p")}'
         )
 
     @property

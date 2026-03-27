@@ -10,6 +10,7 @@ from datetime import timedelta
 
 from django import forms
 from django.forms import ModelForm, TextInput, CheckboxSelectMultiple, ValidationError
+from django.utils.timezone import localtime
 from cal.models import Event, Asset
 
 
@@ -210,8 +211,8 @@ class EventForm(ModelForm):
                     raise ValidationError(
                         f'Scheduling conflict: "{conflict.title}" already has '
                         f'{conflict_asset or asset} booked from '
-                        f'{conflict.start_time.strftime("%b %d %I:%M %p")} to '
-                        f'{conflict.end_time.strftime("%I:%M %p")}.'
+                        f'{localtime(conflict.start_time).strftime("%b %d %I:%M %p")} to '
+                        f'{localtime(conflict.end_time).strftime("%I:%M %p")}.'
                     )
 
         return cleaned

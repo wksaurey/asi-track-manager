@@ -11,6 +11,7 @@ from calendar import HTMLCalendar
 
 from django.urls import reverse
 from django.utils.html import escape
+from django.utils.timezone import localtime
 
 from cal.models import Asset, Event
 
@@ -52,7 +53,7 @@ class Calendar(HTMLCalendar):
     @staticmethod
     def _fmt_time(dt):
         """Format a datetime as '8:30 AM' (no leading zero on the hour)."""
-        return dt.strftime('%I:%M %p').lstrip('0') or '12:00 AM'
+        return localtime(dt).strftime('%I:%M %p').lstrip('0') or '12:00 AM'
 
     @staticmethod
     def _assign_rows(events):
@@ -266,7 +267,9 @@ class Calendar(HTMLCalendar):
             a ghost (scheduled) bar and a solid (actual) bar.  Otherwise a
             single solid bar is returned for the scheduled time.
             """
-            origin    = ev.start_time.replace(hour=GANTT_START, minute=0, second=0, microsecond=0)
+            local_start = localtime(ev.start_time)
+            local_end   = localtime(ev.end_time)
+            origin    = local_start.replace(hour=GANTT_START, minute=0, second=0, microsecond=0)
             edit_url  = reverse('cal:event_edit', args=(ev.id,))
             base_css  = self._event_classes(ev) + (f' {extra_css}' if extra_css else '')
             color_style = f'background:{track_color};' if track_color else ''
@@ -275,8 +278,8 @@ class Calendar(HTMLCalendar):
             has_actual = ev.actual_start or ev.actual_end
 
             # --- scheduled bar (ghost when actuals exist) ---
-            start_off = max(0, int((ev.start_time - origin).total_seconds()) // 60)
-            end_off   = min(GANTT_MINS, int((ev.end_time - origin).total_seconds()) // 60)
+            start_off = max(0, int((local_start - origin).total_seconds()) // 60)
+            end_off   = min(GANTT_MINS, int((local_end - origin).total_seconds()) // 60)
             width_m   = max(0, end_off - start_off)
             if width_m == 0 and not has_actual:
                 return ''
@@ -301,8 +304,8 @@ class Calendar(HTMLCalendar):
 
             # --- actual bar (solid) ---
             if has_actual:
-                act_start = ev.actual_start or ev.start_time
-                act_end   = ev.actual_end or ev.end_time
+                act_start = localtime(ev.actual_start or ev.start_time)
+                act_end   = localtime(ev.actual_end or ev.end_time)
                 a_start_off = max(0, int((act_start - origin).total_seconds()) // 60)
                 a_end_off   = min(GANTT_MINS, int((act_end - origin).total_seconds()) // 60)
                 a_width_m   = max(0, a_end_off - a_start_off)
@@ -492,7 +495,7 @@ class Calendar(HTMLCalendar):
             return sorted(
                 [
                     ev for ev in events
-                    if ev.start_time.date() == day
+                    if localtime(ev.start_time).date() == day
                     and asset_pk in event_asset_ids[ev.pk]
                 ],
                 key=lambda ev: ev.start_time,

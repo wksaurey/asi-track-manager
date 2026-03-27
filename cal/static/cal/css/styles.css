@@ -173,6 +173,37 @@ form input:focus, form select:focus, form textarea:focus {
 .event-action-bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 20px; padding-left: 152px; }
 .event-meta   { font-size: 13px; color: var(--muted); margin: -8px 0 16px; }
 
+/* Event creator name on calendar cards (month/week views) */
+.event-creator {
+  display: block;
+  font-size: 10px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Read-only event view banner */
+.view-only-banner {
+  background: rgba(46,168,229,0.10);
+  border: 1px solid rgba(46,168,229,0.30);
+  border-left: 3px solid var(--primary);
+  color: #073242;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  margin-bottom: 16px;
+}
+
+/* Disabled form styling for read-only event view */
+.asset-form input:disabled,
+.asset-form select:disabled,
+.asset-form textarea:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background: #f0f4f8;
+}
+
 /* ── Track color picker ──────────────────────────────────────── */
 .color-picker-wrap { position: relative; display: inline-flex; align-items: center; gap: 10px; }
 .color-swatch-btn {
@@ -1287,9 +1318,14 @@ html.dark-theme .day-modal-list li.event-track    { background: linear-gradient(
 html.dark-theme .calendar li.event-operator,
 html.dark-theme .month-table li.event-operator,
 html.dark-theme .day-modal-list li.event-operator { background: linear-gradient(90deg, rgba(99,102,241,0.20), rgba(199,210,254,0.05)); }
-html.dark-theme .event-link  { color: #90c0d4; }
-html.dark-theme .event-title { color: #c0d8e4; }
-html.dark-theme .event-time  { color: #5a8090; }
+html.dark-theme .event-link    { color: #90c0d4; }
+html.dark-theme .event-title   { color: #c0d8e4; }
+html.dark-theme .event-time    { color: #5a8090; }
+html.dark-theme .event-creator { color: #5a8090; }
+html.dark-theme .view-only-banner { background: rgba(46,168,229,0.08); border-color: rgba(46,168,229,0.20); color: #c0d8e4; }
+html.dark-theme .asset-form input:disabled,
+html.dark-theme .asset-form select:disabled,
+html.dark-theme .asset-form textarea:disabled { background: #0d1a24; opacity: 0.6; }
 
 /* Forms */
 html.dark-theme form input,

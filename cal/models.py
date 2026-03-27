@@ -278,11 +278,16 @@ class Event(models.Model):
             '<span class="pending-badge">PENDING</span>'
             if not self.is_approved else ''
         )
+        creator = (
+            f'<span class="event-creator">{escape(self.created_by.username)}</span>'
+            if self.created_by else ''
+        )
         return (
             f'<a class="event-link" href="{url}">'
             f'<span class="event-title">{escape(self.title)}</span>'
             f'<span class="event-time">{self._time_range}</span>'
             f'{pending}'
+            f'{creator}'
             f'{self.asset_badge_html}'
             f'</a>'
         )

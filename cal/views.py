@@ -192,25 +192,27 @@ def event(request, event_id=None):
     """
     if event_id:
         instance = get_object_or_404(Event, pk=event_id)
-        # Regular users can only edit their own events
-        if not request.user.is_staff and instance.created_by != request.user:
-            return HttpResponseRedirect(reverse('cal:calendar'))
+        can_edit = request.user.is_staff or instance.created_by == request.user
     else:
         instance = Event()
+        can_edit = True
 
     form = EventForm(request.POST or None, instance=instance)
     # Hide radio_channel from non-admin users
     if not request.user.is_staff:
         del form.fields['radio_channel']
-    if request.POST and form.is_valid():
-        ev = form.save(commit=False)
-        if not event_id:
-            ev.created_by  = request.user
-            ev.is_approved = request.user.is_staff  # admin = auto-approve; user = pending
-        ev.save()
-        form.save_m2m()   # persist ManyToMany (assets) after the instance is saved
-        default = reverse('cal:calendar')
-        return HttpResponseRedirect(_safe_next_url(request, default))
+    if request.POST:
+        if not can_edit:
+            return HttpResponseRedirect(reverse('cal:calendar'))
+        if form.is_valid():
+            ev = form.save(commit=False)
+            if not event_id:
+                ev.created_by  = request.user
+                ev.is_approved = request.user.is_staff  # admin = auto-approve; user = pending
+            ev.save()
+            form.save_m2m()   # persist ManyToMany (assets) after the instance is saved
+            default = reverse('cal:calendar')
+            return HttpResponseRedirect(_safe_next_url(request, default))
 
     # Carry ?next= through to the template so the hidden field can persist it
     next_url = request.GET.get('next', '')
@@ -218,6 +220,7 @@ def event(request, event_id=None):
         'form':            form,
         'event':           instance if event_id else None,
         'is_admin':        request.user.is_staff,
+        'can_edit':        can_edit,
         'asset_data_json': get_asset_tree(),
         'next_url':        next_url,
     })

@@ -26,6 +26,12 @@
     </a>
   </div>
 
+  {% if event and not can_edit %}
+  <div class="view-only-banner">
+    <i class="fas fa-eye"></i> Viewing <strong>{{ event.created_by.username }}'s</strong> reservation (read-only)
+  </div>
+  {% endif %}
+
   {% if event and event.created_by %}
   <p class="event-meta">
     <i class="fas fa-user"></i> Created by <strong>{{ event.created_by }}</strong>
@@ -99,6 +105,7 @@
     <button type="submit" id="event-save-hidden" hidden></button>
   </form>
 
+  {% if can_edit %}
   <div class="event-action-bar">
     <button type="button" class="btn" onclick="document.getElementById('event-save-hidden').click()">
       <i class="fas fa-save"></i> Save Event
@@ -133,6 +140,7 @@
       </form>
     {% endif %}
   </div>
+  {% endif %}
 
 </div>
 {% endblock %}
@@ -146,7 +154,17 @@
 <script>
 const ASSET_DATA = JSON.parse(document.getElementById('asset-data').textContent);
 
+const CAN_EDIT = {{ can_edit|yesno:"true,false" }};
+
 document.addEventListener('DOMContentLoaded', function () {
+  // ── Read-only mode: disable all form inputs ─────────────────────────────
+  if (!CAN_EDIT) {
+    document.querySelectorAll('.asset-form input, .asset-form select, .asset-form textarea').forEach(el => {
+      el.disabled = true;
+    });
+    document.querySelectorAll('.duration-btn').forEach(el => { el.disabled = true; });
+  }
+
   // ── Asset picker ───────────────────────────────────────────────────────
   const picker = document.getElementById('asset-picker');
 

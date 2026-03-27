@@ -38,7 +38,7 @@ class Calendar(HTMLCalendar):
 
     def _base_queryset(self):
         """Return the Event queryset, optionally filtered by asset_id."""
-        qs = Event.objects.prefetch_related('assets')
+        qs = Event.objects.select_related('created_by').prefetch_related('assets')
         if self.asset_id:
             qs = qs.filter(assets__id=self.asset_id)
         return qs
@@ -233,7 +233,7 @@ class Calendar(HTMLCalendar):
                 start_time__year=day_date.year,
                 start_time__month=day_date.month,
                 start_time__day=day_date.day,
-            ).prefetch_related('assets').distinct()
+            ).select_related('created_by').prefetch_related('assets').distinct()
         )
 
         # Build a helper: event_asset_ids[ev.pk] = set of asset PKs for fast lookup
@@ -274,6 +274,9 @@ class Calendar(HTMLCalendar):
             base_css  = self._event_classes(ev) + (f' {extra_css}' if extra_css else '')
             color_style = f'background:{track_color};' if track_color else ''
             end_iso   = ev.end_time.isoformat()
+            creator_name = escape(ev.created_by.username) if ev.created_by else ''
+            creator_attr = f' data-creator="{creator_name}"' if creator_name else ''
+            title_suffix = f' — {creator_name}' if creator_name else ''
 
             has_actual = ev.actual_start or ev.actual_end
 
@@ -295,8 +298,8 @@ class Calendar(HTMLCalendar):
                 parts.append(
                     f'<a class="gantt-block {base_css}{ghost_cls}" href="{edit_url}"'
                     f' style="left:{left_pct}%;width:{width_pct}%;{color_style}"'
-                    f' title="{escape(ev.title)}"'
-                    f' data-end="{end_iso}">'
+                    f' title="{escape(ev.title)}{title_suffix}"'
+                    f' data-end="{end_iso}"{creator_attr}>'
                     f'<span class="gantt-block-title">{escape(ev.title)}</span>'
                     f'<span class="gantt-block-time">{t_start}&ndash;{t_end}</span>'
                     f'</a>'
@@ -317,8 +320,8 @@ class Calendar(HTMLCalendar):
                     parts.append(
                         f'<a class="gantt-block gantt-block--actual {base_css}" href="{edit_url}"'
                         f' style="left:{a_left_pct}%;width:{a_width_pct}%;{color_style}"'
-                        f' title="{escape(ev.title)} (actual)"'
-                        f' data-end="{end_iso}">'
+                        f' title="{escape(ev.title)} (actual){title_suffix}"'
+                        f' data-end="{end_iso}"{creator_attr}>'
                         f'<span class="gantt-block-title">{escape(ev.title)}</span>'
                         f'<span class="gantt-block-time">{a_t_start}&ndash;{a_t_end}</span>'
                         f'</a>'
@@ -457,7 +460,7 @@ class Calendar(HTMLCalendar):
                 assets__asset_type=Asset.AssetType.TRACK,
                 start_time__date__gte=start,
                 start_time__date__lte=end,
-            ).prefetch_related('assets').distinct()
+            ).select_related('created_by').prefetch_related('assets').distinct()
         )
 
         # Build a lookup: event_asset_ids[ev.pk] = set of asset PKs

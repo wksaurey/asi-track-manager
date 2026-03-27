@@ -163,6 +163,8 @@ document.addEventListener('DOMContentLoaded', function () {
       el.disabled = true;
     });
     document.querySelectorAll('.duration-btn').forEach(el => { el.disabled = true; });
+    document.querySelector('.asset-picker').classList.add('disabled');
+    document.querySelector('.duration-row').classList.add('disabled');
   }
 
   // ── Asset picker ───────────────────────────────────────────────────────
@@ -234,6 +236,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (track.subtracks.length === 0) {
           // No subtracks — radio behavior across groups
           pill.addEventListener('click', () => {
+            if (!CAN_EDIT) return;
             const wasChecked = isChecked(track.id);
             deselectAllTracks();
             if (!wasChecked) setChecked(track.id, true);
@@ -250,11 +253,9 @@ document.addEventListener('DOMContentLoaded', function () {
             subBtn.className = 'subtrack-option' + (isChecked(sub.id) ? ' active' : '');
             subBtn.textContent = sub.name;
             subBtn.addEventListener('click', () => {
-              // Clear other track groups, keep this group
+              if (!CAN_EDIT) return;
               deselectOtherTracks(track.id);
-              // Toggle this subtrack within the group
               setChecked(sub.id, !isChecked(sub.id));
-              // If selecting a subtrack, deselect "whole track" parent
               if (isChecked(sub.id)) setChecked(track.id, false);
               renderPicker();
             });
@@ -266,6 +267,7 @@ document.addEventListener('DOMContentLoaded', function () {
           // Pill click: if group inactive → deselect others, select whole + open panel
           //             if group active  → deselect everything
           pill.addEventListener('click', () => {
+            if (!CAN_EDIT) return;
             if (groupActive) {
               deselectAllTracks();
             } else {
@@ -310,6 +312,7 @@ document.addEventListener('DOMContentLoaded', function () {
     pill.className = 'track-pill' + (isChecked(asset.id) ? ' active' : '');
     pill.textContent = asset.name;
     pill.addEventListener('click', () => {
+      if (!CAN_EDIT) return;
       setChecked(asset.id, !isChecked(asset.id));
       renderPicker();
     });

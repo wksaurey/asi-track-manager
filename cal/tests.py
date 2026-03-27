@@ -122,10 +122,10 @@ class EventApproveViewTest(TestCase):
         self.assertFalse(self.event.is_approved)
 
 
-# ── P1 Fix 5 & P2 Fix 10: EventForm 1-hour minimum duration ──────────────────
+# ── EventForm duration validation ─────────────────────────────────────────────
 
 class EventFormDurationTest(TestCase):
-    """Fix 5: EventForm.clean() must enforce a 1-hour minimum duration."""
+    """EventForm.clean() must require end time after start time (no minimum duration)."""
 
     def setUp(self):
         self.start = timezone.now().replace(second=0, microsecond=0) + timedelta(days=1)
@@ -143,20 +143,20 @@ class EventFormDurationTest(TestCase):
             'assets': [self.asset.pk],
         }
 
-    def test_event_form_30_minutes_is_invalid(self):
-        """Duration of 30 minutes must fail validation."""
+    def test_event_form_5_minutes_is_valid(self):
+        """Short durations are allowed."""
+        form = EventForm(data=self._form_data(5))
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_event_form_30_minutes_is_valid(self):
+        """Duration of 30 minutes must pass validation."""
         form = EventForm(data=self._form_data(30))
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_event_form_end_before_start_is_invalid(self):
+        """End time before start time must fail validation."""
+        form = EventForm(data=self._form_data(-30))
         self.assertFalse(form.is_valid())
-
-    def test_event_form_exactly_1_hour_is_valid(self):
-        """Duration of exactly 60 minutes must pass validation."""
-        form = EventForm(data=self._form_data(60))
-        self.assertTrue(form.is_valid(), form.errors)
-
-    def test_event_form_2_hours_is_valid(self):
-        """Duration of 120 minutes must pass validation."""
-        form = EventForm(data=self._form_data(120))
-        self.assertTrue(form.is_valid(), form.errors)
 
 
 # ── P1 Fix 6: Root URL redirect ───────────────────────────────────────────────

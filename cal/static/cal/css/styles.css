@@ -78,7 +78,7 @@ ul { list-style: none; padding: 0; margin: 0; }
   text-align: center;
 }
 .delete-modal-icon { font-size: 36px; color: #ef4444; margin-bottom: 12px; }
-.delete-modal-msg { font-size: 15px; color: var(--text, #1e293b); margin: 0 0 20px; line-height: 1.5; }
+.delete-modal-msg { font-size: 15px; color: #1e293b; margin: 0 0 20px; line-height: 1.5; }
 .delete-modal-actions { display: flex; gap: 10px; justify-content: center; }
 .delete-modal-actions .btn { min-width: 100px; }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
@@ -1047,6 +1047,33 @@ html.dark-theme .subtrack-panel    { background: rgba(46,168,229,0.07); border-c
   font-weight: 600 !important;
 }
 
+/* ── Start time "Now" button ────────────────────────────────── */
+.start-time-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.start-time-row .form-control,
+.start-time-row .flatpickr-display { flex: 1; }
+.btn-now {
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--primary-600);
+  cursor: pointer;
+  transition: background 120ms, border-color 120ms, color 120ms, transform 100ms;
+}
+.btn-now:hover {
+  border-color: var(--primary);
+  background: rgba(46,168,229,0.08);
+  color: var(--primary);
+  transform: translateY(-1px);
+}
+
 /* ── Duration quick-select buttons ──────────────────────────── */
 .duration-row {
   display: flex;
@@ -1224,6 +1251,10 @@ html.dark-theme body {
   color: #c0d8e4;
 }
 
+/* Confirmation modal */
+html.dark-theme .delete-modal-box { background: #1e2d3d; }
+html.dark-theme .delete-modal-msg { color: #c0d8e4; }
+
 /* Nav */
 html.dark-theme .site-nav {
   background: linear-gradient(180deg, #091520, #0d1b28);
@@ -1395,6 +1426,8 @@ html.dark-theme .numInputWrapper span.arrowUp::after   { border-bottom-color: #c
 html.dark-theme .numInputWrapper span.arrowDown::after  { border-top-color: #c0d8e4 !important; }
 html.dark-theme .numInputWrapper span.arrowUp:hover,
 html.dark-theme .numInputWrapper span.arrowDown:hover   { background: rgba(46,168,229,0.20) !important; }
+html.dark-theme .btn-now { background: #1a2b38; color: #7dd3fc; border-color: rgba(46,168,229,0.25); }
+html.dark-theme .btn-now:hover { background: rgba(46,168,229,0.15); color: #93e0ff; border-color: var(--primary); }
 html.dark-theme .duration-btn { background: #1a2b38; color: #7dd3fc; border-color: rgba(46,168,229,0.25); }
 html.dark-theme .duration-btn:hover { background: rgba(46,168,229,0.15); color: #93e0ff; border-color: var(--primary); }
 html.dark-theme .duration-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }

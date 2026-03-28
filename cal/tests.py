@@ -1888,3 +1888,204 @@ class AssetColorAutoAssignmentTest(TestCase):
             name='Cycle Track', asset_type=Asset.AssetType.TRACK
         )
         self.assertIn(track_17.color, TRACK_COLOR_PALETTE)
+
+
+# ── Dark Mode CSS Integrity Tests ────────────────────────────────────────────
+
+class DarkModeDashboardCSSTest(TestCase):
+    """Ensure dark-theme overrides in dashboard.css don't break background-image rules.
+
+    Regression: dark-theme rules that set background-image without also setting
+    background-repeat/position/size cause SVG arrows to tile across the element.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        from django.conf import settings
+        css_path = os.path.join(
+            settings.BASE_DIR, 'cal', 'static', 'cal', 'css', 'dashboard.css'
+        )
+        with open(css_path, 'r') as f:
+            cls.css = f.read()
+        # Parse CSS into rule blocks: list of (selector, body) tuples
+        import re
+        cls.blocks = []
+        # Match selectors followed by { body }
+        for m in re.finditer(
+            r'([^{}]+?)\s*\{([^{}]*)\}', cls.css
+        ):
+            selector = m.group(1).strip()
+            body = m.group(2).strip()
+            cls.blocks.append((selector, body))
+
+    def _dark_blocks(self):
+        """Return all (selector, body) tuples for html.dark-theme rules."""
+        return [(s, b) for s, b in self.blocks if 'dark-theme' in s]
+
+    def _parse_props(self, body):
+        """Parse a CSS body string into a dict of property -> value."""
+        import re
+        props = {}
+        for decl in re.split(r';\s*', body):
+            decl = decl.strip()
+            if ':' in decl:
+                prop, _, val = decl.partition(':')
+                props[prop.strip()] = val.strip()
+        return props
+
+    def test_background_image_has_no_repeat(self):
+        """Any rule with background-image must also set background-repeat: no-repeat
+        (either in the same block or via its base selector)."""
+        import re
+        # Collect base (non-dark) selectors that already set background-repeat
+        base_selectors_with_repeat = set()
+        for selector, body in self.blocks:
+            if 'dark-theme' not in selector:
+                props = self._parse_props(body)
+                if props.get('background-repeat') == 'no-repeat':
+                    base_selectors_with_repeat.add(selector)
+
+        for selector, body in self._dark_blocks():
+            props = self._parse_props(body)
+            if 'background-image' not in props:
+                continue
+            # Check this block has background-repeat
+            if props.get('background-repeat') == 'no-repeat':
+                continue
+            # Check if shorthand 'background' includes no-repeat
+            bg = props.get('background', '')
+            if 'no-repeat' in bg:
+                continue
+            # Check if a base selector for the same element has it
+            # Extract the element selector (strip "html.dark-theme " prefix)
+            base_sel = re.sub(r'html\.dark-theme\s+', '', selector).strip()
+            if base_sel in base_selectors_with_repeat:
+                continue
+            self.fail(
+                f"Dark-theme rule '{selector}' sets background-image but "
+                f"does not ensure background-repeat: no-repeat. "
+                f"This causes SVG arrows to tile across the element."
+            )
+
+    def test_background_image_has_position(self):
+        """Any rule with background-image must also set background-position
+        (either in the same block or via its base selector)."""
+        import re
+        base_selectors_with_position = set()
+        for selector, body in self.blocks:
+            if 'dark-theme' not in selector:
+                props = self._parse_props(body)
+                if 'background-position' in props:
+                    base_selectors_with_position.add(selector)
+
+        for selector, body in self._dark_blocks():
+            props = self._parse_props(body)
+            if 'background-image' not in props:
+                continue
+            if 'background-position' in props:
+                continue
+            bg = props.get('background', '')
+            if 'center' in bg or 'left' in bg or 'right' in bg:
+                continue
+            base_sel = re.sub(r'html\.dark-theme\s+', '', selector).strip()
+            if base_sel in base_selectors_with_position:
+                continue
+            self.fail(
+                f"Dark-theme rule '{selector}' sets background-image but "
+                f"does not ensure background-position is set."
+            )
+
+    def test_background_image_has_size(self):
+        """Any rule with background-image must also set background-size
+        (either in the same block or via its base selector)."""
+        import re
+        base_selectors_with_size = set()
+        for selector, body in self.blocks:
+            if 'dark-theme' not in selector:
+                props = self._parse_props(body)
+                if 'background-size' in props:
+                    base_selectors_with_size.add(selector)
+
+        for selector, body in self._dark_blocks():
+            props = self._parse_props(body)
+            if 'background-image' not in props:
+                continue
+            if 'background-size' in props:
+                continue
+            base_sel = re.sub(r'html\.dark-theme\s+', '', selector).strip()
+            if base_sel in base_selectors_with_size:
+                continue
+            self.fail(
+                f"Dark-theme rule '{selector}' sets background-image but "
+                f"does not ensure background-size is set."
+            )
+
+    def test_dark_theme_hover_preserves_background_image(self):
+        """Dark-theme hover/focus rules must not use shorthand 'background'
+        if the base rule uses background-image (shorthand resets the image)."""
+        import re
+        # Find dark-theme base rules that use background-image
+        dark_selectors_with_image = set()
+        for selector, body in self._dark_blocks():
+            props = self._parse_props(body)
+            if 'background-image' in props:
+                # Normalize: "html.dark-theme select.foo" -> "select.foo"
+                base_sel = re.sub(r'html\.dark-theme\s+', '', selector).strip()
+                dark_selectors_with_image.add(base_sel)
+
+        for selector, body in self._dark_blocks():
+            if ':hover' not in selector and ':focus' not in selector:
+                continue
+            props = self._parse_props(body)
+            if 'background' not in props:
+                continue
+            # This rule uses shorthand 'background' — check if it
+            # would clobber a background-image from the base rule
+            base_sel = re.sub(
+                r'html\.dark-theme\s+', '', selector
+            ).strip()
+            # Strip :hover/:focus to get the base selector
+            base_sel = re.sub(r':(hover|focus)', '', base_sel).strip()
+            # Remove double commas and trailing commas from multi-selectors
+            base_sel = re.sub(r',\s*,', ',', base_sel).strip().rstrip(',')
+            for img_sel in dark_selectors_with_image:
+                if img_sel in base_sel or base_sel in img_sel:
+                    self.fail(
+                        f"Dark-theme rule '{selector}' uses shorthand "
+                        f"'background' which resets background-image set "
+                        f"by '{img_sel}'. Use 'background-color' instead."
+                    )
+
+    def test_styles_css_dark_theme_rules_exist(self):
+        """styles.css must contain dark-theme overrides for core UI elements."""
+        from django.conf import settings
+        css_path = os.path.join(
+            settings.BASE_DIR, 'cal', 'static', 'cal', 'css', 'styles.css'
+        )
+        with open(css_path, 'r') as f:
+            styles_css = f.read()
+        # Core elements that must have dark-theme rules
+        for selector in [
+            'html.dark-theme .card',
+            'html.dark-theme .cal-nav-arrow',
+        ]:
+            self.assertIn(
+                selector, styles_css,
+                f"styles.css missing dark-theme rule for: {selector}"
+            )
+
+    def test_dashboard_css_dark_theme_coverage(self):
+        """Dashboard CSS must have dark-theme rules for key interactive elements."""
+        required_selectors = [
+            'html.dark-theme select.event-channel-badge',
+            'html.dark-theme .radio-channel-select',
+            'html.dark-theme .event-item',
+            'html.dark-theme .track-card',
+            'html.dark-theme .track-card__header',
+        ]
+        for selector in required_selectors:
+            self.assertIn(
+                selector, self.css,
+                f"dashboard.css missing dark-theme rule for: {selector}"
+            )

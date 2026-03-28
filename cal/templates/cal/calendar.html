@@ -74,19 +74,14 @@
 {% if view == 'day' %}
 <div class="cal-legend">
   <span class="legend-item">
-    <span class="legend-swatch-actual"></span> Event
+    <span class="legend-swatch-actual"></span> Scheduled
   </span>
   <span class="legend-item">
-    <span class="legend-swatch-dual"><span class="legend-swatch-dual__actual"></span><span class="legend-swatch-dual__ghost"></span></span> Has actual time
+    <span class="legend-swatch-dual"><span class="legend-swatch-dual__actual"></span><span class="legend-swatch-dual__ghost"></span></span> Actual <span class="text-muted" style="font-size:0.8em">(scheduled shown below)</span>
   </span>
   <span class="legend-item">
     <span class="legend-dot legend-dot-pending"></span> Pending
   </span>
-  {% if is_today %}
-  <span class="legend-item">
-    <span class="legend-now-line"></span> Now
-  </span>
-  {% endif %}
 </div>
 {% else %}
 <div class="cal-legend">

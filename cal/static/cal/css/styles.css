@@ -108,7 +108,7 @@ ul { list-style: none; padding: 0; margin: 0; }
   gap: 7px;
 }
 .nav-logo { height: 26px; width: auto; opacity: 0.9; }
-.site-nav-links { display: flex; gap: 22px; }
+.site-nav-links { display: flex; gap: 0; }
 .site-nav-links a {
   color: rgba(255,255,255,0.78);
   text-decoration: none;
@@ -118,7 +118,10 @@ ul { list-style: none; padding: 0; margin: 0; }
   display: flex;
   align-items: center;
   gap: 5px;
+  padding: 0 12px;
+  border-right: 1px solid rgba(255,255,255,0.12);
 }
+.site-nav-links a:last-child { border-right: none; }
 .site-nav-links a:hover { color: #fff; text-decoration: none; }
 .site-nav-user  { display: flex; align-items: center; gap: 12px; }
 .nav-user-name  { color: rgba(255,255,255,0.9); font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 6px; }
@@ -1751,7 +1754,7 @@ html.dark-theme .wk-today-num    { background: var(--primary); color: #fff; }
   z-index: 10;
 }
 .gantt-subtrack-name {
-  height: 36px;
+  height: 58px;
   display: flex;
   align-items: center;
   padding: 0 8px 0 10px;
@@ -1784,7 +1787,7 @@ html.dark-theme .wk-today-num    { background: var(--primary); color: #fff; }
 
 .gantt-sub-row {
   position: relative;
-  height: 36px;
+  height: 58px;
   flex-shrink: 0;
 }
 
@@ -1800,7 +1803,7 @@ html.dark-theme .wk-today-num    { background: var(--primary); color: #fff; }
 /* Each subtrack within a track row — now just a lane, no inline label */
 .gantt-subtrack-row {
   position: relative;
-  height: 36px;
+  height: 58px;
   flex-shrink: 0;
   border-bottom: 1px solid rgba(46,168,229,0.07);
 }
@@ -1824,8 +1827,8 @@ html.dark-theme .wk-today-num    { background: var(--primary); color: #fff; }
 
 /* Full-track blocks span the full height of the overlay (both subtrack rows) */
 .gantt-block.gantt-fulltrack-block {
-  top: 4px;
-  height: calc(100% - 8px);
+  top: 6px;
+  height: calc(100% - 12px);
   opacity: 0.88;
   border-top: 2px solid rgba(255,255,255,0.25);
 }
@@ -1836,8 +1839,8 @@ html.dark-theme .gantt-subtrack-row  { border-color: rgba(46,168,229,0.08); }
 
 .gantt-block {
   position: absolute;
-  top: 3px;
-  height: 30px;
+  top: 4px;
+  height: 40px;
   border-radius: 4px;
   padding: 0 6px;
   display: flex;
@@ -1868,23 +1871,23 @@ html.dark-theme .gantt-subtrack-row  { border-color: rgba(46,168,229,0.08); }
 
 /* Ghost bar (scheduled time when actuals exist) — offset below actual */
 .gantt-block.gantt-block--ghost {
-  top: 20px;
-  height: 14px;
+  top: 32px;
+  height: 22px;
   opacity: 0.7;
   border: 2px dashed rgba(108,117,125,0.6);
   background: rgba(108,117,125,0.12) !important;
-  font-size: 9px;
-  padding: 0 4px;
+  font-size: 10px;
+  padding: 0 5px;
 }
 .gantt-block.gantt-block--ghost .gantt-block-title { display: none; }
 .gantt-block.gantt-block--ghost .gantt-block-time {
-  color: var(--muted); font-size: 9px; opacity: 0.8;
+  color: var(--muted); font-size: 10px; opacity: 0.85;
 }
 
 /* Actual bar (solid, occupies top portion of lane) */
 .gantt-block.gantt-block--actual {
-  top: 3px;
-  height: 20px;
+  top: 4px;
+  height: 26px;
   border: 1.5px solid rgba(255,255,255,0.35);
 }
 

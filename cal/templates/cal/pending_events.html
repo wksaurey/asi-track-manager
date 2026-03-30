@@ -20,16 +20,26 @@
     {% for ev in events %}
     <div class="schedule-row {{ ev.asset_css_class }}">
       <div class="schedule-date">
+        {% if ev.start_time %}
         <span class="sched-day">{{ ev.start_time|date:"D" }}</span>
         <span class="sched-num">{{ ev.start_time|date:"d" }}</span>
         <span class="sched-mon">{{ ev.start_time|date:"M Y" }}</span>
+        {% else %}
+        <span class="sched-day">Impromptu</span>
+        {% endif %}
       </div>
       <div class="schedule-info" style="flex:1;">
         <span class="schedule-title">{{ ev.title }}</span>
+        {% if ev.start_time %}
         <span class="schedule-time">
           <i class="fas fa-clock"></i>
           {{ ev.start_time|date:"g:i A" }} – {{ ev.end_time|date:"g:i A" }}
         </span>
+        {% else %}
+        <span class="schedule-time">
+          <i class="fas fa-clock"></i> Impromptu
+        </span>
+        {% endif %}
         <div style="margin-top:3px;">{{ ev.asset_badge_html|safe }}</div>
         <span class="schedule-time" style="margin-top:2px;">
           <i class="fas fa-user"></i> {{ ev.created_by|default:"Unknown" }}
@@ -38,23 +48,25 @@
       <div style="display:flex;gap:8px;align-items:center;flex-shrink:0;">
         <form method="post" action="{% url 'cal:event_approve' ev.id %}">
           {% csrf_token %}
+          <input type="hidden" name="next" value="{% url 'cal:pending_events' %}">
           <button type="submit"
                   class="btn"
                   style="background:linear-gradient(180deg,#10b981,#059669);padding:6px 12px;font-size:13px;">
             <i class="fas fa-check"></i> Approve
           </button>
         </form>
-        <a href="{% url 'cal:event_edit' ev.id %}"
+        <a href="{% url 'cal:event_edit' ev.id %}?next={% url 'cal:pending_events' %}"
            class="btn btn-muted"
            style="font-size:13px;padding:6px 12px;">
           <i class="fas fa-edit"></i> Edit
         </a>
         <form method="post" action="{% url 'cal:event_delete' ev.id %}"
-              onsubmit="return confirm('Delete this event?')">
+              onsubmit="return confirmDelete(this, 'Delete &quot;{{ ev.title|escapejs }}&quot;? This cannot be undone.')">
           {% csrf_token %}
+          <input type="hidden" name="next" value="{% url 'cal:pending_events' %}">
           <button type="submit"
-                  class="btn"
-                  style="background:linear-gradient(180deg,#ef4444,#dc2626);padding:6px 12px;font-size:13px;">
+                  class="btn btn-danger"
+                  style="padding:6px 12px;font-size:13px;">
             <i class="fas fa-trash"></i> Delete
           </button>
         </form>

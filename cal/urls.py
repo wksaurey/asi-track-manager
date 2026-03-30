@@ -21,7 +21,8 @@ urlpatterns = [
     path('event/new/',                     views.event,          name='event_new'),
     path('event/edit/<int:event_id>/',     views.event,          name='event_edit'),
     path('event/delete/<int:event_id>/',   views.event_delete,   name='event_delete'),
-    path('event/approve/<int:event_id>/',  views.event_approve,  name='event_approve'),
+    path('event/approve/<int:event_id>/',    views.event_approve,    name='event_approve'),
+    path('event/unapprove/<int:event_id>/', views.event_unapprove,  name='event_unapprove'),
     path('events/pending/',                views.pending_events, name='pending_events'),
 
     # ── Asset management ───────────────────────────────────────────────────
@@ -34,7 +35,13 @@ urlpatterns = [
     # ── Dashboard ──────────────────────────────────────────────────────────
     path('dashboard/',                              views.dashboard,              name='dashboard'),
     path('api/dashboard-events/',                   views.dashboard_events_api,   name='dashboard_events_api'),
+    path('api/event/create/',                        views.api_create_event,       name='api_event_create'),
     path('api/event/<int:event_id>/stamp/',         views.dashboard_stamp_actual, name='dashboard_stamp_actual'),
+    path('api/track/<int:asset_id>/channel/',      views.set_radio_channel,      name='set_radio_channel'),
+    path('api/event/<int:event_id>/channel/',     views.set_event_radio_channel, name='set_event_radio_channel'),
     path('analytics/',                              views.analytics,              name='analytics'),
     path('api/analytics/',                          views.analytics_api,          name='analytics_api'),
+    path('api/feedback/',                           views.submit_feedback,        name='submit_feedback'),
+    path('feedback/',                               views.feedback_list,          name='feedback_list'),
+    path('feedback/<int:feedback_id>/resolve/',     views.feedback_resolve,       name='feedback_resolve'),
 ]

@@ -139,6 +139,10 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 AUTH_USER_MODEL = 'users.User'
 
+AUTHENTICATION_BACKENDS = [
+    'users.backends.CaseInsensitiveModelBackend',
+]
+
 LOGIN_URL = '/users/login/'
 LOGIN_REDIRECT_URL = '/cal/calendar/'
 LOGOUT_REDIRECT_URL = '/users/login/'

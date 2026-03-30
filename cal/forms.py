@@ -185,13 +185,13 @@ class EventForm(ModelForm):
                 if len(parents) > 1:
                     self.add_error('assets', 'Only one track group may be selected per reservation.')
 
-        # End must come after start
+        # End must come after start (skipped for impromptu events with no times)
         if start_time and end_time and start_time >= end_time:
             raise ValidationError('End time must be after start time.')
 
-
         # Conflict check — delegates to Asset.conflicting_asset_ids() for
-        # parent/subtrack rules.
+        # parent/subtrack rules.  Skipped when start_time/end_time are None
+        # (impromptu events).
         if assets and start_time and end_time:
             for asset in assets:
                 conflict_ids = asset.conflicting_asset_ids()
@@ -199,6 +199,7 @@ class EventForm(ModelForm):
                     assets__in=conflict_ids,
                     start_time__lt=end_time,
                     end_time__gt=start_time,
+                    start_time__isnull=False,
                 ).distinct()
                 if self.instance and self.instance.pk:
                     conflicts = conflicts.exclude(pk=self.instance.pk)

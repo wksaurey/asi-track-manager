@@ -289,12 +289,13 @@ async function fetchAndLoadData() {
         let timeStr = "";
         if (startHHMM && endHHMM) timeStr = `${startHHMM}-${endHHMM}`;
         else if (startHHMM) timeStr = startHHMM;
+        const isImpromptu = !!ev.is_impromptu;
         const notes = [];
         if (ev.description && ev.description.trim()) notes.push(ev.description.trim());
         result.push({
           time: timeStr, scheduledTime: timeStr,
           desc: ev.title || "(untitled)", notes, channel: "",
-          eventId: ev.id, isScheduled: true,
+          eventId: ev.id, isScheduled: true, isImpromptu: isImpromptu,
           actualStart: ev.actual_start || null,
           actualEnd: ev.actual_end || null,
           _trackColor: color || null,
@@ -419,23 +420,34 @@ const noteItemTpl  = document.getElementById("noteItemTemplate");
 // ============================================================
 
 let modalTrackName = null;
-let modalEditEntry = null;
 
 const eventPopup        = document.getElementById("eventPopup");
 const eventPopupBox     = document.getElementById("eventPopupBox");
 const eventModalForm    = document.getElementById("eventModalForm");
-const eventModalTitle   = document.getElementById("eventModalTitle");
 const eventModalTrackEl = document.getElementById("eventModalTrackName");
-const modalTimeInput    = document.getElementById("modalTime");
+const modalTrackIdInput = document.getElementById("modalTrackId");
+const modalTitleInput   = document.getElementById("modalTitle");
 const modalDescInput    = document.getElementById("modalDesc");
+const modalError        = document.getElementById("modalError");
+const modalSubmitBtn    = document.getElementById("eventModalSubmit");
+const modalFullFormLink = document.getElementById("modalFullFormLink");
 
-function openEventModal(trackName, entry, anchorEl) {
+function openEventModal(trackName, trackId, anchorEl) {
   modalTrackName = trackName;
-  modalEditEntry = entry || null;
-  eventModalTitle.textContent   = entry ? "Edit Event" : "Add Event";
   eventModalTrackEl.textContent = trackName;
-  modalTimeInput.value = entry ? (entry.time || "") : nowHHMM();
-  modalDescInput.value = entry ? (entry.desc || "") : "";
+  modalTrackIdInput.value = trackId || "";
+  modalTitleInput.value = "";
+  modalDescInput.value = "";
+  modalError.hidden = true;
+  modalError.textContent = "";
+  modalSubmitBtn.disabled = false;
+  modalSubmitBtn.textContent = "Create";
+
+  // Set "Open full form" link
+  const dateStr = toISODateStr(currentDate);
+  let fullFormUrl = `/cal/event/new/?next=/cal/dashboard/&date=${dateStr}`;
+  if (trackId) fullFormUrl += `&track=${trackId}`;
+  modalFullFormLink.href = fullFormUrl;
 
   // Show so the box is measurable
   eventPopup.hidden = false;
@@ -463,13 +475,12 @@ function openEventModal(trackName, entry, anchorEl) {
     eventPopupBox.style.left = left + "px";
   }
 
-  modalDescInput.focus();
+  modalTitleInput.focus();
 }
 
 function closeEventModal() {
   eventPopup.hidden = true;
   modalTrackName = null;
-  modalEditEntry = null;
 }
 
 eventPopup.querySelector(".event-popup__close").addEventListener("click", closeEventModal);
@@ -477,19 +488,57 @@ document.getElementById("eventModalCancel").addEventListener("click", closeEvent
 eventPopup.addEventListener("click", (e) => { if (e.target === eventPopup) closeEventModal(); });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !eventPopup.hidden) closeEventModal(); });
 
-eventModalForm.addEventListener("submit", (e) => {
+eventModalForm.addEventListener("submit", async (e) => {
   e.preventDefault();
-  const time = modalTimeInput.value.trim();
-  const desc = modalDescInput.value.trim();
-  if (!time || !desc) return;
-  if (modalEditEntry) {
-    modalEditEntry.time = time;
-    modalEditEntry.desc = desc;
-  } else {
-    data[modalTrackName].push({ time, desc, notes: [] });
+  const title = modalTitleInput.value.trim();
+  if (!title) return;
+
+  const trackId = parseInt(modalTrackIdInput.value, 10);
+  if (!trackId) {
+    modalError.textContent = "No track selected.";
+    modalError.hidden = false;
+    return;
   }
-  closeEventModal();
-  render();
+
+  // Loading state
+  modalSubmitBtn.disabled = true;
+  modalSubmitBtn.textContent = "Creating...";
+  modalError.hidden = true;
+
+  try {
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
+    const resp = await fetch("/cal/api/event/create/", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRFToken": csrfToken,
+      },
+      body: JSON.stringify({
+        title: title,
+        description: modalDescInput.value.trim(),
+        asset_ids: [trackId],
+        is_impromptu: true,
+      }),
+    });
+
+    if (resp.ok) {
+      closeEventModal();
+      showStampToast("Impromptu event created");
+      await fetchAndLoadData();
+      render();
+    } else {
+      const errData = await resp.json().catch(() => ({}));
+      modalError.textContent = errData.error || "Failed to create event.";
+      modalError.hidden = false;
+      modalSubmitBtn.disabled = false;
+      modalSubmitBtn.textContent = "Create";
+    }
+  } catch (err) {
+    modalError.textContent = "Network error — could not reach server.";
+    modalError.hidden = false;
+    modalSubmitBtn.disabled = false;
+    modalSubmitBtn.textContent = "Create";
+  }
 });
 
 
@@ -562,7 +611,12 @@ function renderEventItem(ev, trackLabel, dataSource, listEl, normalizedFilter) {
 
     const schedLabel = document.createElement("span");
     schedLabel.className   = "time-label time-label--scheduled";
-    schedLabel.textContent = `Scheduled: ${formatTimeChip(ev.scheduledTime)}`;
+    if (ev.isImpromptu && !ev.scheduledTime) {
+      schedLabel.textContent = "Impromptu";
+      schedLabel.classList.add("time-label--impromptu");
+    } else {
+      schedLabel.textContent = `Scheduled: ${formatTimeChip(ev.scheduledTime)}`;
+    }
     actualRow.appendChild(schedLabel);
 
     const actualLabel = document.createElement("span");
@@ -723,28 +777,14 @@ function render() {
     });
 
     // Form and button refs
-    const addNoteToggle  = card.querySelector(".add-note-toggle");
-    const delTrackBtn    = card.querySelector(".delete-track");
-    const noteForm       = card.querySelector(".note-form");
-    const cancelNoteBtn  = card.querySelector(".cancel-note");
     const quickAddBtn    = card.querySelector(".add-event-btn");
     const eventsListEl   = card.querySelector(".events-list");
     const notesListEl    = card.querySelector(".notes-list");
 
-    on(quickAddBtn,   "click", () => {
-      const dateStr = toISODateStr(currentDate);
+    on(quickAddBtn,   "click", (e) => {
       const tid = trackIds[trackName];
-      let url = `/cal/event/new/?next=/cal/dashboard/&date=${dateStr}`;
-      if (tid) url += `&track=${tid}`;
-      window.location.href = url;
+      openEventModal(trackName, tid, e.target);
     });
-    on(addNoteToggle, "click", () => noteForm?.classList.toggle("hidden"));
-    on(cancelNoteBtn, "click", () => noteForm?.classList.add("hidden"));
-
-    // Card kebab menu
-    const menuWrap = card.querySelector(".menu-wrap");
-    const menuBtn  = card.querySelector(".menu-btn");
-    on(menuBtn, "click", () => menuWrap?.classList.toggle("open"));
 
     // Separate events from track-level notes
     const events = sortEvents(
@@ -800,25 +840,6 @@ function render() {
       notesListEl.appendChild(note);
     });
 
-    // New track-level note form submission
-    noteForm.addEventListener("submit", (e) => {
-      e.preventDefault();
-      const fd   = new FormData(noteForm);
-      const note = (fd.get("note") || "").toString().trim();
-      if (!note) return;
-      data[trackName].push({ time: note, desc: "__TRACK_NOTE__", notes: [] });
-      noteForm.reset();
-      noteForm.classList.add("hidden");
-      render();
-    });
-
-    // Delete entire track
-    delTrackBtn.addEventListener("click", () => {
-      showConfirmModal(`Delete track "${trackName}"? This cannot be undone.`, function() {
-        delete data[trackName];
-        render();
-      });
-    });
 
     // Filter visibility check
     if (normalizedFilter && !matchesFilter && filteredEvents.length === 0) {
@@ -859,13 +880,12 @@ function render() {
           }
         });
 
-        // Subtrack "+" button — navigate to new event with subtrack pre-selected
+        // Subtrack "+" button — open impromptu event modal
         const subAddBtn = subSection.querySelector(".subtrack-add-btn");
         if (subAddBtn) {
           const subTrackId = trackIds[subChKey] || subInfo.id;
-          subAddBtn.addEventListener("click", () => {
-            const dateStr = toISODateStr(currentDate);
-            window.location.href = `/cal/event/new/?next=/cal/dashboard/&date=${dateStr}&track=${subTrackId}`;
+          subAddBtn.addEventListener("click", (e) => {
+            openEventModal(subName, subTrackId, e.target);
           });
         }
 

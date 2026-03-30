@@ -234,44 +234,6 @@ html.dark-theme .track-name { color: #dbeafe; }
 .track-logo { position: absolute; left: 8px; top: 50%; transform: translateY(-50%); }
 
 
-/* ============================================================
-   Collapsible forms
-   ============================================================ */
-.track-add-forms {
-  padding: 10px 12px;
-  border-bottom: 1px dashed var(--border);
-  max-height: 260px;
-  overflow-y: auto;
-}
-html.dark-theme .track-add-forms {
-  border-bottom-color: rgba(255,255,255,0.06);
-}
-.track-add-forms label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); }
-.track-add-forms .row { display: flex; flex-direction: column; gap: 5px; margin-bottom: 8px; }
-.track-add-forms input {
-  padding: 8px 10px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: #fff;
-  color: #073242;
-  font-size: 13px;
-  outline: none;
-  transition: border-color 0.15s, box-shadow 0.15s;
-}
-html.dark-theme .track-add-forms input {
-  background: rgba(6,12,24,0.7);
-  border-color: var(--outline);
-  color: var(--text);
-}
-.track-add-forms input:focus {
-  border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(46,168,229,0.10);
-}
-html.dark-theme .track-add-forms input:focus {
-  border-color: rgba(96,165,250,0.45);
-  box-shadow: 0 0 0 3px rgba(96,165,250,0.08);
-}
-.form-actions { display: flex; gap: 8px; padding-top: 2px; }
 .hidden { display: none; }
 
 
@@ -483,38 +445,6 @@ html.dark-theme .note-item:hover { background: rgba(52,211,153,0.06); }
 .app-footer { padding: 14px 20px; color: var(--muted); font-size: 12px; opacity: 0.7; }
 
 
-/* ============================================================
-   Per-card kebab menu
-   ============================================================ */
-.menu-wrap { position: relative; }
-.menu-btn {
-  background: transparent; border: none; color: var(--muted);
-  font-size: 20px; cursor: pointer; padding: 2px 6px; border-radius: 6px;
-  transition: color 0.15s, background 0.15s; line-height: 1;
-}
-.menu-btn:hover { color: var(--text); background: rgba(46,168,229,0.08); }
-html.dark-theme .menu-btn:hover { background: rgba(255,255,255,0.07); }
-.menu {
-  position: absolute; top: 28px; right: 0;
-  background: var(--card); border: 1px solid var(--border); border-radius: 10px;
-  display: none; flex-direction: column; min-width: 140px;
-  z-index: 20; box-shadow: 0 8px 24px rgba(46,168,229,0.12); overflow: hidden;
-}
-html.dark-theme .menu {
-  background: #0d1830;
-  border-color: var(--outline);
-  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
-}
-.menu-item {
-  background: transparent; color: var(--text); padding: 9px 13px;
-  border: none; text-align: left; cursor: pointer; font-size: 13px; transition: background 0.12s;
-}
-.menu-item:hover { background: rgba(46,168,229,0.07); }
-html.dark-theme .menu-item:hover { background: rgba(255,255,255,0.08); }
-.menu-wrap.open .menu { display: flex; }
-
-
-/* (hamburger menu removed — replaced by inline Reload button) */
 
 
 /* ============================================================
@@ -648,6 +578,12 @@ html.dark-theme .icon-btn:hover {
 .time-label--scheduled {
   opacity: 0.7;
   flex-basis: 100%;
+}
+
+.time-label--impromptu {
+  opacity: 1;
+  font-style: italic;
+  color: var(--accent, #ffc107);
 }
 
 .time-label--actual {
@@ -975,10 +911,48 @@ html.dark-theme .event-popup-box { box-shadow: 0 8px 28px rgba(0,0,0,0.55); }
 }
 html.dark-theme .modal-field input { background: var(--bg); border-color: var(--border); }
 html.dark-theme .modal-field input:focus { box-shadow: 0 0 0 3px rgba(96,165,250,0.1); }
+.modal-field textarea {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+  font-family: inherit;
+  resize: vertical;
+  min-height: 56px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.modal-field textarea:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(46,168,229,0.12);
+}
+html.dark-theme .modal-field textarea { background: var(--bg); border-color: var(--border); }
+html.dark-theme .modal-field textarea:focus { box-shadow: 0 0 0 3px rgba(96,165,250,0.1); }
+.modal-error {
+  font-size: 12px;
+  color: #ef4444;
+  background: rgba(239,68,68,0.08);
+  border-radius: 6px;
+  padding: 6px 10px;
+  margin-top: 8px;
+}
+.modal-full-form-link {
+  font-size: 11px;
+  color: var(--muted);
+  margin-right: auto;
+  align-self: center;
+  text-decoration: none;
+  transition: color 0.15s;
+}
+.modal-full-form-link:hover { color: var(--primary); text-decoration: underline; }
 .modal-actions {
   display: flex;
   gap: 8px;
   justify-content: flex-end;
+  align-items: center;
   margin-top: 20px;
 }
 

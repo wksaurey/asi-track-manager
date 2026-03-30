@@ -169,8 +169,9 @@ class Event(models.Model):
 
     title       = models.CharField(max_length=200)
     description = models.TextField(blank=True)
-    start_time   = models.DateTimeField()
-    end_time     = models.DateTimeField()
+    is_impromptu = models.BooleanField(default=False, help_text='Impromptu events have no scheduled time; only actual times.')
+    start_time   = models.DateTimeField(null=True, blank=True)
+    end_time     = models.DateTimeField(null=True, blank=True)
     actual_start = models.DateTimeField(null=True, blank=True)
     actual_end   = models.DateTimeField(null=True, blank=True)
     assets      = models.ManyToManyField(
@@ -253,7 +254,10 @@ class Event(models.Model):
         Omits the AM/PM suffix on the start time when both times share the
         same period, e.g. '8:30-10:00 AM' instead of '8:30 AM-10:00 AM'.
         Uses an en-dash and non-breaking spaces for clean rendering.
+        Returns 'Impromptu' if start_time or end_time is None.
         """
+        if not self.start_time or not self.end_time:
+            return 'Impromptu'
         local_s = localtime(self.start_time)
         local_e = localtime(self.end_time)
         t_s = local_s.strftime('%I:%M').lstrip('0') or '12:00'

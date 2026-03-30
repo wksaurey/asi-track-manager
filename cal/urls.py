@@ -35,6 +35,7 @@ urlpatterns = [
     # ── Dashboard ──────────────────────────────────────────────────────────
     path('dashboard/',                              views.dashboard,              name='dashboard'),
     path('api/dashboard-events/',                   views.dashboard_events_api,   name='dashboard_events_api'),
+    path('api/event/create/',                        views.api_create_event,       name='api_event_create'),
     path('api/event/<int:event_id>/stamp/',         views.dashboard_stamp_actual, name='dashboard_stamp_actual'),
     path('api/track/<int:asset_id>/channel/',      views.set_radio_channel,      name='set_radio_channel'),
     path('api/event/<int:event_id>/channel/',     views.set_event_radio_channel, name='set_event_radio_channel'),

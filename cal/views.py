@@ -439,28 +439,48 @@ def dashboard_events_api(request):
         is_approved=True, start_time__date=target_date
     ).order_by('start_time')
 
+    impromptu_events_qs = Event.objects.filter(
+        Q(actual_start__date=target_date)
+        | Q(actual_start__isnull=True, actual_end__isnull=True),
+        is_approved=True,
+        is_impromptu=True,
+    ).order_by('actual_start')
+
     all_tracks = Asset.objects.filter(
         asset_type=Asset.AssetType.TRACK
     ).prefetch_related(
         Prefetch('events', queryset=track_events_qs, to_attr='day_events'),
+        Prefetch('events', queryset=impromptu_events_qs, to_attr='day_impromptu_events'),
         'subtracks',
     ).order_by('name')
 
     def _serialize_events(track):
+        # Merge scheduled and impromptu events, deduplicating by pk
+        seen = set()
+        merged = []
+        for ev in track.day_events:
+            if ev.pk not in seen:
+                seen.add(ev.pk)
+                merged.append(ev)
+        for ev in track.day_impromptu_events:
+            if ev.pk not in seen:
+                seen.add(ev.pk)
+                merged.append(ev)
         return [
             {
                 'id': ev.pk,
                 'title': ev.title,
                 'description': ev.description,
-                'start_time': ev.start_time.isoformat(),
-                'end_time': ev.end_time.isoformat(),
+                'start_time': ev.start_time.isoformat() if ev.start_time else None,
+                'end_time': ev.end_time.isoformat() if ev.end_time else None,
+                'is_impromptu': ev.is_impromptu,
                 'is_approved': ev.is_approved,
                 'actual_start': ev.actual_start.isoformat() if ev.actual_start else None,
                 'actual_end': ev.actual_end.isoformat() if ev.actual_end else None,
                 'radio_channel': ev.radio_channel,
                 'effective_radio_channel': ev.effective_radio_channel,
             }
-            for ev in track.day_events
+            for ev in merged
         ]
 
     # Group: parent tracks with subtracks nested; standalone tracks at top level
@@ -572,16 +592,25 @@ def analytics_api(request):
     except ValueError:
         end_date = start_date + timedelta(days=6)
 
-    # Base queryset — all events in range
-    events = Event.objects.filter(
+    # Scheduled events in range
+    scheduled_qs = Event.objects.filter(
         start_time__date__gte=start_date,
         start_time__date__lte=end_date,
         is_approved=True,
     )
+    # Impromptu events in range (use actual_start since start_time is null)
+    impromptu_qs = Event.objects.filter(
+        is_impromptu=True,
+        is_approved=True,
+        actual_start__date__gte=start_date,
+        actual_start__date__lte=end_date,
+    )
+    # Combined - dedup by pk
+    all_events_pks = set(scheduled_qs.values_list('pk', flat=True)) | set(impromptu_qs.values_list('pk', flat=True))
+    all_events = list(Event.objects.filter(pk__in=all_events_pks).prefetch_related('assets'))
 
-    # Prefetch all events once to avoid N+1 queries per asset.
-    # SQLite lacks duration math, so we compute in Python from a single queryset.
-    all_events = list(events.prefetch_related('assets'))
+    # Keep scheduled-only queryset for annotation-based queries that need start_time
+    events = scheduled_qs
 
     # Build asset_id → [event, ...] mapping for O(1) lookups
     events_by_asset = defaultdict(list)
@@ -597,6 +626,7 @@ def analytics_api(request):
         scheduled_secs = sum(
             (e.end_time - e.start_time).total_seconds()
             for e in track_events
+            if e.start_time and e.end_time
         )
         actual_secs = sum(
             (e.actual_end - e.actual_start).total_seconds()
@@ -615,7 +645,7 @@ def analytics_api(request):
     start_deltas = []
     end_deltas = []
     for e in all_events:
-        if e.actual_start and e.actual_end:
+        if e.actual_start and e.actual_end and e.start_time and e.end_time:
             start_deltas.append((e.actual_start - e.start_time).total_seconds() / 60)
             end_deltas.append((e.actual_end - e.end_time).total_seconds() / 60)
 
@@ -634,8 +664,19 @@ def analytics_api(request):
         .annotate(count=Count('id'))
         .order_by('day')
     )
-    # Fill in missing days with 0
+    # Impromptu daily counts (keyed on actual_start)
+    impromptu_daily = (
+        impromptu_qs
+        .annotate(day=TruncDate('actual_start'))
+        .values('day')
+        .annotate(count=Count('id'))
+        .order_by('day')
+    )
+    # Fill in missing days with 0, merging scheduled + impromptu
     day_counts = {str(row['day']): row['count'] for row in daily}
+    for row in impromptu_daily:
+        key = str(row['day'])
+        day_counts[key] = day_counts.get(key, 0) + row['count']
     labels = []
     counts = []
     d = start_date
@@ -654,12 +695,24 @@ def analytics_api(request):
         .annotate(count=Count('id'))
         .order_by('hour')
     )
-    peak_hours = [{'hour': r['hour'], 'count': r['count']} for r in peak]
+    # Impromptu peak hours (keyed on actual_start)
+    impromptu_peak = (
+        impromptu_qs
+        .annotate(hour=ExtractHour('actual_start'))
+        .values('hour')
+        .annotate(count=Count('id'))
+        .order_by('hour')
+    )
+    # Merge scheduled + impromptu hour counts
+    hour_counts = {r['hour']: r['count'] for r in peak}
+    for r in impromptu_peak:
+        hour_counts[r['hour']] = hour_counts.get(r['hour'], 0) + r['count']
+    peak_hours = [{'hour': h, 'count': c} for h, c in sorted(hour_counts.items())]
 
     # 5. User activity
     all_events_in_range = Event.objects.filter(
-        start_time__date__gte=start_date,
-        start_time__date__lte=end_date,
+        Q(start_time__date__gte=start_date, start_time__date__lte=end_date)
+        | Q(is_impromptu=True, actual_start__date__gte=start_date, actual_start__date__lte=end_date)
     )
     user_data = (
         all_events_in_range
@@ -689,6 +742,7 @@ def analytics_api(request):
         sched_secs = sum(
             (e.end_time - e.start_time).total_seconds()
             for e in asset_events
+            if e.start_time and e.end_time
         )
         asset_usage.append({
             'name': asset.name,
@@ -696,6 +750,56 @@ def analytics_api(request):
             'event_count': len(asset_events),
             'total_hours': round(sched_secs / 3600, 1),
         })
+
+    # 7. Impromptu summary
+    impromptu_events = [e for e in all_events if e.is_impromptu]
+    scheduled_events = [e for e in all_events if not e.is_impromptu]
+
+    # Impromptu hours by track
+    impromptu_by_asset = defaultdict(list)
+    for ev in impromptu_events:
+        for asset in ev.assets.all():
+            impromptu_by_asset[asset.pk].append(ev)
+
+    impromptu_track_usage = []
+    for track in track_assets:
+        track_imp_events = impromptu_by_asset.get(track.pk, [])
+        imp_actual_secs = sum(
+            (e.actual_end - e.actual_start).total_seconds()
+            for e in track_imp_events
+            if e.actual_start and e.actual_end
+        )
+        if track_imp_events:
+            impromptu_track_usage.append({
+                'name': track.display_name,
+                'color': track.color or '#10b981',
+                'actual_hours': round(imp_actual_secs / 3600, 1),
+                'event_count': len(track_imp_events),
+            })
+
+    # Impromptu daily trend
+    imp_day_counts = {}
+    for row in impromptu_daily:
+        imp_day_counts[str(row['day'])] = row['count']
+    imp_labels = []
+    imp_counts = []
+    d = start_date
+    while d <= end_date:
+        imp_labels.append(str(d))
+        imp_counts.append(imp_day_counts.get(str(d), 0))
+        d += timedelta(days=1)
+
+    # Impromptu peak hours
+    imp_hour_counts = {r['hour']: r['count'] for r in impromptu_peak}
+    imp_peak_hours = [{'hour': h, 'count': c} for h, c in sorted(imp_hour_counts.items())]
+
+    impromptu_summary = {
+        'total_impromptu': len(impromptu_events),
+        'total_scheduled': len(scheduled_events),
+        'track_usage': impromptu_track_usage,
+        'daily_trend': {'labels': imp_labels, 'counts': imp_counts},
+        'peak_hours': imp_peak_hours,
+    }
 
     return JsonResponse({
         'range': {'start': str(start_date), 'end': str(end_date)},
@@ -705,6 +809,7 @@ def analytics_api(request):
         'peak_hours': peak_hours,
         'user_activity': user_activity,
         'asset_usage': asset_usage,
+        'impromptu_summary': impromptu_summary,
     })
 
 
@@ -756,7 +861,7 @@ def dashboard_stamp_actual(request, event_id):
                 parts = time_str.strip().split(':')
                 if len(parts) == 2:
                     h, m = int(parts[0]), int(parts[1])
-                    event_date = event.start_time.date()
+                    event_date = event.start_time.date() if event.start_time else timezone.now().date()
                     naive = datetime.combine(event_date, datetime.min.time().replace(hour=h, minute=m))
                     custom_time = timezone.make_aware(naive)
             except (ValueError, TypeError):
@@ -775,7 +880,7 @@ def dashboard_stamp_actual(request, event_id):
                 status=400,
             )
     if action == 'start' and custom_time:
-        event_date = event.start_time.date()
+        event_date = event.start_time.date() if event.start_time else timezone.now().date()
         event_midnight = timezone.make_aware(datetime.combine(event_date, datetime.min.time()))
         if custom_time < event_midnight - timedelta(hours=24) or custom_time > event_midnight + timedelta(hours=48):
             return JsonResponse(
@@ -803,6 +908,143 @@ def dashboard_stamp_actual(request, event_id):
         'actual_start': event.actual_start.isoformat() if event.actual_start else None,
         'actual_end':   event.actual_end.isoformat() if event.actual_end else None,
     })
+
+
+# ── API: Create Event ────────────────────────────────────────────────────────
+
+@login_required
+@require_POST
+def api_create_event(request):
+    """
+    JSON API — staff only.
+
+    Create a new event via POST with a JSON body::
+
+        {
+            "title": "...",
+            "description": "...",        // optional
+            "asset_ids": [1, 2, ...],
+            "is_impromptu": true/false,
+            "start_time": "ISO 8601",    // required if not impromptu
+            "end_time": "ISO 8601"       // required if not impromptu
+        }
+
+    Impromptu events skip conflict detection and are auto-approved with no
+    scheduled times.  Non-impromptu events run full conflict detection.
+    """
+    if not request.user.is_staff:
+        return JsonResponse({'error': 'Forbidden'}, status=403)
+
+    try:
+        body = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+    title = (body.get('title') or '').strip()
+    if not title:
+        return JsonResponse({'error': 'Title is required.'}, status=400)
+
+    description = (body.get('description') or '').strip()
+    asset_ids = body.get('asset_ids', [])
+    is_impromptu = bool(body.get('is_impromptu', False))
+    start_time_str = body.get('start_time')
+    end_time_str = body.get('end_time')
+
+    # ── Validate assets ────────────────────────────────────────────
+    if not asset_ids:
+        return JsonResponse({'error': 'At least one asset is required.'}, status=400)
+
+    assets = list(Asset.objects.filter(pk__in=asset_ids))
+    if len(assets) != len(asset_ids):
+        return JsonResponse({'error': 'One or more asset IDs are invalid.'}, status=400)
+
+    # Single track group rule
+    track_assets = [a for a in assets if a.asset_type == Asset.AssetType.TRACK]
+    if len(track_assets) > 1:
+        parents = set()
+        for t in track_assets:
+            parents.add(t.parent_id if t.parent_id else t.pk)
+        if len(parents) > 1:
+            return JsonResponse({'error': 'Only one track group may be selected per reservation.'}, status=400)
+
+    # ── Parse times ────────────────────────────────────────────────
+    start_time = None
+    end_time = None
+
+    if not is_impromptu:
+        if not start_time_str or not end_time_str:
+            return JsonResponse({'error': 'start_time and end_time are required for non-impromptu events.'}, status=400)
+        try:
+            start_time = datetime.fromisoformat(start_time_str.replace('Z', '+00:00'))
+            if timezone.is_naive(start_time):
+                start_time = timezone.make_aware(start_time)
+        except (ValueError, TypeError):
+            return JsonResponse({'error': 'Invalid start_time format.'}, status=400)
+        try:
+            end_time = datetime.fromisoformat(end_time_str.replace('Z', '+00:00'))
+            if timezone.is_naive(end_time):
+                end_time = timezone.make_aware(end_time)
+        except (ValueError, TypeError):
+            return JsonResponse({'error': 'Invalid end_time format.'}, status=400)
+
+        if start_time >= end_time:
+            return JsonResponse({'error': 'End time must be after start time.'}, status=400)
+
+        # Conflict detection (same logic as EventForm.clean)
+        for asset in assets:
+            conflict_ids = asset.conflicting_asset_ids()
+            conflicts = Event.objects.filter(
+                assets__in=conflict_ids,
+                start_time__lt=end_time,
+                end_time__gt=start_time,
+            ).distinct()
+            if conflicts.exists():
+                conflict = conflicts.first()
+                return JsonResponse({
+                    'error': f'Scheduling conflict: "{conflict.title}" already has '
+                             f'a conflicting booking.'
+                }, status=400)
+
+    # ── Create event ───────────────────────────────────────────────
+    ev = Event(
+        title=title,
+        description=description,
+        is_impromptu=is_impromptu,
+        start_time=start_time,
+        end_time=end_time,
+        created_by=request.user,
+        is_approved=True,  # staff-created API events are auto-approved
+    )
+    # Impromptu events are immediately "in progress"
+    if is_impromptu:
+        ev.actual_start = timezone.now()
+    ev.save()
+    ev.assets.set(assets)
+
+    # Inherit radio channel from the track asset (or its parent track)
+    if ev.radio_channel is None and track_assets:
+        track = track_assets[0]
+        channel = track.radio_channel
+        if channel is None and track.parent_id:
+            channel = track.parent.radio_channel
+        if channel is not None:
+            ev.radio_channel = channel
+            ev.save(update_fields=['radio_channel'])
+
+    return JsonResponse({
+        'id': ev.pk,
+        'title': ev.title,
+        'is_impromptu': ev.is_impromptu,
+        'start_time': ev.start_time.isoformat() if ev.start_time else None,
+        'end_time': ev.end_time.isoformat() if ev.end_time else None,
+        'actual_start': ev.actual_start.isoformat() if ev.actual_start else None,
+        'actual_end': ev.actual_end.isoformat() if ev.actual_end else None,
+        'radio_channel': ev.radio_channel,
+        'assets': [
+            {'id': a.pk, 'name': a.name, 'type': a.asset_type}
+            for a in assets
+        ],
+    }, status=201)
 
 
 # ── Feedback ─────────────────────────────────────────────────────────────────

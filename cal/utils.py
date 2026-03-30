@@ -9,7 +9,9 @@ and highlights today's date and weekends with CSS classes.
 from datetime import datetime, timedelta, date as date_type
 from calendar import HTMLCalendar
 
+from django.db.models import Q
 from django.urls import reverse
+from django.utils import timezone
 from django.utils.html import escape
 from django.utils.timezone import localtime
 
@@ -62,19 +64,28 @@ class Calendar(HTMLCalendar):
         in the same sub-row overlap. O(N²), acceptable at this scale.
         Returns (assignments, n_rows) where assignments is a list of (event, row_idx).
         """
+        def _ev_start(ev):
+            """Return effective start time: start_time or actual_start."""
+            return ev.start_time or ev.actual_start
+        def _ev_end(ev):
+            """Return effective end time: end_time or actual_end or now."""
+            return ev.end_time or ev.actual_end or timezone.now()
+        events = [ev for ev in events if _ev_start(ev) and _ev_end(ev)]
         assignments = []
         row_end_times = []
-        for ev in sorted(events, key=lambda e: e.start_time):
+        for ev in sorted(events, key=lambda e: _ev_start(e)):
             placed = False
+            ev_s = _ev_start(ev)
+            ev_e = _ev_end(ev)
             for i, row_end in enumerate(row_end_times):
-                if ev.start_time >= row_end:
+                if ev_s >= row_end:
                     assignments.append((ev, i))
-                    row_end_times[i] = ev.end_time
+                    row_end_times[i] = ev_e
                     placed = True
                     break
             if not placed:
                 assignments.append((ev, len(row_end_times)))
-                row_end_times.append(ev.end_time)
+                row_end_times.append(ev_e)
         return assignments, len(row_end_times)
 
     # ── Month view ─────────────────────────────────────────────────────────
@@ -94,7 +105,11 @@ class Calendar(HTMLCalendar):
         a "+N more" button is rendered; clicking it opens a modal (driven by JS
         in calendar.html) that lists all events for the day with times.
         """
-        events_list = list(events.filter(start_time__day=day).order_by('start_time'))
+        events_list = list(
+            events.filter(
+                Q(start_time__day=day) | Q(is_impromptu=True, actual_start__day=day)
+            ).order_by('start_time', 'actual_start')
+        )
 
         if day != 0:
             is_today = (
@@ -169,9 +184,11 @@ class Calendar(HTMLCalendar):
         Queries events once for the entire month, then passes the queryset
         into each day cell to avoid N+1 queries.
         """
+        # Combine scheduled + impromptu events for the month.
+        # Use Q-based OR so formatday can still call .filter() on the queryset.
         events = self._base_queryset().filter(
-            start_time__year=self.year,
-            start_time__month=self.month,
+            Q(start_time__year=self.year, start_time__month=self.month)
+            | Q(is_impromptu=True, actual_start__year=self.year, actual_start__month=self.month)
         )
         cal  = '<table class="calendar month-table">\n'
         cal += f'{self.formatmonthname(self.year, self.month, withyear=withyear)}\n'
@@ -229,14 +246,28 @@ class Calendar(HTMLCalendar):
             )
 
         # Single query for all track events on this day (both parent + subtrack assets).
-        all_events = list(
-            Event.objects.filter(
-                assets__asset_type=Asset.AssetType.TRACK,
-                start_time__year=day_date.year,
-                start_time__month=day_date.month,
-                start_time__day=day_date.day,
-            ).select_related('created_by').prefetch_related('assets').distinct()
-        )
+        scheduled_events = Event.objects.filter(
+            assets__asset_type=Asset.AssetType.TRACK,
+            start_time__year=day_date.year,
+            start_time__month=day_date.month,
+            start_time__day=day_date.day,
+        ).select_related('created_by').prefetch_related('assets').distinct()
+
+        # Impromptu events (no start_time) — shown on the day they actually started.
+        impromptu_events = Event.objects.filter(
+            is_approved=True,
+            is_impromptu=True,
+            actual_start__date=day_date,
+            assets__asset_type=Asset.AssetType.TRACK,
+        ).select_related('created_by').prefetch_related('assets').distinct()
+
+        # Combine scheduled + impromptu, dedup by pk
+        seen_pks = set()
+        all_events = []
+        for ev in list(scheduled_events) + list(impromptu_events):
+            if ev.pk not in seen_pks:
+                seen_pks.add(ev.pk)
+                all_events.append(ev)
 
         # Build a helper: event_asset_ids[ev.pk] = set of asset PKs for fast lookup
         event_asset_ids = {
@@ -244,9 +275,10 @@ class Calendar(HTMLCalendar):
             for ev in all_events
         }
 
-        if all_events:
-            earliest_dt = localtime(min(ev.start_time for ev in all_events))
-            latest_dt = localtime(max(ev.end_time for ev in all_events))
+        timed_events = [ev for ev in all_events if (ev.start_time and ev.end_time) or ev.actual_start]
+        if timed_events:
+            earliest_dt = localtime(min(ev.start_time or ev.actual_start for ev in timed_events))
+            latest_dt = localtime(max(ev.end_time or ev.actual_end or timezone.now() for ev in timed_events))
             data_earliest = earliest_dt.hour * 60 + earliest_dt.minute
             data_latest = latest_dt.hour * 60 + latest_dt.minute
         else:
@@ -277,14 +309,30 @@ class Calendar(HTMLCalendar):
             When an event has actual_start/actual_end, two blocks are returned:
             a ghost (scheduled) bar and a solid (actual) bar.  Otherwise a
             single solid bar is returned for the scheduled time.
+
+            Impromptu events (no start_time/end_time) use actual_start for
+            positioning, and actual_end or now() for the end.
             """
-            local_start = localtime(ev.start_time)
-            local_end   = localtime(ev.end_time)
+            # For impromptu events, use actual times for positioning
+            if ev.start_time is None:
+                if ev.actual_start is None:
+                    return ''  # Can't render without any time reference
+                effective_start = ev.actual_start
+                effective_end = ev.actual_end or timezone.now()
+                local_start = localtime(effective_start)
+                local_end   = localtime(effective_end)
+            elif ev.end_time is None:
+                return ''
+            else:
+                local_start = localtime(ev.start_time)
+                local_end   = localtime(ev.end_time)
             origin    = local_start.replace(hour=GANTT_START, minute=0, second=0, microsecond=0)
             edit_url  = reverse('cal:event_edit', args=(ev.id,))
             base_css  = self._event_classes(ev) + (f' {extra_css}' if extra_css else '')
+            if getattr(ev, 'is_impromptu', False):
+                base_css += ' event-impromptu'
             color_style = f'background:{track_color};' if track_color else ''
-            end_iso   = ev.end_time.isoformat()
+            end_iso   = (ev.end_time or ev.actual_end or timezone.now()).isoformat()
             creator_name = escape(ev.created_by.username) if ev.created_by else ''
             creator_attr = f' data-creator="{creator_name}"' if creator_name else ''
             title_suffix = f' — {creator_name}' if creator_name else ''
@@ -300,12 +348,14 @@ class Calendar(HTMLCalendar):
 
             parts = []
 
+            is_impromptu = getattr(ev, 'is_impromptu', False)
+
             if width_m > 0:
                 left_pct  = round(start_off / GANTT_MINS * 100, 4)
                 width_pct = round(width_m   / GANTT_MINS * 100, 4)
-                t_start   = self._fmt_time(ev.start_time)
-                t_end     = self._fmt_time(ev.end_time)
-                ghost_cls = ' gantt-block--ghost' if has_actual else ''
+                t_start   = self._fmt_time(ev.start_time or ev.actual_start)
+                t_end     = self._fmt_time(ev.end_time or ev.actual_end or timezone.now())
+                ghost_cls = ' gantt-block--ghost' if (has_actual and not is_impromptu) else ''
                 parts.append(
                     f'<a class="gantt-block {base_css}{ghost_cls}" href="{edit_url}"'
                     f' style="left:{left_pct}%;width:{width_pct}%;{color_style}"'
@@ -317,9 +367,11 @@ class Calendar(HTMLCalendar):
                 )
 
             # --- actual bar (solid) ---
-            if has_actual:
-                act_start = localtime(ev.actual_start or ev.start_time)
-                act_end   = localtime(ev.actual_end or ev.end_time)
+            if has_actual and not is_impromptu:
+                act_start = localtime(ev.actual_start) if ev.actual_start else (localtime(ev.start_time) if ev.start_time else None)
+                act_end   = localtime(ev.actual_end) if ev.actual_end else (localtime(ev.end_time) if ev.end_time else localtime(timezone.now()))
+                if act_start is None or act_end is None:
+                    return ''.join(parts)
                 a_start_off = max(0, int((act_start - origin).total_seconds()) // 60)
                 a_end_off   = min(GANTT_MINS, int((act_end - origin).total_seconds()) // 60)
                 a_width_m   = max(0, a_end_off - a_start_off)
@@ -352,8 +404,8 @@ class Calendar(HTMLCalendar):
 
                 # Events booked directly on the parent (full-track)
                 parent_events = sorted(
-                    [ev for ev in all_events if track.pk in event_asset_ids[ev.pk]],
-                    key=lambda ev: ev.start_time,
+                    [ev for ev in all_events if track.pk in event_asset_ids[ev.pk] and (ev.start_time or ev.actual_start)],
+                    key=lambda ev: ev.start_time or ev.actual_start,
                 )
                 n_sub = len(subtracks)
 
@@ -362,8 +414,8 @@ class Calendar(HTMLCalendar):
                 subtrack_names_html = ''
                 for sub in subtracks:
                     sub_events = sorted(
-                        [ev for ev in all_events if sub.pk in event_asset_ids[ev.pk]],
-                        key=lambda ev: ev.start_time,
+                        [ev for ev in all_events if sub.pk in event_asset_ids[ev.pk] and (ev.start_time or ev.actual_start)],
+                        key=lambda ev: ev.start_time or ev.actual_start,
                     )
                     assigned, n_rows = self._assign_rows(sub_events)
                     row_buckets = [[] for _ in range(max(n_rows, 1))]
@@ -402,8 +454,8 @@ class Calendar(HTMLCalendar):
             else:
                 # ── Track without subtracks (original behaviour) ──────
                 track_events = sorted(
-                    [ev for ev in all_events if track.pk in event_asset_ids[ev.pk]],
-                    key=lambda ev: ev.start_time,
+                    [ev for ev in all_events if track.pk in event_asset_ids[ev.pk] and (ev.start_time or ev.actual_start)],
+                    key=lambda ev: ev.start_time or ev.actual_start,
                 )
                 assigned, n_rows = self._assign_rows(track_events)
 
@@ -472,13 +524,28 @@ class Calendar(HTMLCalendar):
         )
 
         # Single query for all track-related events this week.
-        events = list(
-            Event.objects.filter(
-                assets__asset_type=Asset.AssetType.TRACK,
-                start_time__date__gte=start,
-                start_time__date__lte=end,
-            ).select_related('created_by').prefetch_related('assets').distinct()
-        )
+        scheduled_wk = Event.objects.filter(
+            assets__asset_type=Asset.AssetType.TRACK,
+            start_time__date__gte=start,
+            start_time__date__lte=end,
+        ).select_related('created_by').prefetch_related('assets').distinct()
+
+        # Impromptu events this week (no start_time, use actual_start).
+        impromptu_wk = Event.objects.filter(
+            is_approved=True,
+            is_impromptu=True,
+            actual_start__date__gte=start,
+            actual_start__date__lte=end,
+            assets__asset_type=Asset.AssetType.TRACK,
+        ).select_related('created_by').prefetch_related('assets').distinct()
+
+        # Combine scheduled + impromptu, dedup by pk
+        _seen_wk = set()
+        events = []
+        for _ev in list(scheduled_wk) + list(impromptu_wk):
+            if _ev.pk not in _seen_wk:
+                _seen_wk.add(_ev.pk)
+                events.append(_ev)
 
         # Build a lookup: event_asset_ids[ev.pk] = set of asset PKs
         event_asset_ids = {
@@ -515,10 +582,13 @@ class Calendar(HTMLCalendar):
             return sorted(
                 [
                     ev for ev in events
-                    if localtime(ev.start_time).date() == day
+                    if (
+                        (ev.start_time and localtime(ev.start_time).date() == day)
+                        or (ev.is_impromptu and ev.actual_start and localtime(ev.actual_start).date() == day)
+                    )
                     and asset_pk in event_asset_ids[ev.pk]
                 ],
-                key=lambda ev: ev.start_time,
+                key=lambda ev: ev.start_time or ev.actual_start,
             )
 
         def _cell_html(day_evs, td_cls):
@@ -555,7 +625,7 @@ class Calendar(HTMLCalendar):
                 all_pks = [track.pk] + [s.pk for s in subtracks]
                 day_evs = sorted(
                     {ev for pk in all_pks for ev in _day_events_for_asset(pk, day)},
-                    key=lambda ev: ev.start_time,
+                    key=lambda ev: ev.start_time or ev.actual_start or datetime.max,
                 )
                 row += _cell_html(day_evs, td_cls)
             body_rows += f'<tr>{row}</tr>'

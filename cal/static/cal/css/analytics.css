@@ -166,6 +166,32 @@
   font-size: 0.9rem;
 }
 
+/* ── Section Divider ── */
+.section-divider {
+  margin: 40px 0 24px;
+  padding-top: 32px;
+  border-top: 2px solid #e9ecef;
+}
+
+.section-title {
+  font-size: 1.3rem;
+  font-weight: 600;
+  margin: 0 0 4px;
+  color: inherit;
+}
+
+.section-title i {
+  margin-right: 8px;
+  opacity: 0.7;
+  color: #f59e0b;
+}
+
+.section-subtitle {
+  font-size: 0.85rem;
+  color: #6c757d;
+  margin: 0 0 16px;
+}
+
 /* ── Dark Theme ── */
 .dark-theme .range-btn {
   background: #2d3748;
@@ -196,6 +222,14 @@
 
 .dark-theme .stat-icon {
   background: rgba(46,168,229,0.12);
+}
+
+.dark-theme .section-divider {
+  border-top-color: #2d3748;
+}
+
+.dark-theme .section-subtitle {
+  color: #a0aec0;
 }
 
 .dark-theme .stat-label,

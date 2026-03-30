@@ -1,0 +1,410 @@
+[
+{
+  "model": "users.user",
+  "pk": 1,
+  "fields": {
+    "password": "pbkdf2_sha256$1000000$HsX53hVtIsgkxS5v89q3aS$ngNcH3XjZYtMhiBFa6CvcNqmxNiWKho7gyUtBZQW+AA=",
+    "last_login": "2026-03-24T22:39:23.766Z",
+    "is_superuser": true,
+    "username": "admin",
+    "first_name": "",
+    "last_name": "",
+    "email": "",
+    "is_staff": true,
+    "is_active": true,
+    "date_joined": "2026-03-24T20:42:51.920Z",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "users.user",
+  "pk": 2,
+  "fields": {
+    "password": "pbkdf2_sha256$1000000$VAFVvIAUHeM3YJRiYe9tdj$kHbruTi2aNeyIN8pNzB8uaBc7VLs5DMiNRoiOkeBoUA=",
+    "last_login": "2026-03-24T21:18:22.403Z",
+    "is_superuser": false,
+    "username": "kolter",
+    "first_name": "",
+    "last_name": "",
+    "email": "",
+    "is_staff": true,
+    "is_active": true,
+    "date_joined": "2026-03-24T21:01:07.221Z",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "cal.asset",
+  "pk": 20,
+  "fields": {
+    "name": "Main",
+    "asset_type": "track",
+    "description": "",
+    "color": "#dc2626",
+    "parent": null,
+    "radio_channel": null
+  }
+},
+{
+  "model": "cal.asset",
+  "pk": 21,
+  "fields": {
+    "name": "South",
+    "asset_type": "track",
+    "description": "",
+    "color": "#ea580c",
+    "parent": 20,
+    "radio_channel": null
+  }
+},
+{
+  "model": "cal.asset",
+  "pk": 22,
+  "fields": {
+    "name": "North",
+    "asset_type": "track",
+    "description": "",
+    "color": "#d97706",
+    "parent": 20,
+    "radio_channel": null
+  }
+},
+{
+  "model": "cal.asset",
+  "pk": 23,
+  "fields": {
+    "name": "Figure Eight",
+    "asset_type": "track",
+    "description": "",
+    "color": "#ca8a04",
+    "parent": null,
+    "radio_channel": null
+  }
+},
+{
+  "model": "cal.asset",
+  "pk": 24,
+  "fields": {
+    "name": "South",
+    "asset_type": "track",
+    "description": "",
+    "color": "#65a30d",
+    "parent": 23,
+    "radio_channel": null
+  }
+},
+{
+  "model": "cal.asset",
+  "pk": 25,
+  "fields": {
+    "name": "North",
+    "asset_type": "track",
+    "description": "",
+    "color": "#16a34a",
+    "parent": 23,
+    "radio_channel": null
+  }
+},
+{
+  "model": "cal.asset",
+  "pk": 26,
+  "fields": {
+    "name": "Mining Loop",
+    "asset_type": "track",
+    "description": "",
+    "color": "#059669",
+    "parent": null,
+    "radio_channel": null
+  }
+},
+{
+  "model": "cal.asset",
+  "pk": 27,
+  "fields": {
+    "name": "Loop",
+    "asset_type": "track",
+    "description": "",
+    "color": "#0d9488",
+    "parent": 26,
+    "radio_channel": null
+  }
+},
+{
+  "model": "cal.asset",
+  "pk": 28,
+  "fields": {
+    "name": "Pad",
+    "asset_type": "track",
+    "description": "",
+    "color": "#0891b2",
+    "parent": 26,
+    "radio_channel": null
+  }
+},
+{
+  "model": "cal.asset",
+  "pk": 29,
+  "fields": {
+    "name": "Dirt Track",
+    "asset_type": "track",
+    "description": "",
+    "color": "#0284c7",
+    "parent": null,
+    "radio_channel": null
+  }
+},
+{
+  "model": "cal.asset",
+  "pk": 30,
+  "fields": {
+    "name": "Upper",
+    "asset_type": "track",
+    "description": "",
+    "color": "#2563eb",
+    "parent": 29,
+    "radio_channel": null
+  }
+},
+{
+  "model": "cal.asset",
+  "pk": 31,
+  "fields": {
+    "name": "Lower",
+    "asset_type": "track",
+    "description": "",
+    "color": "#4f46e5",
+    "parent": 29,
+    "radio_channel": null
+  }
+},
+{
+  "model": "cal.asset",
+  "pk": 32,
+  "fields": {
+    "name": "West Field",
+    "asset_type": "track",
+    "description": "",
+    "color": "#7c3aed",
+    "parent": null,
+    "radio_channel": null
+  }
+},
+{
+  "model": "cal.asset",
+  "pk": 33,
+  "fields": {
+    "name": "South",
+    "asset_type": "track",
+    "description": "",
+    "color": "#9333ea",
+    "parent": 32,
+    "radio_channel": null
+  }
+},
+{
+  "model": "cal.asset",
+  "pk": 34,
+  "fields": {
+    "name": "North",
+    "asset_type": "track",
+    "description": "",
+    "color": "#c026d3",
+    "parent": 32,
+    "radio_channel": null
+  }
+},
+{
+  "model": "cal.asset",
+  "pk": 38,
+  "fields": {
+    "name": "Vineyard",
+    "asset_type": "track",
+    "description": "",
+    "color": "#d97706",
+    "parent": null,
+    "radio_channel": null
+  }
+},
+{
+  "model": "cal.asset",
+  "pk": 40,
+  "fields": {
+    "name": "South Field",
+    "asset_type": "track",
+    "description": "",
+    "color": "#65a30d",
+    "parent": null,
+    "radio_channel": null
+  }
+},
+{
+  "model": "cal.asset",
+  "pk": 45,
+  "fields": {
+    "name": "ADT",
+    "asset_type": "vehicle",
+    "description": "",
+    "color": "",
+    "parent": null,
+    "radio_channel": null
+  }
+},
+{
+  "model": "cal.asset",
+  "pk": 46,
+  "fields": {
+    "name": "AWT",
+    "asset_type": "vehicle",
+    "description": "",
+    "color": "",
+    "parent": null,
+    "radio_channel": null
+  }
+},
+{
+  "model": "cal.asset",
+  "pk": 47,
+  "fields": {
+    "name": "Wheel Loader",
+    "asset_type": "vehicle",
+    "description": "",
+    "color": "",
+    "parent": null,
+    "radio_channel": null
+  }
+},
+{
+  "model": "cal.asset",
+  "pk": 48,
+  "fields": {
+    "name": "Dozer",
+    "asset_type": "vehicle",
+    "description": "",
+    "color": "",
+    "parent": null,
+    "radio_channel": null
+  }
+},
+{
+  "model": "cal.asset",
+  "pk": 49,
+  "fields": {
+    "name": "Telehandler",
+    "asset_type": "vehicle",
+    "description": "",
+    "color": "",
+    "parent": null,
+    "radio_channel": null
+  }
+},
+{
+  "model": "cal.asset",
+  "pk": 50,
+  "fields": {
+    "name": "Reach Stacker",
+    "asset_type": "vehicle",
+    "description": "",
+    "color": "",
+    "parent": null,
+    "radio_channel": null
+  }
+},
+{
+  "model": "cal.asset",
+  "pk": 51,
+  "fields": {
+    "name": "Compactor",
+    "asset_type": "vehicle",
+    "description": "",
+    "color": "",
+    "parent": null,
+    "radio_channel": null
+  }
+},
+{
+  "model": "cal.asset",
+  "pk": 53,
+  "fields": {
+    "name": "Terberg",
+    "asset_type": "vehicle",
+    "description": "",
+    "color": "",
+    "parent": null,
+    "radio_channel": null
+  }
+},
+{
+  "model": "cal.asset",
+  "pk": 55,
+  "fields": {
+    "name": "RT250 Autocar",
+    "asset_type": "vehicle",
+    "description": "",
+    "color": "",
+    "parent": null,
+    "radio_channel": null
+  }
+},
+{
+  "model": "cal.asset",
+  "pk": 56,
+  "fields": {
+    "name": "Gravel Pad",
+    "asset_type": "track",
+    "description": "",
+    "color": "#0d9488",
+    "parent": 20,
+    "radio_channel": null
+  }
+},
+{
+  "model": "cal.asset",
+  "pk": 57,
+  "fields": {
+    "name": "Pinky",
+    "asset_type": "vehicle",
+    "description": "",
+    "color": "",
+    "parent": null,
+    "radio_channel": null
+  }
+},
+{
+  "model": "cal.asset",
+  "pk": 58,
+  "fields": {
+    "name": "Brain",
+    "asset_type": "vehicle",
+    "description": "",
+    "color": "",
+    "parent": null,
+    "radio_channel": null
+  }
+},
+{
+  "model": "cal.asset",
+  "pk": 59,
+  "fields": {
+    "name": "8R",
+    "asset_type": "vehicle",
+    "description": "",
+    "color": "",
+    "parent": null,
+    "radio_channel": null
+  }
+},
+{
+  "model": "cal.asset",
+  "pk": 60,
+  "fields": {
+    "name": "9R",
+    "asset_type": "vehicle",
+    "description": "",
+    "color": "",
+    "parent": null,
+    "radio_channel": null
+  }
+}
+]

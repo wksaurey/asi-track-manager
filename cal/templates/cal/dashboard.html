@@ -1,62 +1,23 @@
+{% extends 'base.html' %}
 {% load static %}
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <title>ASI Control Center</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="csrf-token" content="{{ csrf_token }}" />
-    <link rel="icon" type="image/x-icon" href="{% static 'cal/img/ASI_Logo.svg' %}" />
-    <link rel="stylesheet" href="{% static 'cal/css/dashboard.css' %}" />
-  </head>
-  <body>
+
+{% block title %}ASI Control Center{% endblock %}
+
+{% block extra_css %}
+  <link rel="stylesheet" href="{% static 'cal/css/dashboard.css' %}" />
+{% endblock %}
+
+{% block extra_head %}
+  <meta name="csrf-token" content="{{ csrf_token }}" />
+  <link rel="icon" type="image/x-icon" href="{% static 'cal/img/ASI_Logo.svg' %}" />
+{% endblock %}
+
+{% block content %}
 
     <header class="app-header">
       <div class="title-row">
-        <img src="{% static 'cal/img/ASI_Logo.svg' %}" class="ASI-logo" alt="ASI Logo" />
         <h1 class="brand-title">ASI Control Center</h1>
-
-        <div class="header-actions">
-          <a href="/cal/calendar/" class="back-link" title="Back to Calendar">&#8592; Calendar</a>
-
-          <div class="hamburger-wrap" id="headerHamburger">
-            <button class="hamburger-btn" aria-label="Open menu" aria-haspopup="true" aria-expanded="false">&#9776;</button>
-            <div class="hamburger-menu" role="menu" aria-hidden="true">
-              <button id="exportBtn" class="menu-item" role="menuitem">Export JSON</button>
-              <label for="importInput" class="menu-item" role="menuitem" tabindex="0">
-                Import JSON
-                <input id="importInput" type="file" accept="application/json" hidden />
-              </label>
-              <hr class="menu-sep" />
-              <button id="reloadBtn" class="menu-item" role="menuitem">Reload from Server</button>
-            </div>
-          </div>
-        </div>
       </div>
-
-      <!-- View tabs -->
-      <div class="view-tabs">
-        <button class="view-tab active" data-view="tracks">Tracks</button>
-        <button class="view-tab" data-view="timeline">Timeline</button>
-      </div>
-
-      <!-- Controls row (Tracks view) -->
-      <div class="controls-row" id="tracksControls">
-        <div class="search-wrap">
-          <label for="searchInput">Filter by person / text</label>
-          <input id="searchInput" type="text" placeholder="e.g., Hollis, Cody, Dozer, Water Truck..." />
-        </div>
-        <form id="addTrackForm" class="add-track-form add-track-form--stacked" autocomplete="off">
-          <div class="form-field">
-            <label for="newTrackName" class="field-label">Add Track</label>
-            <input id="newTrackName" type="text" placeholder="Track name (e.g., East Loop)" required />
-          </div>
-          <button type="submit" class="btn">Add</button>
-        </form>
-      </div>
-
-      <!-- Timeline controls (empty placeholder, reserved for future use) -->
-      <div class="hidden" id="timelineControls"></div>
     </header>
 
     <!-- Date navigation bar -->
@@ -74,13 +35,10 @@
       <div id="tracksView">
         <div id="tracksGrid" class="grid"></div>
       </div>
-      <div id="timelineView" class="hidden">
-        <div id="timelineContainer"></div>
-      </div>
     </main>
 
     <footer class="app-footer">
-      <small>Track data is loaded from the server. Use Export JSON to back up or move the day's log between devices.</small>
+      <small>Track data is loaded from the server and updates automatically.</small>
     </footer>
 
 
@@ -92,47 +50,20 @@
       <section class="track-card">
         <div class="track-card__inner">
           <header class="track-card__header">
-            <button class="channel-badge" title="Click to set channel">&#8212;</button>
+            <select class="radio-channel-select" title="Assign radio channel">
+              <option value="">Radio Ch</option>
+              <option value="11">Ch 11</option>
+              <option value="12">Ch 12</option>
+              <option value="13">Ch 13</option>
+              <option value="14">Ch 14</option>
+              <option value="15">Ch 15</option>
+              <option value="16">Ch 16</option>
+            </select>
             <h2 class="track-name"></h2>
             <div class="track-actions">
               <button class="icon-btn add-event-btn" title="Add event">&#xff0b;</button>
-              <div class="menu-wrap">
-                <button class="menu-btn">&#8942;</button>
-                <div class="menu">
-                  <button class="menu-item add-note-toggle">Add Note</button>
-                  <button class="menu-item delete-track">Delete Track</button>
-                </div>
-              </div>
             </div>
           </header>
-
-          <div class="track-add-forms">
-            <form class="event-form hidden" autocomplete="off">
-              <div class="row">
-                <label>Time</label>
-                <input name="time" type="text" placeholder="e.g., 9:01-~11:30 or 10:21" required />
-              </div>
-              <div class="row">
-                <label>Description</label>
-                <input name="desc" type="text" placeholder="What is happening?" required />
-              </div>
-              <div class="row form-actions">
-                <button type="submit" class="btn">Add Event</button>
-                <button type="button" class="btn btn-outline cancel-event">Cancel</button>
-              </div>
-            </form>
-
-            <form class="note-form hidden" autocomplete="off">
-              <div class="row">
-                <label>Note</label>
-                <input name="note" type="text" placeholder="Quick note for this track..." required />
-              </div>
-              <div class="row form-actions">
-                <button type="submit" class="btn">Add Note</button>
-                <button type="button" class="btn btn-outline cancel-note">Cancel</button>
-              </div>
-            </form>
-          </div>
 
           <div class="track-content">
             <ol class="events-list"></ol>
@@ -140,18 +71,36 @@
               <h3>Notes</h3>
               <ul class="notes-list"></ul>
             </div>
+            <div class="subtracks-container"></div>
           </div>
         </div>
       </section>
     </template>
 
-    <!-- Channel badge added to event-main -->
+    <template id="subtrackSectionTemplate">
+      <div class="subtrack-section">
+        <div class="subtrack-header">
+          <select class="radio-channel-select radio-channel-select--sub" title="Assign radio channel">
+            <option value="">Radio Ch</option>
+            <option value="11">Ch 11</option>
+            <option value="12">Ch 12</option>
+            <option value="13">Ch 13</option>
+            <option value="14">Ch 14</option>
+            <option value="15">Ch 15</option>
+            <option value="16">Ch 16</option>
+          </select>
+          <span class="subtrack-name"></span>
+          <button class="icon-btn icon-btn--sm subtrack-add-btn" title="Add event to this subtrack">&#xff0b;</button>
+        </div>
+        <ol class="events-list subtrack-events-list"></ol>
+      </div>
+    </template>
+
     <template id="eventItemTemplate">
       <li class="event-item">
         <div class="event-main">
           <span class="time-chip"></span>
           <div class="event-text"></div>
-          <button class="event-channel-badge" title="Click to set channel">&#8212;</button>
         </div>
         <div class="event-actions">
           <button class="btn btn-xxs add-subnote">+ Sub-note</button>
@@ -172,6 +121,40 @@
       </li>
     </template>
 
-    <script src="{% static 'cal/js/dashboard.js' %}"></script>
-  </body>
-</html>
+    <input type="hidden" id="currentUserName" value="{{ request.user.username }}" />
+
+    <!-- Impromptu event creation modal -->
+    <div id="eventPopup" class="event-popup-overlay" hidden>
+      <div class="event-popup-box" id="eventPopupBox">
+        <div class="event-popup__header">
+          <div>
+            <h2 class="event-popup__title">New Impromptu Event</h2>
+            <div class="event-popup__track" id="eventModalTrackName"></div>
+          </div>
+          <button type="button" class="event-popup__close" aria-label="Close">&times;</button>
+        </div>
+        <form id="eventModalForm" autocomplete="off">
+          <input type="hidden" id="modalTrackId" value="" />
+          <div class="modal-field">
+            <label for="modalTitle">Title</label>
+            <input id="modalTitle" name="title" type="text" placeholder="Event title" required />
+          </div>
+          <div class="modal-field">
+            <label for="modalDesc">Description</label>
+            <textarea id="modalDesc" name="description" rows="3" placeholder="Optional details"></textarea>
+          </div>
+          <div id="modalError" class="modal-error" hidden></div>
+          <div class="modal-actions">
+            <a id="modalFullFormLink" href="#" class="modal-full-form-link">Open full form &rarr;</a>
+            <button type="button" class="btn btn-outline" id="eventModalCancel">Cancel</button>
+            <button type="submit" class="btn" id="eventModalSubmit">Create</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+{% endblock %}
+
+{% block script %}
+  <script src="{% static 'cal/js/dashboard.js' %}"></script>
+{% endblock %}

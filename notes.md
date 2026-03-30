@@ -108,3 +108,15 @@
 # Notes
 - Should I include the workbays as tracks?
 - Should a reservation be able to be used by multiple users?
+
+## Implementation Notes
+
+These notes bridge the original spec above to the actual implementation.
+
+- **Unified Asset model:** Assets are implemented as a single `Asset` model with an `asset_type` field (choices: TRACK, VEHICLE, OPERATOR) rather than separate Track and Vehicle models as originally planned.
+- **App structure:** Two apps were implemented — `cal` (calendar UI, events, assets, approval workflow) and `users` (auth/registration) — rather than the originally planned `reservations`, `asi-assets`, and `calendar` split.
+- **Operators as first-class assets:** Operators (human test operators) were added as a first-class asset type alongside vehicles and tracks.
+- **Admin approval workflow:** User-created events default to pending and require admin approval before they are confirmed. Admin-created events are auto-approved. This replaces the original "no approvals required yet" stance.
+- **Events vs. Reservations:** The domain model uses "Event" rather than "Reservation" throughout the codebase, reflecting the calendar-centric UI.
+- **Subtrack support:** Tracks can have a parent track, enabling hierarchical track structures (e.g., "North Main" as a parent with "Left Lane" and "Right Lane" as subtracks).
+- **Conflict detection:** Booking a parent track conflicts with all its subtracks (and vice versa); booking a subtrack conflicts with its parent and any other booking of itself.

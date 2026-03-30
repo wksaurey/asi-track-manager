@@ -11,6 +11,17 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 from pathlib import Path
+import os
+
+# Load .env file if present (production deploys without python-dotenv)
+_env_file = Path(__file__).resolve().parent.parent / '.env'
+if _env_file.is_file():
+    with open(_env_file) as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith('#') and '=' in line:
+                key, _, value = line.partition('=')
+                os.environ.setdefault(key.strip(), value.strip())
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -20,12 +31,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-@v@q(+k%aviz8#h&wbfkpm&ovh$kpnh39o6%u)@ul3u-%ean7+'
+SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-local-dev-key-replace-in-production')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
 
 # Application definition
@@ -43,6 +54,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -78,7 +90,7 @@ WSGI_APPLICATION = 'asi_track_manager.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'NAME': os.environ.get('DB_PATH', BASE_DIR / 'db.sqlite3'),
     }
 }
 
@@ -94,7 +106,7 @@ AUTH_PASSWORD_VALIDATORS = []
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'America/New_York'
 
 USE_I18N = True
 
@@ -104,7 +116,21 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+if not DEBUG:
+    STORAGES = {
+        "staticfiles": {
+            "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+        },
+    }
+
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+CSRF_TRUSTED_ORIGINS = os.environ.get(
+    'CSRF_TRUSTED_ORIGINS', 'http://localhost'
+).split(',')
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
@@ -112,6 +138,10 @@ STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 AUTH_USER_MODEL = 'users.User'
+
+AUTHENTICATION_BACKENDS = [
+    'users.backends.CaseInsensitiveModelBackend',
+]
 
 LOGIN_URL = '/users/login/'
 LOGIN_REDIRECT_URL = '/cal/calendar/'

@@ -3,6 +3,106 @@
 
 {% block title %}{{ page_title }}{% endblock %}
 
+{% block script %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const typeSelect  = document.getElementById('id_asset_type');
+  const parentField = document.getElementById('id_parent');
+  const colorInput  = document.getElementById('id_color');
+  const colorSwatch = document.getElementById('color-swatch');
+  const colorPopover = document.getElementById('color-popover');
+  const colorLabel  = document.getElementById('color-swatch-label');
+
+  const PALETTE = [
+    // Reds / oranges / yellows
+    '#dc2626','#ea580c','#d97706','#ca8a04',
+    // Greens
+    '#65a30d','#16a34a','#059669','#0d9488',
+    // Blues
+    '#0891b2','#0284c7','#2563eb','#4f46e5',
+    // Purples / pinks
+    '#7c3aed','#9333ea','#c026d3','#db2777',
+  ];
+
+  // Build popover swatches
+  if (colorPopover) {
+    PALETTE.forEach(hex => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'color-popover-swatch';
+      btn.style.background = hex;
+      btn.title = hex;
+      btn.addEventListener('click', () => {
+        setColor(hex);
+        closePopover();
+      });
+      colorPopover.appendChild(btn);
+    });
+  }
+
+  function setColor(hex) {
+    if (colorInput)  colorInput.value = hex;
+    if (colorSwatch) colorSwatch.style.background = hex;
+    if (colorLabel)  colorLabel.textContent = hex;
+    updateSelectedSwatch();
+  }
+
+  function updateSelectedSwatch() {
+    const current = colorInput ? colorInput.value : '';
+    colorPopover && colorPopover.querySelectorAll('.color-popover-swatch').forEach(btn => {
+      btn.classList.toggle('selected', btn.title === current);
+    });
+  }
+
+  function openPopover() {
+    if (!colorPopover) return;
+    colorPopover.hidden = false;
+    colorSwatch && colorSwatch.setAttribute('aria-expanded', 'true');
+    updateSelectedSwatch();
+  }
+
+  function closePopover() {
+    if (!colorPopover) return;
+    colorPopover.hidden = true;
+    colorSwatch && colorSwatch.setAttribute('aria-expanded', 'false');
+  }
+
+  colorSwatch && colorSwatch.addEventListener('click', (e) => {
+    e.stopPropagation();
+    colorPopover.hidden ? openPopover() : closePopover();
+  });
+
+  document.addEventListener('click', (e) => {
+    if (colorPopover && !colorPopover.hidden && !colorPopover.contains(e.target) && e.target !== colorSwatch) {
+      closePopover();
+    }
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closePopover();
+  });
+
+  // Initialise swatch from current value
+  if (colorInput && colorInput.value) {
+    setColor(colorInput.value);
+  }
+
+  // Show/hide track-only rows based on asset type
+  const parentRow = parentField ? parentField.closest('tr') : null;
+  const colorRow  = document.getElementById('color-row');
+
+  function updateTrackRows() {
+    const isTrack = typeSelect && typeSelect.value === 'track';
+    if (parentRow) parentRow.style.display = isTrack ? '' : 'none';
+    if (colorRow)  colorRow.style.display  = isTrack ? '' : 'none';
+  }
+
+  typeSelect && typeSelect.addEventListener('change', updateTrackRows);
+  updateTrackRows();
+});
+</script>
+{% endblock %}
+
 {% block content %}
 <div class="page-container form-page">
 
@@ -26,7 +126,7 @@
   <form method="post" class="asset-form">
     {% csrf_token %}
     <table class="form-table">
-      {% for field in form %}
+      {% for field in form %}{% if field.html_name != 'color' %}
       <tr>
         <td><label for="{{ field.id_for_label }}">{{ field.label }}</label></td>
         <td>
@@ -36,7 +136,21 @@
           {% endif %}
         </td>
       </tr>
-      {% endfor %}
+      {% endif %}{% endfor %}
+      {{ form.color }}
+      <tr id="color-row">
+        <td><label>Track Color</label></td>
+        <td>
+          <div class="color-picker-wrap">
+            <button type="button" id="color-swatch" class="color-swatch-btn"
+                    style="background:{{ form.instance.color|default:'#3b82f6' }};"
+                    aria-label="Pick color" aria-haspopup="true" aria-expanded="false"></button>
+            <span id="color-swatch-label" class="color-swatch-label">{{ form.instance.color|default:'#3b82f6' }}</span>
+            <div id="color-popover" class="color-popover" hidden></div>
+          </div>
+          <small class="field-help">Click the swatch to change this track's color.</small>
+        </td>
+      </tr>
     </table>
     <div class="form-actions">
       <button type="submit" class="btn">
@@ -49,6 +163,44 @@
       {% endif %}
     </div>
   </form>
+
+  {% if subtracks is not None %}
+  <div class="subtracks-section">
+    <div class="subtracks-section-header">
+      <h3 class="section-heading" style="margin:0;">Subtracks</h3>
+      <a class="btn btn-sm" href="{% url 'cal:asset_create' %}?parent={{ asset.id }}">
+        <i class="fas fa-plus"></i> Add Subtrack
+      </a>
+    </div>
+    {% if subtracks %}
+    <div class="asset-card-group">
+      {% for sub in subtracks %}
+      <div class="asset-card">
+        <form class="asset-card-delete-form" method="post" action="{% url 'cal:asset_delete' sub.id %}"
+              onsubmit="return confirmDelete(this, 'Delete subtrack &quot;{{ sub.name|escapejs }}&quot;? This cannot be undone.')">
+          {% csrf_token %}
+          <button type="submit" class="asset-card-delete-btn" title="Delete {{ sub.name|escapejs }}">&times;</button>
+        </form>
+        <div class="asset-card-body">
+          <strong class="asset-card-name">{{ sub.name }}</strong>
+          {% if sub.description %}<p class="asset-card-desc">{{ sub.description }}</p>{% endif %}
+        </div>
+        <div class="asset-card-actions">
+          <a class="btn btn-sm" href="{% url 'cal:asset_detail' sub.id %}">
+            <i class="fas fa-calendar-check"></i> Schedule
+          </a>
+          <a class="btn btn-sm btn-secondary" href="{% url 'cal:asset_edit' sub.id %}">
+            <i class="fas fa-edit"></i> Edit
+          </a>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="field-help">No subtracks yet.</p>
+    {% endif %}
+  </div>
+  {% endif %}
 
 </div>
 {% endblock %}

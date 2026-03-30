@@ -2089,3 +2089,206 @@ class DarkModeDashboardCSSTest(TestCase):
                 selector, self.css,
                 f"dashboard.css missing dark-theme rule for: {selector}"
             )
+
+
+# ── Impromptu Event Tests ─────────────────────────────────────────────────────
+
+class ImpromptuEventTests(TestCase):
+    """Tests for the is_impromptu feature: API creation, conflict exclusion,
+    model property, and dashboard serialization."""
+
+    def setUp(self):
+        self.staff = User.objects.create_user(
+            username='impstaff', password='Testpass123!', is_staff=True
+        )
+        self.regular = User.objects.create_user(
+            username='impuser', password='Testpass123!'
+        )
+        self.track = Asset.objects.create(
+            name='Impromptu Track', asset_type=Asset.AssetType.TRACK
+        )
+        self.create_url = reverse('cal:api_event_create')
+        self.dashboard_url = reverse('cal:dashboard_events_api')
+
+    # ── 1. Successful impromptu creation ──────────────────────────────
+
+    def test_api_create_impromptu_event_returns_201(self):
+        """POST with is_impromptu=true and no times should return 201."""
+        self.client.login(username='impstaff', password='Testpass123!')
+        resp = self.client.post(self.create_url, json.dumps({
+            'title': 'Quick Test',
+            'asset_ids': [self.track.pk],
+            'is_impromptu': True,
+        }), content_type='application/json')
+        self.assertEqual(resp.status_code, 201)
+        data = resp.json()
+        self.assertEqual(data['title'], 'Quick Test')
+        self.assertTrue(data['is_impromptu'])
+        self.assertIsNone(data['start_time'])
+        self.assertIsNone(data['end_time'])
+        # Verify event exists in DB
+        ev = Event.objects.get(pk=data['id'])
+        self.assertTrue(ev.is_impromptu)
+        self.assertTrue(ev.is_approved)
+
+    # ── 2. Requires login ─────────────────────────────────────────────
+
+    def test_api_create_anonymous_returns_302(self):
+        """Anonymous POST to create API should redirect to login."""
+        resp = self.client.post(self.create_url, json.dumps({
+            'title': 'Anon Test',
+            'asset_ids': [self.track.pk],
+            'is_impromptu': True,
+        }), content_type='application/json')
+        self.assertEqual(resp.status_code, 302)
+
+    # ── 3. Requires staff ─────────────────────────────────────────────
+
+    def test_api_create_non_staff_returns_403(self):
+        """Non-staff user POST to create API should return 403."""
+        self.client.login(username='impuser', password='Testpass123!')
+        resp = self.client.post(self.create_url, json.dumps({
+            'title': 'Forbidden Test',
+            'asset_ids': [self.track.pk],
+            'is_impromptu': True,
+        }), content_type='application/json')
+        self.assertEqual(resp.status_code, 403)
+
+    # ── 4. Title required ─────────────────────────────────────────────
+
+    def test_api_create_missing_title_returns_400(self):
+        """POST without title should return 400."""
+        self.client.login(username='impstaff', password='Testpass123!')
+        resp = self.client.post(self.create_url, json.dumps({
+            'asset_ids': [self.track.pk],
+            'is_impromptu': True,
+        }), content_type='application/json')
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn('Title', resp.json()['error'])
+
+    # ── 5. asset_ids required ─────────────────────────────────────────
+
+    def test_api_create_missing_assets_returns_400(self):
+        """POST without asset_ids should return 400."""
+        self.client.login(username='impstaff', password='Testpass123!')
+        resp = self.client.post(self.create_url, json.dumps({
+            'title': 'No Assets',
+            'is_impromptu': True,
+        }), content_type='application/json')
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn('asset', resp.json()['error'].lower())
+
+    # ── 6. Impromptu events don't cause conflicts ─────────────────────
+
+    def test_impromptu_does_not_block_scheduled_event(self):
+        """Creating an impromptu event on a track should not prevent a
+        scheduled event on the same track from being created."""
+        self.client.login(username='impstaff', password='Testpass123!')
+        # Create impromptu event
+        resp1 = self.client.post(self.create_url, json.dumps({
+            'title': 'Impromptu Run',
+            'asset_ids': [self.track.pk],
+            'is_impromptu': True,
+        }), content_type='application/json')
+        self.assertEqual(resp1.status_code, 201)
+
+        # Create scheduled event on the same track — should succeed
+        now = timezone.now()
+        start = (now + timedelta(hours=1)).isoformat()
+        end = (now + timedelta(hours=3)).isoformat()
+        resp2 = self.client.post(self.create_url, json.dumps({
+            'title': 'Scheduled Run',
+            'asset_ids': [self.track.pk],
+            'start_time': start,
+            'end_time': end,
+        }), content_type='application/json')
+        self.assertEqual(resp2.status_code, 201)
+
+    # ── 7. Impromptu excluded from conflict check ─────────────────────
+
+    def test_scheduled_event_does_not_conflict_with_impromptu(self):
+        """A pre-existing impromptu event should not conflict with a new
+        scheduled event on the same track (impromptu has no time range)."""
+        # Create impromptu event directly in DB
+        imp = Event.objects.create(
+            title='Existing Impromptu',
+            is_impromptu=True,
+            is_approved=True,
+            created_by=self.staff,
+        )
+        imp.assets.add(self.track)
+
+        # Now create a scheduled event via API — should not conflict
+        self.client.login(username='impstaff', password='Testpass123!')
+        now = timezone.now()
+        start = (now + timedelta(hours=1)).isoformat()
+        end = (now + timedelta(hours=3)).isoformat()
+        resp = self.client.post(self.create_url, json.dumps({
+            'title': 'No Conflict',
+            'asset_ids': [self.track.pk],
+            'start_time': start,
+            'end_time': end,
+        }), content_type='application/json')
+        self.assertEqual(resp.status_code, 201)
+
+    # ── 8. Model _time_range returns "Impromptu" ─────────────────────
+
+    def test_time_range_returns_impromptu_for_null_times(self):
+        """Event._time_range should return 'Impromptu' when start_time
+        and end_time are None."""
+        ev = Event.objects.create(
+            title='Impromptu Check',
+            is_impromptu=True,
+            created_by=self.staff,
+        )
+        self.assertEqual(ev._time_range, 'Impromptu')
+
+    # ── 9. Dashboard API includes impromptu events ────────────────────
+
+    def test_dashboard_api_includes_approved_impromptu_with_actual_start(self):
+        """An approved impromptu event with actual_start on today should
+        appear in the dashboard events API response."""
+        now = timezone.now()
+        ev = Event.objects.create(
+            title='Dashboard Impromptu',
+            is_impromptu=True,
+            is_approved=True,
+            actual_start=now,
+            created_by=self.staff,
+        )
+        ev.assets.add(self.track)
+
+        self.client.login(username='impstaff', password='Testpass123!')
+        resp = self.client.get(self.dashboard_url, {'date': now.date().isoformat()})
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        track_data = data['tracks'].get('Impromptu Track', {})
+        event_titles = [e['title'] for e in track_data.get('events', [])]
+        self.assertIn('Dashboard Impromptu', event_titles)
+
+    # ── 10. Impromptu event serialization ─────────────────────────────
+
+    def test_dashboard_api_serializes_impromptu_fields(self):
+        """Dashboard API should serialize is_impromptu=true and null times
+        for impromptu events."""
+        now = timezone.now()
+        ev = Event.objects.create(
+            title='Serialization Test',
+            is_impromptu=True,
+            is_approved=True,
+            actual_start=now,
+            created_by=self.staff,
+        )
+        ev.assets.add(self.track)
+
+        self.client.login(username='impstaff', password='Testpass123!')
+        resp = self.client.get(self.dashboard_url, {'date': now.date().isoformat()})
+        data = resp.json()
+        track_data = data['tracks'].get('Impromptu Track', {})
+        events = track_data.get('events', [])
+        imp_events = [e for e in events if e['title'] == 'Serialization Test']
+        self.assertEqual(len(imp_events), 1)
+        imp_ev = imp_events[0]
+        self.assertTrue(imp_ev['is_impromptu'])
+        self.assertIsNone(imp_ev['start_time'])
+        self.assertIsNone(imp_ev['end_time'])

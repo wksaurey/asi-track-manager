@@ -270,6 +270,129 @@
     } else {
       assetCtx.parentElement.innerHTML += '<div class="chart-empty">No asset data for this period</div>';
     }
+
+    // ── Impromptu Charts ──
+    const imp = data.impromptu_summary;
+    if (imp) {
+      renderImpromptuCharts(imp, c, scales);
+    }
+  }
+
+  function renderImpromptuCharts(imp, c, scales) {
+    // 6. Scheduled vs Impromptu — doughnut
+    const ratioCtx = document.getElementById('impromptuRatioChart');
+    const totalAll = imp.total_scheduled + imp.total_impromptu;
+    if (totalAll > 0) {
+      charts.impromptuRatio = new Chart(ratioCtx, {
+        type: 'doughnut',
+        data: {
+          labels: ['Scheduled', 'Impromptu'],
+          datasets: [{
+            data: [imp.total_scheduled, imp.total_impromptu],
+            backgroundColor: ['#10b981', '#f59e0b'],
+            borderWidth: 2,
+            borderColor: isDark() ? '#1a202c' : '#fff',
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { labels: { color: c.text } },
+          },
+        }
+      });
+    } else {
+      ratioCtx.parentElement.innerHTML += '<div class="chart-empty">No events in this period</div>';
+    }
+
+    // 7. Impromptu Track Usage — horizontal bar
+    const trackCtx = document.getElementById('impromptuTrackChart');
+    if (imp.track_usage.length > 0) {
+      charts.impromptuTrack = new Chart(trackCtx, {
+        type: 'bar',
+        data: {
+          labels: imp.track_usage.map(t => t.name),
+          datasets: [{
+            label: 'Actual Hours',
+            data: imp.track_usage.map(t => t.actual_hours),
+            backgroundColor: imp.track_usage.map(t => (t.color || c.warning) + '99'),
+            borderColor: imp.track_usage.map(t => t.color || c.warning),
+            borderWidth: 1,
+          }]
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { ...scales.x, title: { display: true, text: 'Hours', color: c.text }, beginAtZero: true },
+            y: { ...scales.y },
+          },
+        }
+      });
+    } else {
+      trackCtx.parentElement.innerHTML += '<div class="chart-empty">No impromptu track usage</div>';
+    }
+
+    // 8. Impromptu Trends — line chart
+    const trendCtx = document.getElementById('impromptuTrendChart');
+    if (imp.daily_trend.counts.some(v => v > 0)) {
+      const shortLabels = imp.daily_trend.labels.map(l => {
+        const d = new Date(l + 'T00:00:00');
+        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      });
+      charts.impromptuTrend = new Chart(trendCtx, {
+        type: 'line',
+        data: {
+          labels: shortLabels,
+          datasets: [{
+            label: 'Impromptu Events',
+            data: imp.daily_trend.counts,
+            borderColor: '#f59e0b',
+            backgroundColor: 'rgba(245,158,11,0.1)',
+            fill: true,
+            tension: 0.3,
+            pointRadius: 3,
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { labels: { color: c.text } } },
+          scales,
+        }
+      });
+    } else {
+      trendCtx.parentElement.innerHTML += '<div class="chart-empty">No impromptu events in this period</div>';
+    }
+
+    // 9. Impromptu Peak Hours — bar chart
+    const peakCtx = document.getElementById('impromptuPeakChart');
+    if (imp.peak_hours.length > 0) {
+      const hourCounts = new Array(24).fill(0);
+      imp.peak_hours.forEach(h => { hourCounts[h.hour] = h.count; });
+      const hourLabels = hourCounts.map((_, i) => `${String(i).padStart(2,'0')}:00`);
+      const maxCount = Math.max(...hourCounts);
+      charts.impromptuPeak = new Chart(peakCtx, {
+        type: 'bar',
+        data: {
+          labels: hourLabels,
+          datasets: [{
+            label: 'Events',
+            data: hourCounts,
+            backgroundColor: hourCounts.map(v => v === maxCount && maxCount > 0 ? '#f59e0b' : 'rgba(245,158,11,0.5)'),
+            borderColor: '#f59e0b',
+            borderWidth: 1,
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { display: false } },
+          scales,
+        }
+      });
+    } else {
+      peakCtx.parentElement.innerHTML += '<div class="chart-empty">No data</div>';
+    }
   }
 
   // ── Main ──

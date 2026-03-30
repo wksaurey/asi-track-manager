@@ -1869,6 +1869,23 @@ html.dark-theme .gantt-subtrack-row  { border-color: rgba(46,168,229,0.08); }
 }
 .gantt-block.event-past     { opacity: 0.45; filter: saturate(0.5); }
 
+/* Impromptu event — dashed border + subtle pulse when in-progress */
+.gantt-block.event-impromptu {
+  border: 2px dashed rgba(255,255,255,0.8);
+  box-shadow: 0 0 6px rgba(46,168,229,0.3);
+}
+.gantt-block.event-impromptu:not(.gantt-block--ghost) {
+  animation: impromptu-pulse 2s ease-in-out infinite;
+}
+@keyframes impromptu-pulse {
+  0%, 100% { box-shadow: 0 0 6px rgba(46,168,229,0.3); }
+  50%      { box-shadow: 0 0 14px rgba(46,168,229,0.6); }
+}
+.calendar li.event-impromptu {
+  border-left: 3px dashed var(--primary);
+  font-style: italic;
+}
+
 /* Ghost bar (scheduled time when actuals exist) — offset below actual */
 .gantt-block.gantt-block--ghost {
   top: 32px;

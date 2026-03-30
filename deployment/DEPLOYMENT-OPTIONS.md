@@ -43,19 +43,21 @@ pip install -r requirements.txt
 
 ### Configuration
 
-Create a `.env` file in the project root (or set environment variables via Windows):
+Create a `.env` file in the project root. Django loads this automatically on startup via a lightweight loader in `settings.py` — no extra packages needed.
 
 ```
 SECRET_KEY=<generate-a-random-key>
 DEBUG=False
-ALLOWED_HOSTS=schedule.asi.com,localhost
-CSRF_TRUSTED_ORIGINS=https://schedule.asi.com,https://localhost
+ALLOWED_HOSTS=schedule.asi.com,localhost,127.0.0.1,<VM-IP>
+CSRF_TRUSTED_ORIGINS=https://schedule.asi.com,http://schedule.asi.com,https://localhost,http://localhost,http://<VM-IP>
 ```
 
 Generate a secret key:
 ```powershell
 python -c "import secrets; print(secrets.token_urlsafe(50))"
 ```
+
+> **Note:** `CSRF_TRUSTED_ORIGINS` requires the full origin including scheme (e.g., `http://10.10.105.198`). If using a non-standard port, include the port too (e.g., `http://10.10.105.198:8080`). `ALLOWED_HOSTS` uses just the hostname/IP (no scheme or port).
 
 ### Database Setup
 
@@ -65,53 +67,86 @@ python manage.py createsuperuser
 python manage.py collectstatic --noinput
 ```
 
-### Running the Server
+### Running the Server (Manual)
 
 ```powershell
-# Basic startup
-waitress-serve --host=0.0.0.0 --port=8080 --threads=4 asi_track_manager.wsgi:application
+waitress-serve --host=0.0.0.0 --port=80 --threads=4 asi_track_manager.wsgi:application
 ```
 
-Or create a startup script (`start-server.ps1`):
+### Running as a Scheduled Task (Auto-Start on Boot)
+
+Use Windows Task Scheduler to keep the app running in the background and auto-start on boot. No extra software required.
+
+1. Open **Task Scheduler** (search in Start Menu)
+
+2. Click **Create Task** (not "Create Basic Task")
+
+3. **General tab:**
+   - Name: `ASI Track Manager`
+   - Description: `ASI Track Scheduler Web Application`
+   - Check **"Run whether user is logged on or not"**
+   - Check **"Run with highest privileges"**
+
+4. **Triggers tab:**
+   - Click **New...** → Begin the task: **At startup** → OK
+
+5. **Actions tab:**
+   - Click **New...**
+   - Action: **Start a program**
+   - Program/script: `C:\apps\asi-track-manager\.venv\asi_track_manager\Scripts\waitress-serve.exe`
+   - Add arguments: `--host=0.0.0.0 --port=80 --threads=4 asi_track_manager.wsgi:application`
+   - Start in: `C:\apps\asi-track-manager`
+   - Click OK
+
+6. **Settings tab:**
+   - Uncheck **"Stop the task if it runs longer than"**
+   - Check **"If the task fails, restart every"** → **1 minute**, up to **3 times**
+   - Check **"Allow task to be run on demand"**
+   - Click OK
+
+7. Enter the Windows account password when prompted.
+
+8. Right-click the task → **Run** to start it.
+
+#### Managing the Task
+
+- **Stop:** Right-click task → End
+- **Start:** Right-click task → Run
+- **View status:** Check the "Last Run Result" column
+- **After code updates:** End the task, pull changes, run `collectstatic --noinput`, then Run the task again
+
+### Windows Firewall
+
+Open the app's port (run PowerShell as Administrator):
 
 ```powershell
-# start-server.ps1
-$env:DJANGO_SETTINGS_MODULE = "asi_track_manager.settings"
-Set-Location C:\apps\asi-track-manager
-& C:\apps\asi-track-manager\.venv\Scripts\Activate.ps1
-waitress-serve --host=0.0.0.0 --port=8080 --threads=4 asi_track_manager.wsgi:application
+New-NetFirewallRule -DisplayName "ASI Track Manager HTTP" -Direction Inbound -Protocol TCP -LocalPort 80 -Action Allow
 ```
-
-### Running as a Windows Service
-
-To keep the app running in the background and auto-start on boot, use **NSSM** (Non-Sucking Service Manager):
-
-1. Download NSSM from [nssm.cc](https://nssm.cc/download)
-2. Install the service:
-
-```powershell
-nssm install ASITrackManager C:\apps\asi-track-manager\.venv\Scripts\waitress-serve.exe
-nssm set ASITrackManager AppParameters "--host=0.0.0.0 --port=8080 --threads=4 asi_track_manager.wsgi:application"
-nssm set ASITrackManager AppDirectory C:\apps\asi-track-manager
-nssm set ASITrackManager AppEnvironmentExtra "SECRET_KEY=<your-key>" "DEBUG=False" "ALLOWED_HOSTS=schedule.asi.com,localhost"
-nssm set ASITrackManager DisplayName "ASI Track Manager"
-nssm set ASITrackManager Description "ASI Track Scheduler Web Application"
-nssm set ASITrackManager Start SERVICE_AUTO_START
-nssm start ASITrackManager
-```
-
-The service will now auto-start on boot, restart on crash, and can be managed from Windows Services (`services.msc`).
 
 ### HTTPS
 
 Without Caddy handling HTTPS, you have two options:
 
-1. **IIS as a reverse proxy:** If IIS is available on the VM, configure it as a reverse proxy to `localhost:8080` with an SSL binding. IT may already have internal CA certificates for this.
-2. **Direct HTTP:** For an internal-only tool, running on HTTP (port 80 or 8080) may be acceptable. Users access `http://schedule.asi.com:8080`.
+1. **IIS as a reverse proxy:** If IIS is available on the VM, configure it as a reverse proxy to `localhost:80` with an SSL binding. IT may already have internal CA certificates for this.
+2. **Direct HTTP:** For an internal-only tool, running on HTTP (port 80) is acceptable. Users access `http://schedule.asi.com`.
+
+### DNS Setup
+
+Ask IT to create an internal DNS A record:
+
+```
+schedule.asi.com → <VM-IP>
+```
+
+Until IT creates the record, users can add the following to `C:\Windows\System32\drivers\etc\hosts` (requires admin) on their machines:
+
+```
+<VM-IP>  schedule.asi.com
+```
 
 ### Backups
 
-Set up a Windows Scheduled Task to copy the SQLite database file:
+Create `C:\apps\asi-track-manager\backup-db.ps1`:
 
 ```powershell
 # backup-db.ps1
@@ -121,6 +156,22 @@ New-Item -ItemType Directory -Force -Path $backupDir | Out-Null
 Copy-Item "C:\apps\asi-track-manager\db.sqlite3" "$backupDir\db_$timestamp.sqlite3"
 # Keep last 30 backups
 Get-ChildItem $backupDir -Filter "db_*.sqlite3" | Sort-Object LastWriteTime -Descending | Select-Object -Skip 30 | Remove-Item
+```
+
+Schedule it via Task Scheduler: create a new task with a **Daily** trigger (e.g., 2:00 AM), action set to `powershell.exe` with arguments `-ExecutionPolicy Bypass -File C:\apps\asi-track-manager\backup-db.ps1`.
+
+### Updating After a Code Change
+
+```powershell
+# 1. Stop the scheduled task (right-click → End in Task Scheduler)
+# 2. Pull and rebuild static files:
+cd C:\apps\asi-track-manager
+.venv\asi_track_manager\Scripts\Activate.ps1
+git pull origin main
+pip install -r requirements.txt
+python manage.py migrate --noinput
+python manage.py collectstatic --noinput
+# 3. Start the scheduled task (right-click → Run in Task Scheduler)
 ```
 
 ### Pros
@@ -175,11 +226,11 @@ from asi_track_manager.wsgi import application
 
 print("=" * 50)
 print("ASI Track Manager is running!")
-print("Open http://localhost:8080 in your browser")
+print("Open http://localhost in your browser")
 print("Press Ctrl+C to stop")
 print("=" * 50)
 
-serve(application, host='0.0.0.0', port=8080, threads=4)
+serve(application, host='0.0.0.0', port=80, threads=4)
 ```
 
 ### Build Command

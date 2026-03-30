@@ -10,7 +10,8 @@ from datetime import timedelta
 
 from django import forms
 from django.forms import ModelForm, TextInput, CheckboxSelectMultiple, ValidationError
-from cal.models import Event, Asset
+from django.utils.timezone import localtime
+from cal.models import Event, Asset, Feedback
 
 
 class AssetForm(ModelForm):
@@ -188,9 +189,6 @@ class EventForm(ModelForm):
         if start_time and end_time and start_time >= end_time:
             raise ValidationError('End time must be after start time.')
 
-        # Minimum duration of 1 hour
-        if start_time and end_time and (end_time - start_time) < timedelta(hours=1):
-            raise ValidationError('Reservations must be at least 1 hour long.')
 
         # Conflict check — delegates to Asset.conflicting_asset_ids() for
         # parent/subtrack rules.
@@ -210,8 +208,18 @@ class EventForm(ModelForm):
                     raise ValidationError(
                         f'Scheduling conflict: "{conflict.title}" already has '
                         f'{conflict_asset or asset} booked from '
-                        f'{conflict.start_time.strftime("%b %d %I:%M %p")} to '
-                        f'{conflict.end_time.strftime("%I:%M %p")}.'
+                        f'{localtime(conflict.start_time).strftime("%b %d %I:%M %p")} to '
+                        f'{localtime(conflict.end_time).strftime("%I:%M %p")}.'
                     )
 
         return cleaned
+
+
+class FeedbackForm(ModelForm):
+    class Meta:
+        model = Feedback
+        fields = ['category', 'subject', 'message', 'page_url']
+        widgets = {
+            'page_url': forms.HiddenInput(),
+            'message': forms.Textarea(attrs={'rows': 4}),
+        }

@@ -10,6 +10,7 @@ from django.conf import settings
 from django.db import models
 from django.urls import reverse
 from django.utils.html import escape
+from django.utils.timezone import localtime
 
 # Predefined palette for track colors.  New tracks auto-pick the first unused
 # color; all 16 are available for manual override via the asset edit form.
@@ -253,13 +254,15 @@ class Event(models.Model):
         same period, e.g. '8:30-10:00 AM' instead of '8:30 AM-10:00 AM'.
         Uses an en-dash and non-breaking spaces for clean rendering.
         """
-        t_s = self.start_time.strftime('%I:%M').lstrip('0') or '12:00'
-        t_e = self.end_time.strftime('%I:%M').lstrip('0') or '12:00'
-        if self.start_time.strftime('%p') == self.end_time.strftime('%p'):
-            return f'{t_s}\u2013{t_e}\u00a0{self.end_time.strftime("%p")}'
+        local_s = localtime(self.start_time)
+        local_e = localtime(self.end_time)
+        t_s = local_s.strftime('%I:%M').lstrip('0') or '12:00'
+        t_e = local_e.strftime('%I:%M').lstrip('0') or '12:00'
+        if local_s.strftime('%p') == local_e.strftime('%p'):
+            return f'{t_s}\u2013{t_e}\u00a0{local_e.strftime("%p")}'
         return (
-            f'{t_s}\u00a0{self.start_time.strftime("%p")}'
-            f'\u2013{t_e}\u00a0{self.end_time.strftime("%p")}'
+            f'{t_s}\u00a0{local_s.strftime("%p")}'
+            f'\u2013{t_e}\u00a0{local_e.strftime("%p")}'
         )
 
     @property
@@ -275,11 +278,42 @@ class Event(models.Model):
             '<span class="pending-badge">PENDING</span>'
             if not self.is_approved else ''
         )
+        creator = (
+            f'<span class="event-creator">{escape(self.created_by.username)}</span>'
+            if self.created_by else ''
+        )
         return (
             f'<a class="event-link" href="{url}">'
             f'<span class="event-title">{escape(self.title)}</span>'
             f'<span class="event-time">{self._time_range}</span>'
             f'{pending}'
+            f'{creator}'
             f'{self.asset_badge_html}'
             f'</a>'
         )
+
+
+class Feedback(models.Model):
+    class Category(models.TextChoices):
+        BUG = 'bug', 'Bug Report'
+        FEATURE = 'feature', 'Feature Request'
+        OTHER = 'other', 'Other'
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='feedback',
+    )
+    category = models.CharField(max_length=20, choices=Category.choices, default=Category.BUG)
+    subject = models.CharField(max_length=200)
+    message = models.TextField()
+    page_url = models.URLField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    is_resolved = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'[{self.get_category_display()}] {self.subject}'

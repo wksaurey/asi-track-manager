@@ -26,6 +26,12 @@
     </a>
   </div>
 
+  {% if event and not can_edit %}
+  <div class="view-only-banner">
+    <i class="fas fa-eye"></i> Viewing <strong>{{ event.created_by.username }}'s</strong> reservation (read-only)
+  </div>
+  {% endif %}
+
   {% if event and event.created_by %}
   <p class="event-meta">
     <i class="fas fa-user"></i> Created by <strong>{{ event.created_by }}</strong>
@@ -69,7 +75,16 @@
       <tr>
         <td><label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="required-mark">*</span>{% endif %}</label></td>
         <td>
+          {% if field.html_name == 'start_time' %}
+          <div class="start-time-row">
+            {{ field }}
+            <button type="button" class="btn btn-now" id="btn-now" title="Set to current time">
+              <i class="fas fa-clock"></i> Now
+            </button>
+          </div>
+          {% else %}
           {{ field }}
+          {% endif %}
           {% if field.help_text %}
             <small class="field-help">{{ field.help_text }}</small>
           {% endif %}
@@ -99,6 +114,7 @@
     <button type="submit" id="event-save-hidden" hidden></button>
   </form>
 
+  {% if can_edit %}
   <div class="event-action-bar">
     <button type="button" class="btn" onclick="document.getElementById('event-save-hidden').click()">
       <i class="fas fa-save"></i> Save Event
@@ -115,7 +131,7 @@
       </form>
       {% else %}
       <form method="post" action="{% url 'cal:event_unapprove' event.id %}"
-            onsubmit="return confirmDelete(this, 'Revoke approval? This event will return to pending status.', {confirmLabel:'Revoke', confirmClass:'btn-warning'})">
+            onsubmit="return confirmDelete(this, 'Revoke approval for &quot;{{ event.title|escapejs }}&quot;? It will return to pending status.', {confirmLabel:'Revoke', confirmClass:'btn-warning'})">
         {% csrf_token %}
         <input type="hidden" name="next" value="{% url 'cal:event_edit' event.id %}{% if next_url %}?next={{ next_url|urlencode }}{% endif %}">
         <button type="submit" class="btn btn-warning">
@@ -124,7 +140,7 @@
       </form>
       {% endif %}
       <form method="post" action="{% url 'cal:event_delete' event.id %}"
-            onsubmit="return confirmDelete(this, 'Delete this event? This cannot be undone.')">
+            onsubmit="return confirmDelete(this, 'Delete &quot;{{ event.title|escapejs }}&quot;? This cannot be undone.')">
         {% csrf_token %}
         {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
         <button type="submit" class="btn btn-danger">
@@ -133,6 +149,7 @@
       </form>
     {% endif %}
   </div>
+  {% endif %}
 
 </div>
 {% endblock %}
@@ -146,7 +163,21 @@
 <script>
 const ASSET_DATA = JSON.parse(document.getElementById('asset-data').textContent);
 
+const CAN_EDIT = {{ can_edit|yesno:"true,false" }};
+
 document.addEventListener('DOMContentLoaded', function () {
+  // ── Read-only mode: disable all form inputs ─────────────────────────────
+  if (!CAN_EDIT) {
+    document.querySelectorAll('.asset-form input, .asset-form select, .asset-form textarea').forEach(el => {
+      el.disabled = true;
+    });
+    document.querySelectorAll('.duration-btn').forEach(el => { el.disabled = true; });
+    const nowBtn = document.getElementById('btn-now');
+    if (nowBtn) nowBtn.style.display = 'none';
+    document.querySelector('.asset-picker').classList.add('disabled');
+    document.querySelector('.duration-row').classList.add('disabled');
+  }
+
   // ── Asset picker ───────────────────────────────────────────────────────
   const picker = document.getElementById('asset-picker');
 
@@ -216,6 +247,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (track.subtracks.length === 0) {
           // No subtracks — radio behavior across groups
           pill.addEventListener('click', () => {
+            if (!CAN_EDIT) return;
             const wasChecked = isChecked(track.id);
             deselectAllTracks();
             if (!wasChecked) setChecked(track.id, true);
@@ -232,11 +264,9 @@ document.addEventListener('DOMContentLoaded', function () {
             subBtn.className = 'subtrack-option' + (isChecked(sub.id) ? ' active' : '');
             subBtn.textContent = sub.name;
             subBtn.addEventListener('click', () => {
-              // Clear other track groups, keep this group
+              if (!CAN_EDIT) return;
               deselectOtherTracks(track.id);
-              // Toggle this subtrack within the group
               setChecked(sub.id, !isChecked(sub.id));
-              // If selecting a subtrack, deselect "whole track" parent
               if (isChecked(sub.id)) setChecked(track.id, false);
               renderPicker();
             });
@@ -248,6 +278,7 @@ document.addEventListener('DOMContentLoaded', function () {
           // Pill click: if group inactive → deselect others, select whole + open panel
           //             if group active  → deselect everything
           pill.addEventListener('click', () => {
+            if (!CAN_EDIT) return;
             if (groupActive) {
               deselectAllTracks();
             } else {
@@ -292,6 +323,7 @@ document.addEventListener('DOMContentLoaded', function () {
     pill.className = 'track-pill' + (isChecked(asset.id) ? ' active' : '');
     pill.textContent = asset.name;
     pill.addEventListener('click', () => {
+      if (!CAN_EDIT) return;
       setChecked(asset.id, !isChecked(asset.id));
       renderPicker();
     });
@@ -385,6 +417,16 @@ document.addEventListener('DOMContentLoaded', function () {
   // Ensure defaultDate values are written to the hidden inputs
   if (fpOpts.defaultDate) fpStart.setDate(fpOpts.defaultDate, true);
   if (endOpts.defaultDate) fpEnd.setDate(endOpts.defaultDate, true);
+
+  // "Now" button — sets start time to current time (rounded to nearest minute)
+  const btnNow = document.getElementById('btn-now');
+  if (btnNow) {
+    btnNow.addEventListener('click', function() {
+      const now = new Date();
+      now.setSeconds(0, 0);
+      fpStart.setDate(now, true);
+    });
+  }
 
   // Auto-set end minimum to match start so you can't pick an earlier end time
   fpStart.config.onChange.push(function(dates) {

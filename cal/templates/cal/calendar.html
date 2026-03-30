@@ -74,19 +74,14 @@
 {% if view == 'day' %}
 <div class="cal-legend">
   <span class="legend-item">
-    <span class="legend-swatch-actual"></span> Event
+    <span class="legend-swatch-actual"></span> Scheduled
   </span>
   <span class="legend-item">
-    <span class="legend-swatch-dual"><span class="legend-swatch-dual__actual"></span><span class="legend-swatch-dual__ghost"></span></span> Has actual time
+    <span class="legend-swatch-dual"><span class="legend-swatch-dual__actual"></span><span class="legend-swatch-dual__ghost"></span></span> Actual <span class="text-muted" style="font-size:0.8em">(scheduled shown below)</span>
   </span>
   <span class="legend-item">
     <span class="legend-dot legend-dot-pending"></span> Pending
   </span>
-  {% if is_today %}
-  <span class="legend-item">
-    <span class="legend-now-line"></span> Now
-  </span>
-  {% endif %}
 </div>
 {% else %}
 <div class="cal-legend">
@@ -207,19 +202,21 @@
 {% if view == 'day' %}
 <script>
   document.addEventListener('DOMContentLoaded', function() {
+    var gantt = document.querySelector('.gantt-view');
+    if (!gantt) return;
+    var ganttStart = parseInt(gantt.dataset.ganttStart || '0');
+    var ganttMins = parseInt(gantt.dataset.ganttMins || '1440');
 
     // ── Now line (only on today's date) ──────────────────────────
     {% if is_today %}
     (function() {
-      var GANTT_START = 6;   // 6:00 AM
-      var GANTT_MINS  = 840; // 14 hours
       var nowLines = [];
 
       function getNowPct() {
         var d = new Date();
         var mins = d.getHours() * 60 + d.getMinutes();
-        var offset = mins - (GANTT_START * 60);
-        return (offset / GANTT_MINS) * 100;
+        var offset = mins - (ganttStart * 60);
+        return (offset / ganttMins) * 100;
       }
 
       function updateNowLine() {
@@ -231,8 +228,6 @@
         });
       }
 
-      // Insert now-line elements into the Gantt structure
-
       var axisRow = document.querySelector('.gantt-axis');
       if (axisRow) {
         var axisEl = document.createElement('div');
@@ -242,7 +237,6 @@
         nowLines.push(axisEl);
       }
 
-      // Add a now-line to each gantt-lane so it aligns with the event blocks
       document.querySelectorAll('.gantt-lane').forEach(function(lane) {
         var lineEl = document.createElement('div');
         lineEl.className = 'gantt-now-line gantt-now-body';
@@ -251,10 +245,22 @@
       });
 
       updateNowLine();
-      // Update every 60 seconds
       setInterval(updateNowLine, 60000);
     })();
     {% endif %}
+
+    // ── Auto-scroll: center viewport on current time ──────────────
+    (function() {
+      var container = document.querySelector('.gantt-scroll-container');
+      if (!container) return;
+
+      var now = new Date();
+      var nowMin = now.getHours() * 60 + now.getMinutes();
+      var scrollableWidth = container.scrollWidth;
+      var viewportWidth = container.clientWidth;
+      var nowPx = ((nowMin - ganttStart * 60) / ganttMins) * scrollableWidth;
+      container.scrollLeft = Math.max(0, nowPx - viewportWidth / 2);
+    })();
   });
 </script>
 {% endif %}

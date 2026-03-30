@@ -37,7 +37,10 @@
           </a>
           <a href="{% url 'cal:dashboard' %}"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
           <a href="{% url 'cal:analytics' %}"><i class="fas fa-chart-bar"></i> Analytics</a>
-          <a href="{% url 'users:user_management' %}"><i class="fas fa-users-cog"></i> Users</a>
+          <a href="{% url 'users:user_management' %}"><i class="fas fa-users"></i> Users</a>
+        {% endif %}
+        {% if request.user.is_developer %}
+          <a href="{% url 'cal:feedback_list' %}"><i class="fas fa-comment-alt"></i> Feedback</a>
         {% endif %}
       {% endif %}
     </div>
@@ -49,7 +52,10 @@
     <div class="site-nav-user">
       {% if request.user.is_authenticated %}
         <span class="nav-user-name">
-          {% if request.user.is_staff %}
+          {% if request.user.is_developer %}
+            <i class="fas fa-user-cog"></i> {{ request.user.username }}
+            <span class="admin-chip" style="background:#10b981;">Staff</span>
+          {% elif request.user.is_staff %}
             <i class="fas fa-user-shield"></i> {{ request.user.username }}
             <span class="admin-chip">Admin</span>
           {% else %}
@@ -70,6 +76,46 @@
 
   {% block content %}
   {% endblock %}
+
+  {% if user.is_authenticated %}
+  <!-- ── Feedback FAB + modal ──────────────────────────────────── -->
+  <button type="button" class="feedback-fab" id="feedback-fab" title="Send feedback">
+    <i class="fas fa-comment-alt"></i> <span class="feedback-fab-label">Feedback</span>
+  </button>
+
+  <div id="feedback-modal" class="feedback-modal-overlay" hidden>
+    <div class="feedback-modal">
+      <h5 style="margin:0 0 16px;font-weight:600;">Send Feedback</h5>
+      <form id="feedback-form">
+        {% csrf_token %}
+        <input type="hidden" name="page_url" id="feedback-page-url">
+        <div class="form-group" style="margin-bottom:12px;">
+          <label for="feedback-category" style="font-size:13px;font-weight:500;margin-bottom:4px;display:block;">Category</label>
+          <select name="category" id="feedback-category" class="form-control" style="font-size:14px;">
+            <option value="bug">Bug Report</option>
+            <option value="feature">Feature Request</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin-bottom:12px;">
+          <label for="feedback-subject" style="font-size:13px;font-weight:500;margin-bottom:4px;display:block;">Subject <span style="color:#ef4444;">*</span></label>
+          <input type="text" name="subject" id="feedback-subject" class="form-control" required maxlength="200" style="font-size:14px;">
+        </div>
+        <div class="form-group" style="margin-bottom:16px;">
+          <label for="feedback-message" style="font-size:13px;font-weight:500;margin-bottom:4px;display:block;">Message <span style="color:#ef4444;">*</span></label>
+          <textarea name="message" id="feedback-message" class="form-control" required rows="4" style="font-size:14px;resize:vertical;"></textarea>
+        </div>
+        <div id="feedback-errors" style="display:none;color:#ef4444;font-size:13px;margin-bottom:12px;"></div>
+        <div style="display:flex;gap:10px;justify-content:flex-end;">
+          <button type="button" class="btn btn-muted" id="feedback-cancel">Cancel</button>
+          <button type="submit" class="btn">Submit</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="feedback-toast" class="feedback-toast" hidden>Feedback submitted — thank you!</div>
+  {% endif %}
 
   <!-- ── Delete confirmation modal ──────────────────────────────── -->
   <div id="delete-modal" class="delete-modal-overlay" hidden>
@@ -194,6 +240,72 @@
       };
     })();
   </script>
+
+  <!-- Feedback modal logic -->
+  {% if user.is_authenticated %}
+  <script>
+    (function() {
+      var fab     = document.getElementById('feedback-fab');
+      var modal   = document.getElementById('feedback-modal');
+      var form    = document.getElementById('feedback-form');
+      var cancel  = document.getElementById('feedback-cancel');
+      var toast   = document.getElementById('feedback-toast');
+      var errBox  = document.getElementById('feedback-errors');
+      var urlField = document.getElementById('feedback-page-url');
+
+      if (!fab) return;
+
+      function openModal() {
+        urlField.value = window.location.href;
+        errBox.style.display = 'none';
+        errBox.textContent = '';
+        modal.hidden = false;
+      }
+      function closeModal() {
+        modal.hidden = true;
+        form.reset();
+      }
+      function showToast() {
+        toast.hidden = false;
+        setTimeout(function() { toast.hidden = true; }, 3000);
+      }
+
+      fab.addEventListener('click', openModal);
+      cancel.addEventListener('click', closeModal);
+      modal.addEventListener('click', function(e) { if (e.target === modal) closeModal(); });
+      document.addEventListener('keydown', function(e) { if (e.key === 'Escape' && !modal.hidden) closeModal(); });
+
+      form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        var csrf = form.querySelector('[name=csrfmiddlewaretoken]').value;
+        var data = new FormData(form);
+        fetch('{% url "cal:submit_feedback" %}', {
+          method: 'POST',
+          headers: { 'X-CSRFToken': csrf },
+          body: data,
+        }).then(function(resp) {
+          return resp.json().then(function(json) { return { ok: resp.ok, data: json }; });
+        }).then(function(result) {
+          if (result.ok) {
+            closeModal();
+            showToast();
+          } else {
+            var msgs = [];
+            var errs = result.data.errors || {};
+            for (var field in errs) {
+              var fieldErrs = errs[field];
+              for (var i = 0; i < fieldErrs.length; i++) {
+                msgs.push(fieldErrs[i].message || fieldErrs[i]);
+              }
+            }
+            errBox.textContent = msgs.join(' ');
+            errBox.style.display = 'block';
+          }
+        });
+      });
+    })();
+  </script>
+  {% endif %}
 
   {% block extra_js %}{% endblock %}
 

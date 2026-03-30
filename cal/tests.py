@@ -6,9 +6,12 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.timezone import get_current_timezone
 
 from .models import Asset, Event
 from .forms import EventForm
+
+_local_tz = get_current_timezone()
 
 User = get_user_model()
 
@@ -119,10 +122,10 @@ class EventApproveViewTest(TestCase):
         self.assertFalse(self.event.is_approved)
 
 
-# ── P1 Fix 5 & P2 Fix 10: EventForm 1-hour minimum duration ──────────────────
+# ── EventForm duration validation ─────────────────────────────────────────────
 
 class EventFormDurationTest(TestCase):
-    """Fix 5: EventForm.clean() must enforce a 1-hour minimum duration."""
+    """EventForm.clean() must require end time after start time (no minimum duration)."""
 
     def setUp(self):
         self.start = timezone.now().replace(second=0, microsecond=0) + timedelta(days=1)
@@ -140,20 +143,20 @@ class EventFormDurationTest(TestCase):
             'assets': [self.asset.pk],
         }
 
-    def test_event_form_30_minutes_is_invalid(self):
-        """Duration of 30 minutes must fail validation."""
+    def test_event_form_5_minutes_is_valid(self):
+        """Short durations are allowed."""
+        form = EventForm(data=self._form_data(5))
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_event_form_30_minutes_is_valid(self):
+        """Duration of 30 minutes must pass validation."""
         form = EventForm(data=self._form_data(30))
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_event_form_end_before_start_is_invalid(self):
+        """End time before start time must fail validation."""
+        form = EventForm(data=self._form_data(-30))
         self.assertFalse(form.is_valid())
-
-    def test_event_form_exactly_1_hour_is_valid(self):
-        """Duration of exactly 60 minutes must pass validation."""
-        form = EventForm(data=self._form_data(60))
-        self.assertTrue(form.is_valid(), form.errors)
-
-    def test_event_form_2_hours_is_valid(self):
-        """Duration of 120 minutes must pass validation."""
-        form = EventForm(data=self._form_data(120))
-        self.assertTrue(form.is_valid(), form.errors)
 
 
 # ── P1 Fix 6: Root URL redirect ───────────────────────────────────────────────
@@ -206,7 +209,7 @@ class PendingEventsAdminOnlyTest(TestCase):
 
 
 class EventEditOwnershipTest(TestCase):
-    """Regular users must not be able to edit another user's event."""
+    """Regular users can view (read-only) but not edit another user's event."""
 
     def setUp(self):
         self.owner = User.objects.create_user(username='owner', password='Testpass123!')
@@ -222,19 +225,34 @@ class EventEditOwnershipTest(TestCase):
             is_approved=True,
         )
 
-    def test_event_edit_ownership(self):
-        """Regular user cannot edit another user's event — must be redirected."""
+    def test_event_view_other_user_readonly(self):
+        """Regular user can view another user's event in read-only mode."""
         self.client.login(username='other', password='Testpass123!')
         url = reverse('cal:event_edit', args=[self.event.pk])
         response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.context['can_edit'])
+
+    def test_event_post_other_user_blocked(self):
+        """Regular user cannot POST to another user's event."""
+        self.client.login(username='other', password='Testpass123!')
+        url = reverse('cal:event_edit', args=[self.event.pk])
+        response = self.client.post(url, {
+            'title': 'Hacked',
+            'start_time': self.start.strftime('%Y-%m-%dT%H:%M'),
+            'end_time': self.end.strftime('%Y-%m-%dT%H:%M'),
+        })
         self.assertEqual(response.status_code, 302)
+        self.event.refresh_from_db()
+        self.assertEqual(self.event.title, 'Owner Event')
 
     def test_event_edit_owner_can_edit(self):
-        """Event owner can access the edit view (200)."""
+        """Event owner can access the edit view with full edit rights."""
         self.client.login(username='owner', password='Testpass123!')
         url = reverse('cal:event_edit', args=[self.event.pk])
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context['can_edit'])
 
 
 class AssetListLoginRequiredTest(TestCase):
@@ -701,8 +719,8 @@ class TrackViewEventAssignmentTest(TestCase):
         self.client.force_login(self.user)
         self.track = Asset.objects.create(name='Test Track', asset_type='track')
         # Monday 2026-03-09 10:00 UTC
-        start = datetime(2026, 3, 9, 10, 0, tzinfo=dt_timezone.utc)
-        end = datetime(2026, 3, 9, 12, 0, tzinfo=dt_timezone.utc)
+        start = datetime(2026, 3, 9, 10, 0, tzinfo=_local_tz)
+        end = datetime(2026, 3, 9, 12, 0, tzinfo=_local_tz)
         event = Event.objects.create(
             title='Sprint Test',
             description='desc',
@@ -796,8 +814,8 @@ class GanttDayViewTest(TestCase):
         self.assertContains(response, 'North Loop')
 
     def test_day_view_shows_event_in_gantt(self):
-        start = datetime(2026, 3, 9, 9, 0, tzinfo=dt_timezone.utc)
-        end   = datetime(2026, 3, 9, 11, 0, tzinfo=dt_timezone.utc)
+        start = datetime(2026, 3, 9, 9, 0, tzinfo=_local_tz)
+        end   = datetime(2026, 3, 9, 11, 0, tzinfo=_local_tz)
         ev = Event.objects.create(
             title='Morning Test', description='', start_time=start, end_time=end,
             created_by=self.user, is_approved=True,
@@ -808,28 +826,28 @@ class GanttDayViewTest(TestCase):
         self.assertContains(response, 'gantt-block')
 
     def test_day_view_event_position_in_html(self):
-        """9am start = 180 min after 6am; 180/840*100 = 21.4286%."""
-        start = datetime(2026, 3, 9, 9, 0, tzinfo=dt_timezone.utc)
-        end   = datetime(2026, 3, 9, 11, 0, tzinfo=dt_timezone.utc)
+        """9am start in 24h range: 540/1440*100 = 37.5%."""
+        start = datetime(2026, 3, 9, 9, 0, tzinfo=_local_tz)
+        end   = datetime(2026, 3, 9, 11, 0, tzinfo=_local_tz)
         ev = Event.objects.create(
             title='Position Test', description='', start_time=start, end_time=end,
             created_by=self.user, is_approved=True,
         )
         ev.assets.add(self.track)
         response = self.client.get(reverse('cal:calendar') + '?view=day&date=2026-3-9')
-        self.assertContains(response, 'left:21.4286%')
+        self.assertContains(response, 'left:37.5%')
 
-    def test_day_view_event_outside_range_not_rendered(self):
-        """Event entirely before 6am (4am-5am) must not produce a gantt-block."""
-        start = datetime(2026, 3, 9, 4, 0, tzinfo=dt_timezone.utc)
-        end   = datetime(2026, 3, 9, 5, 0, tzinfo=dt_timezone.utc)
+    def test_day_view_early_morning_event_rendered(self):
+        """Event at 4am-5am is visible in the 24h gantt view."""
+        start = datetime(2026, 3, 9, 4, 0, tzinfo=_local_tz)
+        end   = datetime(2026, 3, 9, 5, 0, tzinfo=_local_tz)
         ev = Event.objects.create(
             title='Pre-Dawn Test', description='', start_time=start, end_time=end,
             created_by=self.user, is_approved=True,
         )
         ev.assets.add(self.track)
         response = self.client.get(reverse('cal:calendar') + '?view=day&date=2026-3-9')
-        self.assertNotContains(response, 'Pre-Dawn Test')
+        self.assertContains(response, 'Pre-Dawn Test')
 
     def test_day_view_asset_filter_hidden(self):
         response = self.client.get(reverse('cal:calendar') + '?view=day&date=2026-3-9')
@@ -837,10 +855,10 @@ class GanttDayViewTest(TestCase):
 
     def test_day_view_overlapping_events_use_multiple_sub_rows(self):
         """Two overlapping events on the same track appear in separate sub-rows."""
-        start1 = datetime(2026, 3, 9, 9, 0, tzinfo=dt_timezone.utc)
-        end1   = datetime(2026, 3, 9, 12, 0, tzinfo=dt_timezone.utc)
-        start2 = datetime(2026, 3, 9, 10, 0, tzinfo=dt_timezone.utc)
-        end2   = datetime(2026, 3, 9, 13, 0, tzinfo=dt_timezone.utc)
+        start1 = datetime(2026, 3, 9, 9, 0, tzinfo=_local_tz)
+        end1   = datetime(2026, 3, 9, 12, 0, tzinfo=_local_tz)
+        start2 = datetime(2026, 3, 9, 10, 0, tzinfo=_local_tz)
+        end2   = datetime(2026, 3, 9, 13, 0, tzinfo=_local_tz)
         for t, s, e in [('Event A', start1, end1), ('Event B', start2, end2)]:
             ev = Event.objects.create(
                 title=t, description='', start_time=s, end_time=e,
@@ -926,8 +944,8 @@ class SubtrackConflictDetectionTest(TestCase):
         self.sub_south = Asset.objects.create(
             name='South', asset_type=Asset.AssetType.TRACK, parent=self.parent
         )
-        self.start = datetime(2026, 4, 1, 9, 0, tzinfo=dt_timezone.utc)
-        self.end   = datetime(2026, 4, 1, 11, 0, tzinfo=dt_timezone.utc)
+        self.start = datetime(2026, 4, 1, 9, 0, tzinfo=_local_tz)
+        self.end   = datetime(2026, 4, 1, 11, 0, tzinfo=_local_tz)
 
     def _make_event(self, asset, title='Existing Event'):
         ev = Event.objects.create(
@@ -985,8 +1003,8 @@ class SubtrackConflictDetectionTest(TestCase):
     def test_no_conflict_non_overlapping_times(self):
         """Even with parent/subtrack relationship, non-overlapping times must not conflict."""
         self._make_event(self.parent, 'Morning Full Event')
-        afternoon_start = datetime(2026, 4, 1, 14, 0, tzinfo=dt_timezone.utc)
-        afternoon_end   = datetime(2026, 4, 1, 16, 0, tzinfo=dt_timezone.utc)
+        afternoon_start = datetime(2026, 4, 1, 14, 0, tzinfo=_local_tz)
+        afternoon_end   = datetime(2026, 4, 1, 16, 0, tzinfo=_local_tz)
         form = EventForm(data=self._form_data(self.sub_north, afternoon_start, afternoon_end))
         self.assertTrue(form.is_valid(), f"Non-overlapping time should not conflict. Errors: {form.errors}")
 
@@ -1016,8 +1034,8 @@ class SubtrackDayViewTest(TestCase):
 
     def test_day_view_subtrack_event_appears_in_correct_row(self):
         """An event booked on a subtrack must appear in the day view."""
-        start = datetime(2026, 4, 1, 9, 0, tzinfo=dt_timezone.utc)
-        end   = datetime(2026, 4, 1, 11, 0, tzinfo=dt_timezone.utc)
+        start = datetime(2026, 4, 1, 9, 0, tzinfo=_local_tz)
+        end   = datetime(2026, 4, 1, 11, 0, tzinfo=_local_tz)
         ev = Event.objects.create(
             title='North Test', description='', start_time=start, end_time=end,
             created_by=self.user, is_approved=True,
@@ -1029,8 +1047,8 @@ class SubtrackDayViewTest(TestCase):
 
     def test_day_view_full_track_event_shows_fulltrack_overlay(self):
         """A full-track (parent) event must render with the gantt-fulltrack-overlay class."""
-        start = datetime(2026, 4, 1, 9, 0, tzinfo=dt_timezone.utc)
-        end   = datetime(2026, 4, 1, 11, 0, tzinfo=dt_timezone.utc)
+        start = datetime(2026, 4, 1, 9, 0, tzinfo=_local_tz)
+        end   = datetime(2026, 4, 1, 11, 0, tzinfo=_local_tz)
         ev = Event.objects.create(
             title='Full Track Event', description='', start_time=start, end_time=end,
             created_by=self.user, is_approved=True,
@@ -1075,8 +1093,8 @@ class SubtrackWeekViewTest(TestCase):
 
     def test_week_view_subtrack_event_appears(self):
         """An event booked on a subtrack must appear in the week view."""
-        start = datetime(2026, 3, 30, 9, 0, tzinfo=dt_timezone.utc)
-        end   = datetime(2026, 3, 30, 11, 0, tzinfo=dt_timezone.utc)
+        start = datetime(2026, 3, 30, 9, 0, tzinfo=_local_tz)
+        end   = datetime(2026, 3, 30, 11, 0, tzinfo=_local_tz)
         ev = Event.objects.create(
             title='North Week Test', description='', start_time=start, end_time=end,
             created_by=self.user, is_approved=True,
@@ -1087,8 +1105,8 @@ class SubtrackWeekViewTest(TestCase):
 
     def test_week_view_full_track_event_appears(self):
         """A full-track (parent) event must appear in the single parent-track row."""
-        start = datetime(2026, 3, 30, 9, 0, tzinfo=dt_timezone.utc)
-        end   = datetime(2026, 3, 30, 11, 0, tzinfo=dt_timezone.utc)
+        start = datetime(2026, 3, 30, 9, 0, tzinfo=_local_tz)
+        end   = datetime(2026, 3, 30, 11, 0, tzinfo=_local_tz)
         ev = Event.objects.create(
             title='Full Track Week Event', description='', start_time=start, end_time=end,
             created_by=self.user, is_approved=True,
@@ -1106,8 +1124,8 @@ class SubtrackWeekViewTest(TestCase):
 
     def test_week_view_sibling_events_both_appear(self):
         """Two events on sibling subtracks on the same day must both appear."""
-        start = datetime(2026, 3, 30, 9, 0, tzinfo=dt_timezone.utc)
-        end   = datetime(2026, 3, 30, 11, 0, tzinfo=dt_timezone.utc)
+        start = datetime(2026, 3, 30, 9, 0, tzinfo=_local_tz)
+        end   = datetime(2026, 3, 30, 11, 0, tzinfo=_local_tz)
         ev1 = Event.objects.create(
             title='North Event', description='', start_time=start, end_time=end,
             created_by=self.user, is_approved=True,
@@ -1572,15 +1590,16 @@ class GanttDataEndAttributeTest(TestCase):
 
     def test_gantt_block_has_data_end_attribute(self):
         """Day view Gantt blocks include data-end with the event end time."""
-        start = datetime(2026, 3, 9, 9, 0, tzinfo=dt_timezone.utc)
-        end = datetime(2026, 3, 9, 11, 0, tzinfo=dt_timezone.utc)
+        start = datetime(2026, 3, 9, 9, 0, tzinfo=_local_tz)
+        end = datetime(2026, 3, 9, 11, 0, tzinfo=_local_tz)
         ev = Event.objects.create(
             title='Data End Test', description='', start_time=start, end_time=end,
             created_by=self.user, is_approved=True,
         )
         ev.assets.add(self.track)
         response = self.client.get(reverse('cal:calendar') + '?view=day&date=2026-3-9')
-        self.assertContains(response, 'data-end="2026-03-09T11:00:00')
+        ev.refresh_from_db()
+        self.assertContains(response, f'data-end="{ev.end_time.isoformat()}"')
 
     def test_event_past_css_rule_exists(self):
         """styles.css must contain the .event-past rule with opacity."""
@@ -1672,10 +1691,10 @@ class EventTouchingTimesTest(TestCase):
         self.asset = Asset.objects.create(
             name='Touch Track', asset_type=Asset.AssetType.TRACK
         )
-        self.nine_am = datetime(2026, 5, 1, 9, 0, tzinfo=dt_timezone.utc)
-        self.ten_am = datetime(2026, 5, 1, 10, 0, tzinfo=dt_timezone.utc)
-        self.eleven_am = datetime(2026, 5, 1, 11, 0, tzinfo=dt_timezone.utc)
-        self.noon = datetime(2026, 5, 1, 12, 0, tzinfo=dt_timezone.utc)
+        self.nine_am = datetime(2026, 5, 1, 9, 0, tzinfo=_local_tz)
+        self.ten_am = datetime(2026, 5, 1, 10, 0, tzinfo=_local_tz)
+        self.eleven_am = datetime(2026, 5, 1, 11, 0, tzinfo=_local_tz)
+        self.noon = datetime(2026, 5, 1, 12, 0, tzinfo=_local_tz)
         # Existing event: 9 AM - 10 AM
         ev = Event.objects.create(
             title='First Block', description='',
@@ -1785,8 +1804,8 @@ class AnalyticsComputationTest(TestCase):
 
     def test_track_utilization_computation(self):
         """Create a 2h approved event -> scheduled_hours matches expected value."""
-        start = datetime(2026, 5, 4, 9, 0, tzinfo=dt_timezone.utc)
-        end = datetime(2026, 5, 4, 11, 0, tzinfo=dt_timezone.utc)
+        start = datetime(2026, 5, 4, 9, 0, tzinfo=_local_tz)
+        end = datetime(2026, 5, 4, 11, 0, tzinfo=_local_tz)
         ev = Event.objects.create(
             title='Util Test', description='',
             start_time=start, end_time=end,
@@ -1805,10 +1824,10 @@ class AnalyticsComputationTest(TestCase):
 
     def test_schedule_accuracy_computation(self):
         """Create event with actual_start 15 min late -> avg_start_delta_minutes is 15."""
-        start = datetime(2026, 5, 4, 9, 0, tzinfo=dt_timezone.utc)
-        end = datetime(2026, 5, 4, 11, 0, tzinfo=dt_timezone.utc)
-        actual_start = datetime(2026, 5, 4, 9, 15, tzinfo=dt_timezone.utc)
-        actual_end = datetime(2026, 5, 4, 11, 0, tzinfo=dt_timezone.utc)
+        start = datetime(2026, 5, 4, 9, 0, tzinfo=_local_tz)
+        end = datetime(2026, 5, 4, 11, 0, tzinfo=_local_tz)
+        actual_start = datetime(2026, 5, 4, 9, 15, tzinfo=_local_tz)
+        actual_end = datetime(2026, 5, 4, 11, 0, tzinfo=_local_tz)
         ev = Event.objects.create(
             title='Accuracy Test', description='',
             start_time=start, end_time=end,
@@ -1869,3 +1888,204 @@ class AssetColorAutoAssignmentTest(TestCase):
             name='Cycle Track', asset_type=Asset.AssetType.TRACK
         )
         self.assertIn(track_17.color, TRACK_COLOR_PALETTE)
+
+
+# ── Dark Mode CSS Integrity Tests ────────────────────────────────────────────
+
+class DarkModeDashboardCSSTest(TestCase):
+    """Ensure dark-theme overrides in dashboard.css don't break background-image rules.
+
+    Regression: dark-theme rules that set background-image without also setting
+    background-repeat/position/size cause SVG arrows to tile across the element.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        from django.conf import settings
+        css_path = os.path.join(
+            settings.BASE_DIR, 'cal', 'static', 'cal', 'css', 'dashboard.css'
+        )
+        with open(css_path, 'r') as f:
+            cls.css = f.read()
+        # Parse CSS into rule blocks: list of (selector, body) tuples
+        import re
+        cls.blocks = []
+        # Match selectors followed by { body }
+        for m in re.finditer(
+            r'([^{}]+?)\s*\{([^{}]*)\}', cls.css
+        ):
+            selector = m.group(1).strip()
+            body = m.group(2).strip()
+            cls.blocks.append((selector, body))
+
+    def _dark_blocks(self):
+        """Return all (selector, body) tuples for html.dark-theme rules."""
+        return [(s, b) for s, b in self.blocks if 'dark-theme' in s]
+
+    def _parse_props(self, body):
+        """Parse a CSS body string into a dict of property -> value."""
+        import re
+        props = {}
+        for decl in re.split(r';\s*', body):
+            decl = decl.strip()
+            if ':' in decl:
+                prop, _, val = decl.partition(':')
+                props[prop.strip()] = val.strip()
+        return props
+
+    def test_background_image_has_no_repeat(self):
+        """Any rule with background-image must also set background-repeat: no-repeat
+        (either in the same block or via its base selector)."""
+        import re
+        # Collect base (non-dark) selectors that already set background-repeat
+        base_selectors_with_repeat = set()
+        for selector, body in self.blocks:
+            if 'dark-theme' not in selector:
+                props = self._parse_props(body)
+                if props.get('background-repeat') == 'no-repeat':
+                    base_selectors_with_repeat.add(selector)
+
+        for selector, body in self._dark_blocks():
+            props = self._parse_props(body)
+            if 'background-image' not in props:
+                continue
+            # Check this block has background-repeat
+            if props.get('background-repeat') == 'no-repeat':
+                continue
+            # Check if shorthand 'background' includes no-repeat
+            bg = props.get('background', '')
+            if 'no-repeat' in bg:
+                continue
+            # Check if a base selector for the same element has it
+            # Extract the element selector (strip "html.dark-theme " prefix)
+            base_sel = re.sub(r'html\.dark-theme\s+', '', selector).strip()
+            if base_sel in base_selectors_with_repeat:
+                continue
+            self.fail(
+                f"Dark-theme rule '{selector}' sets background-image but "
+                f"does not ensure background-repeat: no-repeat. "
+                f"This causes SVG arrows to tile across the element."
+            )
+
+    def test_background_image_has_position(self):
+        """Any rule with background-image must also set background-position
+        (either in the same block or via its base selector)."""
+        import re
+        base_selectors_with_position = set()
+        for selector, body in self.blocks:
+            if 'dark-theme' not in selector:
+                props = self._parse_props(body)
+                if 'background-position' in props:
+                    base_selectors_with_position.add(selector)
+
+        for selector, body in self._dark_blocks():
+            props = self._parse_props(body)
+            if 'background-image' not in props:
+                continue
+            if 'background-position' in props:
+                continue
+            bg = props.get('background', '')
+            if 'center' in bg or 'left' in bg or 'right' in bg:
+                continue
+            base_sel = re.sub(r'html\.dark-theme\s+', '', selector).strip()
+            if base_sel in base_selectors_with_position:
+                continue
+            self.fail(
+                f"Dark-theme rule '{selector}' sets background-image but "
+                f"does not ensure background-position is set."
+            )
+
+    def test_background_image_has_size(self):
+        """Any rule with background-image must also set background-size
+        (either in the same block or via its base selector)."""
+        import re
+        base_selectors_with_size = set()
+        for selector, body in self.blocks:
+            if 'dark-theme' not in selector:
+                props = self._parse_props(body)
+                if 'background-size' in props:
+                    base_selectors_with_size.add(selector)
+
+        for selector, body in self._dark_blocks():
+            props = self._parse_props(body)
+            if 'background-image' not in props:
+                continue
+            if 'background-size' in props:
+                continue
+            base_sel = re.sub(r'html\.dark-theme\s+', '', selector).strip()
+            if base_sel in base_selectors_with_size:
+                continue
+            self.fail(
+                f"Dark-theme rule '{selector}' sets background-image but "
+                f"does not ensure background-size is set."
+            )
+
+    def test_dark_theme_hover_preserves_background_image(self):
+        """Dark-theme hover/focus rules must not use shorthand 'background'
+        if the base rule uses background-image (shorthand resets the image)."""
+        import re
+        # Find dark-theme base rules that use background-image
+        dark_selectors_with_image = set()
+        for selector, body in self._dark_blocks():
+            props = self._parse_props(body)
+            if 'background-image' in props:
+                # Normalize: "html.dark-theme select.foo" -> "select.foo"
+                base_sel = re.sub(r'html\.dark-theme\s+', '', selector).strip()
+                dark_selectors_with_image.add(base_sel)
+
+        for selector, body in self._dark_blocks():
+            if ':hover' not in selector and ':focus' not in selector:
+                continue
+            props = self._parse_props(body)
+            if 'background' not in props:
+                continue
+            # This rule uses shorthand 'background' — check if it
+            # would clobber a background-image from the base rule
+            base_sel = re.sub(
+                r'html\.dark-theme\s+', '', selector
+            ).strip()
+            # Strip :hover/:focus to get the base selector
+            base_sel = re.sub(r':(hover|focus)', '', base_sel).strip()
+            # Remove double commas and trailing commas from multi-selectors
+            base_sel = re.sub(r',\s*,', ',', base_sel).strip().rstrip(',')
+            for img_sel in dark_selectors_with_image:
+                if img_sel in base_sel or base_sel in img_sel:
+                    self.fail(
+                        f"Dark-theme rule '{selector}' uses shorthand "
+                        f"'background' which resets background-image set "
+                        f"by '{img_sel}'. Use 'background-color' instead."
+                    )
+
+    def test_styles_css_dark_theme_rules_exist(self):
+        """styles.css must contain dark-theme overrides for core UI elements."""
+        from django.conf import settings
+        css_path = os.path.join(
+            settings.BASE_DIR, 'cal', 'static', 'cal', 'css', 'styles.css'
+        )
+        with open(css_path, 'r') as f:
+            styles_css = f.read()
+        # Core elements that must have dark-theme rules
+        for selector in [
+            'html.dark-theme .card',
+            'html.dark-theme .cal-nav-arrow',
+        ]:
+            self.assertIn(
+                selector, styles_css,
+                f"styles.css missing dark-theme rule for: {selector}"
+            )
+
+    def test_dashboard_css_dark_theme_coverage(self):
+        """Dashboard CSS must have dark-theme rules for key interactive elements."""
+        required_selectors = [
+            'html.dark-theme select.event-channel-badge',
+            'html.dark-theme .radio-channel-select',
+            'html.dark-theme .event-item',
+            'html.dark-theme .track-card',
+            'html.dark-theme .track-card__header',
+        ]
+        for selector in required_selectors:
+            self.assertIn(
+                selector, self.css,
+                f"dashboard.css missing dark-theme rule for: {selector}"
+            )

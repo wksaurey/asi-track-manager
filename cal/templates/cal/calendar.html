@@ -94,6 +94,10 @@
 
 {% endblock %}
 
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'cal/css/easter-egg.css' %}">
+{% endblock %}
+
 {% block script %}
 <script>
   // ── Pending filter toggle (client-side, no reload) ────────────────
@@ -264,4 +268,33 @@
   });
 </script>
 {% endif %}
+
+<!-- ── Konami Code Easter Egg ──────────────────────────────────── -->
+<div class="easter-egg-overlay" id="easter-egg">
+
+  <!-- Starfield background -->
+  <canvas id="starfield-canvas"></canvas>
+
+  <!-- 3D CSS scene on top -->
+  <div class="egg-scene">
+    <div class="egg-card">
+      <div class="rocket-wrapper">
+        <div class="galaxy-bg"></div>
+        <div class="rocket-orbit"><div class="rocket-emoji">🚀</div></div>
+      </div>
+      <div class="egg-label">Hollis was here</div>
+    </div>
+    <div class="egg-card">
+      <div class="saturn-wrapper">
+        <div class="saturn-body"></div>
+        <div class="saturn-ring"></div>
+      </div>
+      <div class="egg-label">Kolter was here</div>
+    </div>
+  </div>
+
+  <span class="egg-hint">press any key to close</span>
+</div>
+
+<script src="{% static 'cal/js/easter-egg.js' %}"></script>
 {% endblock %}

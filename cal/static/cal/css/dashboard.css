@@ -116,8 +116,9 @@ h1 { margin: 0; font-size: 22px; letter-spacing: 0.2px; }
    ============================================================ */
 .grid {
   padding: 20px;
-  columns: 300px;
+  columns: 350px;
   column-gap: 18px;
+  margin: 0 auto;
 }
 
 
@@ -413,6 +414,17 @@ html.dark-theme select.event-channel-badge option {
   background: #1a2b38;
   color: #c0d8e4;
 }
+/* Green highlight when a non-default channel is selected */
+select.event-channel-badge[data-empty="false"] {
+  color: #059669;
+  border-color: rgba(16,185,129,0.5);
+  background-color: rgba(16,185,129,0.08);
+}
+html.dark-theme select.event-channel-badge[data-empty="false"] {
+  color: #34d399;
+  border-color: rgba(52,211,153,0.5);
+  background-color: rgba(52,211,153,0.12);
+}
 html.dark-theme select.event-channel-badge:hover {
   border-color: var(--primary);
   background-color: rgba(46,168,229,0.1);
@@ -599,9 +611,18 @@ html.dark-theme .brand-title {
 }
 .radio-channel-select:hover,
 .radio-channel-select:focus { border-color: #34d399; background: #0a4155; }
+/* Green highlight when a non-default channel is selected */
+.radio-channel-select[data-empty="false"] {
+  background: #064e3b; color: #6ee7b7;
+  border-color: rgba(110,231,183,0.5);
+}
 html.dark-theme .radio-channel-select {
   background: #0f1d2a;
   border-color: rgba(52,211,153,0.3);
+}
+html.dark-theme .radio-channel-select[data-empty="false"] {
+  background: #064e3b; color: #6ee7b7;
+  border-color: rgba(110,231,183,0.5);
 }
 html.dark-theme .radio-channel-select:hover,
 html.dark-theme .radio-channel-select:focus { background: #162636; }
@@ -625,6 +646,35 @@ html.dark-theme .icon-btn:hover {
   box-shadow: 0 0 8px rgba(96,165,250,0.2);
 }
 .icon-btn--sm { font-size: 12px; padding: 2px 6px; border-radius: 6px; }
+
+/* ── Active/Inactive toggle button ────────────────────────── */
+.active-toggle-btn {
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--muted);
+  font-size: 11px;
+  min-width: 60px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  text-align: center;
+  transition: all 0.2s;
+}
+.active-toggle-btn.active {
+  color: #fff;
+  background: #dc2626;
+  border-color: #dc2626;
+}
+
+/* ── Active track red border ─────────────────────────────── */
+.track-card--active {
+  border: 3px solid #dc2626 !important;
+  box-shadow: 0 0 10px rgba(220, 38, 38, 0.35);
+}
+.track-card--active:hover {
+  border-color: #dc2626 !important;
+  box-shadow: 0 0 14px rgba(220, 38, 38, 0.5);
+}
+
 
 
 
@@ -1026,3 +1076,332 @@ html.dark-theme .stamp-toast {
   background: #dc2626;
   box-shadow: 0 4px 12px rgba(0,0,0,.4);
 }
+
+
+/* ============================================================
+   Task #7: Approve button
+   ============================================================ */
+.btn-approve {
+  background: rgba(59, 130, 246, 0.12) !important;
+  border-color: #3b82f6 !important;
+  color: #3b82f6 !important;
+}
+.btn-approve:hover {
+  background: rgba(59, 130, 246, 0.24) !important;
+}
+html.dark-theme .btn-approve {
+  background: rgba(96, 165, 250, 0.15) !important;
+  border-color: #60a5fa !important;
+  color: #60a5fa !important;
+}
+html.dark-theme .btn-approve:hover {
+  background: rgba(96, 165, 250, 0.3) !important;
+}
+.time-label--pending {
+  color: #d97706 !important;
+  font-weight: 700;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+html.dark-theme .time-label--pending { color: #fbbf24 !important; }
+
+.event-item--unapproved {
+  opacity: 0.75;
+  border-left: 3px solid #d97706;
+}
+html.dark-theme .event-item--unapproved {
+  border-left-color: #fbbf24;
+}
+
+
+/* ============================================================
+   Task #8: Play / Pause / Stop controls
+   ============================================================ */
+.btn-play {
+  background: rgba(16, 185, 129, 0.12) !important;
+  border-color: #10b981 !important;
+  color: #10b981 !important;
+}
+.btn-play:hover { background: rgba(16, 185, 129, 0.24) !important; }
+html.dark-theme .btn-play {
+  background: rgba(52, 211, 153, 0.15) !important;
+  border-color: #34d399 !important;
+  color: #34d399 !important;
+}
+html.dark-theme .btn-play:hover { background: rgba(52, 211, 153, 0.3) !important; }
+
+.btn-pause {
+  background: rgba(234, 179, 8, 0.12) !important;
+  border-color: #eab308 !important;
+  color: #ca8a04 !important;
+}
+.btn-pause:hover { background: rgba(234, 179, 8, 0.24) !important; }
+html.dark-theme .btn-pause {
+  background: rgba(234, 179, 8, 0.15) !important;
+  border-color: #facc15 !important;
+  color: #facc15 !important;
+}
+html.dark-theme .btn-pause:hover { background: rgba(234, 179, 8, 0.3) !important; }
+
+.btn-stop {
+  background: rgba(239, 68, 68, 0.10) !important;
+  border-color: #ef4444 !important;
+  color: #ef4444 !important;
+}
+.btn-stop:hover { background: rgba(239, 68, 68, 0.22) !important; }
+html.dark-theme .btn-stop {
+  background: rgba(239, 68, 68, 0.15) !important;
+}
+html.dark-theme .btn-stop:hover { background: rgba(239, 68, 68, 0.3) !important; }
+
+.btn-undo {
+  background: rgba(148, 163, 184, 0.12) !important;
+  border-color: #94a3b8 !important;
+  color: #64748b !important;
+}
+.btn-undo:hover { background: rgba(148, 163, 184, 0.24) !important; }
+html.dark-theme .btn-undo {
+  background: rgba(148, 163, 184, 0.15) !important;
+  border-color: #94a3b8 !important;
+  color: #94a3b8 !important;
+}
+html.dark-theme .btn-undo:hover { background: rgba(148, 163, 184, 0.3) !important; }
+
+.time-label--active {
+  color: #10b981 !important;
+  font-weight: 600;
+}
+html.dark-theme .time-label--active { color: #34d399 !important; }
+
+.time-label--paused {
+  color: #ca8a04 !important;
+  font-weight: 600;
+}
+html.dark-theme .time-label--paused { color: #facc15 !important; }
+
+.time-label--complete {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+
+/* ============================================================
+   Task #9: Pending filter toggle
+   ============================================================ */
+.pending-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+  margin-left: 12px;
+  user-select: none;
+}
+.pending-filter input[type="checkbox"] {
+  accent-color: var(--primary-strong, #3b82f6);
+  cursor: pointer;
+}
+
+
+/* ============================================================
+   Task #14: Impromptu button + conflict list
+   ============================================================ */
+.btn-impromptu {
+  background: rgba(168, 85, 247, 0.12) !important;
+  border-color: #a855f7 !important;
+  color: #a855f7 !important;
+  white-space: nowrap;
+}
+.btn-impromptu:hover { background: rgba(168, 85, 247, 0.24) !important; }
+html.dark-theme .btn-impromptu {
+  background: rgba(168, 85, 247, 0.15) !important;
+  border-color: #c084fc !important;
+  color: #c084fc !important;
+}
+html.dark-theme .btn-impromptu:hover { background: rgba(168, 85, 247, 0.3) !important; }
+
+.impromptu-conflicts {
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin-top: 6px;
+  font-size: 13px;
+}
+.impromptu-conflicts p { margin: 4px 0; }
+.impromptu-conflicts ul {
+  list-style: disc;
+  padding-left: 20px;
+  margin: 4px 0;
+}
+.impromptu-conflicts li { margin: 2px 0; }
+.impromptu-confirm-msg { color: var(--danger); font-weight: 600; }
+html.dark-theme .impromptu-conflicts {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.35);
+}
+
+
+/* ============================================================
+   Segment toggle button + expandable segment list
+   ============================================================ */
+.btn-seg-toggle {
+  background: rgba(100, 116, 139, 0.10) !important;
+  border-color: #94a3b8 !important;
+  color: #64748b !important;
+  font-variant-numeric: tabular-nums;
+}
+.btn-seg-toggle:hover,
+.btn-seg-toggle.active {
+  background: rgba(100, 116, 139, 0.20) !important;
+  color: var(--text) !important;
+}
+html.dark-theme .btn-seg-toggle {
+  background: rgba(148, 163, 184, 0.10) !important;
+  border-color: #64748b !important;
+  color: #94a3b8 !important;
+}
+html.dark-theme .btn-seg-toggle:hover,
+html.dark-theme .btn-seg-toggle.active {
+  background: rgba(148, 163, 184, 0.22) !important;
+  color: #e2e8f0 !important;
+}
+
+.segment-list {
+  flex-basis: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 4px 0 2px;
+}
+.segment-list.hidden { display: none; }
+
+.segment-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.segment-label {
+  min-width: 38px;
+  font-weight: 600;
+  color: var(--text);
+  opacity: 0.6;
+}
+
+.segment-dash {
+  opacity: 0.5;
+}
+
+.segment-dur {
+  margin-left: auto;
+  opacity: 0.6;
+  font-size: 0.68rem;
+}
+
+.editable-time--disabled {
+  cursor: default;
+  border-bottom: none !important;
+  opacity: 0.5;
+}
+
+
+/* ============================================================
+   Segment time picker (anchored popover, duration-btn style)
+   ============================================================ */
+/* Segment time edit popup — Flatpickr inline time picker */
+.seg-edit-box {
+  position: absolute;
+  z-index: 1100;
+  background: var(--card, #fff);
+  border: 1px solid var(--card-border);
+  border-radius: var(--border-r, 12px);
+  box-shadow: var(--shadow-hover);
+  padding: 10px 12px 8px;
+  width: auto;
+  min-width: 160px;
+}
+.seg-edit-box.saving { opacity: 0.6; pointer-events: none; }
+
+.seg-edit-header {
+  margin-bottom: 4px;
+}
+.seg-edit-title {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.seg-edit-fp-input { display: none; }
+
+/* Style the inline flatpickr within the popup */
+.seg-edit-box .flatpickr-calendar {
+  box-shadow: none !important;
+  border: none !important;
+  background: transparent !important;
+  margin: 0 auto;
+}
+.seg-edit-box .flatpickr-time {
+  border: none !important;
+  background: transparent !important;
+}
+.seg-edit-box .flatpickr-time .numInputWrapper span::after {
+  left: 50%;
+  transform: translateX(-50%);
+}
+.seg-edit-box .flatpickr-time input {
+  color: var(--text, #1e293b) !important;
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+html.dark-theme .seg-edit-box .flatpickr-time input {
+  color: var(--text, #e2e8f0) !important;
+  background: transparent !important;
+}
+html.dark-theme .seg-edit-box .flatpickr-time .flatpickr-am-pm {
+  color: var(--text, #e2e8f0) !important;
+  background: transparent !important;
+}
+html.dark-theme .seg-edit-box .flatpickr-time .numInputWrapper span {
+  border-color: rgba(255,255,255,0.15);
+}
+html.dark-theme .seg-edit-box .flatpickr-time .numInputWrapper span.arrowUp::after {
+  border-bottom-color: var(--muted, #94a3b8);
+}
+html.dark-theme .seg-edit-box .flatpickr-time .numInputWrapper span.arrowDown::after {
+  border-top-color: var(--muted, #94a3b8);
+}
+
+/* "Now" button */
+.seg-pick-now {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid #10b981;
+  background: rgba(16, 185, 129, 0.08);
+  color: #10b981;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: center;
+  transition: background 120ms;
+}
+.seg-pick-now:hover {
+  background: rgba(16, 185, 129, 0.18);
+}
+html.dark-theme .seg-pick-now {
+  background: rgba(52, 211, 153, 0.10);
+  border-color: #34d399;
+  color: #34d399;
+}
+html.dark-theme .seg-pick-now:hover { background: rgba(52, 211, 153, 0.22); }

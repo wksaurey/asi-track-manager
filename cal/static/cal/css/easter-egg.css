@@ -46,23 +46,10 @@
   transform: translateX(-50%) rotate(45deg);
 }
 
-/* ── Saturn (Kolter / purple) ────────────────────────────────── */
-.saturn-wrapper {
-  width: 200px; height: 200px; position: relative;
-}
-.saturn-body {
-  width: 100px; height: 100px; border-radius: 50%;
-  background: linear-gradient(135deg, #c084fc, #7c3aed, #a855f7);
-  position: absolute; top: 50px; left: 50px;
-  box-shadow: 0 0 40px rgba(192,132,252,0.4), inset -10px -10px 20px rgba(0,0,0,0.3);
-  animation: eggFloat 3s ease-in-out infinite;
-}
-.saturn-ring {
-  width: 200px; height: 50px;
-  border: 3px solid rgba(192,132,252,0.5);
-  border-radius: 50%; position: absolute; top: 75px; left: 0;
-  transform: rotateX(75deg);
-  animation: eggFloat 3s ease-in-out infinite;
+/* ── Saturn SVG (Kolter / purple) ────────────────────────────── */
+.saturn-svg {
+  filter: drop-shadow(0 0 30px rgba(124,58,237,0.4));
+  animation: eggFloatBody 3s ease-in-out infinite;
 }
 
 /* ── Labels ──────────────────────────────────────────────────── */
@@ -94,13 +81,6 @@
 @keyframes eggOrbit {
   from { transform: rotate(0deg); }
   to   { transform: rotate(360deg); }
-}
-@keyframes eggFloat {
-  0%, 100% { transform: translateY(0) rotateX(75deg); }
-  50%      { transform: translateY(-8px) rotateX(75deg); }
-}
-.saturn-body {
-  animation: eggFloatBody 3s ease-in-out infinite;
 }
 @keyframes eggFloatBody {
   0%, 100% { transform: translateY(0); }

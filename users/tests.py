@@ -290,3 +290,154 @@ class DeleteUserTest(TestCase):
         event.refresh_from_db()
         self.assertIsNone(event.created_by)
         self.assertTrue(Event.objects.filter(pk=event.pk).exists())
+
+
+class ProfileViewAccessTest(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='profuser', password='Testpass123!')
+        self.url = reverse('users:profile')
+
+    def test_anonymous_redirects_to_login(self):
+        resp = self.client.get(self.url)
+        self.assertEqual(resp.status_code, 302)
+        self.assertIn('/login', resp.url)
+
+    def test_logged_in_gets_profile_page(self):
+        self.client.force_login(self.user)
+        resp = self.client.get(self.url)
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn('username_form', resp.context)
+        self.assertIn('password_form', resp.context)
+
+
+class ProfileUsernameChangeTest(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='origname', password='Testpass123!')
+        self.url = reverse('users:profile')
+        self.client.force_login(self.user)
+
+    def test_valid_username_change(self):
+        resp = self.client.post(self.url, {
+            'action': 'change_username', 'username': 'newname',
+        })
+        self.assertEqual(resp.status_code, 302)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.username, 'newname')
+
+    def test_username_normalized_to_lowercase(self):
+        self.client.post(self.url, {
+            'action': 'change_username', 'username': 'MixedCase',
+        })
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.username, 'mixedcase')
+
+    def test_duplicate_username_case_insensitive(self):
+        User.objects.create_user(username='taken', password='Testpass123!')
+        resp = self.client.post(self.url, {
+            'action': 'change_username', 'username': 'Taken',
+        })
+        self.assertEqual(resp.status_code, 200)  # re-renders form with errors
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.username, 'origname')
+
+    def test_same_username_accepted(self):
+        resp = self.client.post(self.url, {
+            'action': 'change_username', 'username': 'origname',
+        })
+        self.assertEqual(resp.status_code, 302)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.username, 'origname')
+
+    def test_blank_username_rejected(self):
+        resp = self.client.post(self.url, {
+            'action': 'change_username', 'username': '',
+        })
+        self.assertEqual(resp.status_code, 200)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.username, 'origname')
+
+
+class ProfilePasswordChangeTest(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='pwuser', password='Testpass123!')
+        self.url = reverse('users:profile')
+        self.client.force_login(self.user)
+
+    def test_valid_password_change(self):
+        resp = self.client.post(self.url, {
+            'action': 'change_password',
+            'old_password': 'Testpass123!',
+            'new_password1': 'Newpass456!',
+            'new_password2': 'Newpass456!',
+        })
+        self.assertEqual(resp.status_code, 302)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password('Newpass456!'))
+
+    def test_session_stays_alive_after_password_change(self):
+        self.client.post(self.url, {
+            'action': 'change_password',
+            'old_password': 'Testpass123!',
+            'new_password1': 'Newpass456!',
+            'new_password2': 'Newpass456!',
+        })
+        resp = self.client.get(self.url)
+        self.assertEqual(resp.status_code, 200)  # still logged in, not redirected
+
+    def test_wrong_current_password(self):
+        self.client.post(self.url, {
+            'action': 'change_password',
+            'old_password': 'WrongPass!',
+            'new_password1': 'Newpass456!',
+            'new_password2': 'Newpass456!',
+        })
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password('Testpass123!'))
+
+    def test_mismatched_new_passwords(self):
+        self.client.post(self.url, {
+            'action': 'change_password',
+            'old_password': 'Testpass123!',
+            'new_password1': 'Newpass456!',
+            'new_password2': 'Different789!',
+        })
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password('Testpass123!'))
+
+
+class ProfileBothChangesTest(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='bothuser', password='Testpass123!')
+        self.url = reverse('users:profile')
+        self.client.force_login(self.user)
+
+    def test_change_username_then_password(self):
+        self.client.post(self.url, {
+            'action': 'change_username', 'username': 'newboth',
+        })
+        self.client.post(self.url, {
+            'action': 'change_password',
+            'old_password': 'Testpass123!',
+            'new_password1': 'Newpass456!',
+            'new_password2': 'Newpass456!',
+        })
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.username, 'newboth')
+        self.assertTrue(self.user.check_password('Newpass456!'))
+
+    def test_success_message_on_username_change(self):
+        resp = self.client.post(self.url, {
+            'action': 'change_username', 'username': 'msguser',
+        }, follow=True)
+        messages = list(resp.context['messages'])
+        self.assertTrue(any('Username' in str(m) for m in messages))
+
+    def test_success_message_on_password_change(self):
+        resp = self.client.post(self.url, {
+            'action': 'change_password',
+            'old_password': 'Testpass123!',
+            'new_password1': 'Newpass456!',
+            'new_password2': 'Newpass456!',
+        }, follow=True)
+        messages = list(resp.context['messages'])
+        self.assertTrue(any('Password' in str(m) for m in messages))

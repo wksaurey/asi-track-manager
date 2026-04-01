@@ -24,6 +24,7 @@ urlpatterns = [
     path('event/approve/<int:event_id>/',    views.event_approve,    name='event_approve'),
     path('event/unapprove/<int:event_id>/', views.event_unapprove,  name='event_unapprove'),
     path('events/pending/',                views.pending_events, name='pending_events'),
+    path('events/mass-approve/',            views.mass_approve_events, name='mass_approve_events'),
 
     # ── Asset management ───────────────────────────────────────────────────
     path('assets/',                        views.asset_list,   name='asset_list'),

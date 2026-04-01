@@ -143,7 +143,7 @@ class Calendar(HTMLCalendar):
             more_html = ''
             n_extra = len(events_list) - self.MONTH_VISIBLE_LIMIT
             if n_extra > 0:
-                day_label = day_date.strftime('%A, %B %-d, %Y')
+                day_label = f"{day_date.strftime('%A, %B')} {day_date.day}, {day_date.year}"
                 all_items = ''.join(
                     f'<li class="{self._event_classes(ev)} event-modal-item">'
                     f'{ev.get_html_url}'

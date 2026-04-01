@@ -162,6 +162,21 @@ form input:focus, form select:focus, form textarea:focus {
   border-color: var(--primary);
   box-shadow: 0 0 0 3px rgba(46,168,229,0.12);
 }
+/* Radio channel dropdown in event form — matches dashboard green style */
+select#id_radio_channel,
+select#id_radio_channel.form-control {
+  background: #064e3b !important; color: #6ee7b7 !important;
+  border: 2px solid #10b981 !important;
+  font-weight: 700;
+  color-scheme: dark;
+  box-shadow: 0 0 5px rgba(16,185,129,0.25);
+}
+select#id_radio_channel:focus,
+select#id_radio_channel.form-control:focus {
+  border-color: #34d399 !important;
+  box-shadow: 0 0 8px rgba(16,185,129,0.4) !important;
+}
+select#id_radio_channel option { background: #064e3b; color: #6ee7b7; }
 .form-errors  { background: #fff3cd; border: 1px solid #ffc107; border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; }
 .error-msg    { color: #856404; margin: 4px 0; font-size: 14px; }
 .asset-form   { width: 100%; }
@@ -1632,6 +1647,10 @@ html.dark-theme .wk-today-head    { background: rgba(46,168,229,0.08); }
 html.dark-theme .wk-weekend-head  { background: rgba(99,102,241,0.05); }
 html.dark-theme .wk-today-num    { background: var(--primary); color: #fff; }
 
+/* ── Hamburger toggle — hidden on desktop ──────────────────── */
+.nav-toggle-checkbox { display: none; }
+.nav-hamburger       { display: none; }
+
 /* ── Responsive ─────────────────────────────────────────────── */
 @media (max-width: 900px) {
 
@@ -1646,7 +1665,6 @@ html.dark-theme .wk-today-num    { background: var(--primary); color: #fff; }
   .login-panels    { flex-direction: column; }
   .login-divider   { flex-direction: row; width: auto; padding: 12px 24px; height: 40px; border: none; border-top: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0; }
   .login-panel-admin { border-left: none; }
-  .site-nav-user   { display: none; }
 }
 
 /* ── Gantt day view ─────────────────────────────────────────── */
@@ -2114,3 +2132,500 @@ html.dark-theme .feedback-modal { background: var(--card); }
 html.dark-theme .feedback-modal h5 { color: #e2e8f0; }
 html.dark-theme .feedback-modal .form-control { background: rgba(255,255,255,0.05); border-color: rgba(46,168,229,0.25); color: #e2e8f0; }
 html.dark-theme .feedback-modal label { color: #c0d8e4; }
+
+/* ══════════════════════════════════════════════════════════════
+   Mobile responsive — event creation / edit form
+   ══════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+
+  /* ── Page container: edge-to-edge ─────────────────────────── */
+  .page-container {
+    padding: 12px 10px 32px;
+  }
+  .form-page {
+    max-width: 100%;
+  }
+
+  /* ── Page header ──────────────────────────────────────────── */
+  .page-heading {
+    font-size: 19px;
+  }
+
+  /* ── Form table: single column, labels stacked above inputs ─ */
+  .form-table,
+  .form-table tbody,
+  .form-table tr,
+  .form-table td {
+    display: block;
+    width: 100%;
+  }
+  .form-table td {
+    padding: 4px 0;
+  }
+  .form-table td:first-child {
+    width: 100%;
+    padding-bottom: 2px;
+    font-size: 15px;
+  }
+
+  /* ── Inputs: larger touch targets ─────────────────────────── */
+  form input,
+  form select,
+  form textarea {
+    min-width: 0;
+    width: 100%;
+    min-height: 44px;
+    padding: 10px 12px;
+    font-size: 16px;            /* prevents iOS zoom on focus */
+  }
+  .flatpickr-display {
+    min-height: 44px !important;
+    padding: 10px 12px !important;
+    font-size: 16px !important;
+  }
+
+  /* ── Start time row: stack Now button below on very small ── */
+  .start-time-row {
+    flex-wrap: wrap;
+  }
+  .btn-now {
+    min-height: 40px;
+    padding: 8px 16px;
+    font-size: 14px;
+  }
+
+  /* ── Duration shortcut buttons: 3 per row, bigger targets ── */
+  .duration-row {
+    gap: 8px;
+  }
+  .duration-btn {
+    min-height: 44px;
+    min-width: calc(33.33% - 6px);
+    padding: 8px 12px;
+    font-size: 14px;
+    justify-content: center;
+    flex: 1 1 calc(33.33% - 6px);
+  }
+  .duration-custom {
+    width: 100%;
+    text-align: center;
+    margin-left: 0;
+    font-size: 14px;
+  }
+
+  /* ── Asset picker: larger pills, better wrapping ──────────── */
+  .asset-picker {
+    gap: 8px;
+  }
+  .asset-picker-heading {
+    font-size: 12px;
+    margin-top: 12px;
+    margin-bottom: 4px;
+  }
+  .track-pill {
+    padding: 8px 16px;
+    font-size: 14px;
+    min-height: 44px;
+  }
+  .pill-sub-label {
+    font-size: 12px;
+  }
+
+  /* Subtrack panel: more room on mobile */
+  .subtrack-panel {
+    gap: 6px;
+    padding: 8px 10px;
+    margin-left: 0;
+    border-left-width: 3px;
+  }
+  .subtrack-option {
+    padding: 7px 14px;
+    font-size: 13px;
+    min-height: 40px;
+    display: inline-flex;
+    align-items: center;
+  }
+
+  /* ── Event action bar: full-width stacked buttons ─────────── */
+  .event-action-bar {
+    padding-left: 0;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 16px;
+  }
+  .event-action-bar .btn,
+  .event-action-bar form {
+    width: 100%;
+  }
+  .event-action-bar form {
+    display: flex;
+  }
+  .event-action-bar form .btn {
+    width: 100%;
+    flex: 1;
+  }
+  .event-action-bar .btn {
+    min-height: 50px;
+    font-size: 16px;
+    justify-content: center;
+  }
+
+  /* ── Sticky save bar at bottom ────────────────────────────── */
+  .event-action-bar {
+    position: sticky;
+    bottom: 0;
+    background: var(--bg);
+    padding: 12px 0;
+    border-top: 1px solid var(--border);
+    z-index: 50;
+  }
+
+  /* ── View-only banner: tighter on mobile ─────────────────── */
+  .view-only-banner {
+    font-size: 13px;
+    padding: 8px 12px;
+  }
+
+  /* ── Form errors ─────────────────────────────────────────── */
+  .form-errors {
+    padding: 8px 10px;
+    font-size: 13px;
+  }
+
+  /* ── Field help text ─────────────────────────────────────── */
+  .field-help {
+    font-size: 13px;
+  }
+
+  /* ── Navbar mobile layout ────────────────────────────────── */
+  .site-nav {
+    flex-wrap: wrap;
+    height: auto;
+    padding: 10px 12px;
+    gap: 0;
+    align-items: center;
+  }
+  .site-nav-brand {
+    font-size: 15px;
+    gap: 6px;
+    order: 1;
+    flex: 1;
+  }
+  .nav-logo { height: 22px; }
+
+  /* Hamburger icon — CSS-drawn lines */
+  .nav-hamburger {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 5px;
+    width: 40px;
+    height: 40px;
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 8px;
+    order: 2;
+    flex-shrink: 0;
+    background: rgba(255,255,255,0.08);
+  }
+  .nav-hamburger:active {
+    background: rgba(255,255,255,0.15);
+  }
+  .nav-hamburger span {
+    display: block;
+    height: 2px;
+    width: 100%;
+    background: rgba(255,255,255,0.85);
+    border-radius: 2px;
+    transition: transform 200ms ease, opacity 200ms ease;
+  }
+
+  /* Animate hamburger to X when open */
+  .nav-toggle-checkbox:checked ~ .nav-hamburger {
+    background: rgba(255,255,255,0.15);
+  }
+  .nav-toggle-checkbox:checked ~ .nav-hamburger span:nth-child(1) {
+    transform: translateY(7px) rotate(45deg);
+  }
+  .nav-toggle-checkbox:checked ~ .nav-hamburger span:nth-child(2) {
+    opacity: 0;
+  }
+  .nav-toggle-checkbox:checked ~ .nav-hamburger span:nth-child(3) {
+    transform: translateY(-7px) rotate(-45deg);
+  }
+
+  /* Theme toggle next to hamburger */
+  .theme-toggle {
+    order: 3;
+    margin-left: 8px;
+    flex-shrink: 0;
+  }
+
+  /* Nav links — hidden by default, shown when checkbox is checked */
+  .site-nav-links {
+    display: none;
+    flex-direction: column;
+    width: 100%;
+    order: 10;
+    padding: 10px 0 6px;
+    border-top: 1px solid rgba(255,255,255,0.15);
+    margin-top: 10px;
+  }
+  .nav-toggle-checkbox:checked ~ .site-nav-links {
+    display: flex;
+  }
+  .site-nav-links a {
+    padding: 12px 10px;
+    font-size: 15px;
+    border-right: none;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .site-nav-links a:last-child { border-bottom: none; }
+  .site-nav-links a i { width: 18px; text-align: center; }
+
+  /* User section — full width below links */
+  .site-nav-user {
+    display: none;
+    width: 100%;
+    order: 11;
+    padding: 10px 10px 6px;
+    border-top: 1px solid rgba(255,255,255,0.15);
+    justify-content: space-between;
+    align-items: center;
+  }
+  .nav-toggle-checkbox:checked ~ .site-nav-user {
+    display: flex;
+  }
+
+  /* ── Prevent horizontal overflow ─────────────────────────── */
+  body { overflow-x: hidden; }
+
+  /* ── Schedule / pending events rows ──────────────────────── */
+  .schedule-row {
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+  }
+  .schedule-date {
+    display: flex;
+    gap: 6px;
+    align-items: baseline;
+    min-width: unset;
+    text-align: left;
+  }
+  .schedule-info { width: 100%; }
+
+  /* Action buttons — full-width row with large touch targets */
+  .schedule-row > div:last-child {
+    display: flex;
+    width: 100%;
+    gap: 6px;
+  }
+  .schedule-row > div:last-child .btn,
+  .schedule-row > div:last-child button.btn {
+    flex: 1;
+    min-height: 44px;
+    font-size: 14px;
+    padding: 10px 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+  }
+
+  /* ── Buttons — larger touch targets globally ─────────────── */
+  .btn { min-height: 40px; padding: 10px 14px; }
+
+  /* ── Asset grid — single column ──────────────────────────── */
+  .asset-grid { grid-template-columns: 1fr; }
+
+  /* ── Delete / feedback modals ────────────────────────────── */
+  .delete-modal-box { padding: 20px 16px; }
+  .feedback-modal   { width: 95%; padding: 20px 16px; }
+
+  /* ── Feedback FAB — compact on mobile ────────────────────── */
+  .feedback-fab { bottom: 12px; right: 12px; }
+  .feedback-fab-label { display: none; }
+  .feedback-toast { right: 12px; bottom: 68px; }
+
+  /* ── Gantt label — narrower on mobile ────────────────────── */
+  .gantt-track-row .gantt-track-label { min-width: 100px; font-size: 11px; }
+
+  /* ── Empty state ─────────────────────────────────────────── */
+  .empty-state { padding: 32px 16px; }
+
+  /* ── Calendar toolbar — touch-friendly controls ─────────────── */
+  .cal-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 8px 10px;
+    gap: 8px;
+    top: 0;
+  }
+  .cal-tb-left { justify-content: center; gap: 8px; }
+  .cal-tb-center { justify-content: center; flex-wrap: wrap; gap: 8px; }
+  .cal-tb-right { justify-content: center; flex-wrap: wrap; gap: 8px; }
+
+  /* Nav arrows — 44px minimum touch target */
+  .cal-nav-arrow { width: 44px; height: 44px; font-size: 24px; }
+  .cal-today-btn {
+    padding: 8px 18px; font-size: 14px;
+    min-height: 44px; display: inline-flex; align-items: center;
+  }
+
+  /* View switcher — full width, equal spacing, 44px targets */
+  .view-switcher { display: flex; width: 100%; }
+  .vsw {
+    flex: 1; text-align: center;
+    padding: 10px 8px; font-size: 14px;
+    min-height: 44px;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+
+  /* New event button — full width */
+  .btn-new-event {
+    width: 100%; justify-content: center;
+    padding: 10px 16px; font-size: 14px; min-height: 44px;
+  }
+
+  /* Asset filter — full width */
+  .asset-filter-form { width: 100%; }
+  .asset-filter-select {
+    width: 100%; min-width: unset;
+    padding: 8px 12px; font-size: 14px; min-height: 44px;
+  }
+
+  /* Pending filter — touch-friendly */
+  .pending-filter { font-size: 14px; gap: 8px; }
+  .pending-filter input[type="checkbox"] {
+    width: 18px; height: 18px; min-width: 18px;
+  }
+
+  /* ── Month view — compact cells ─────────────────────────────── */
+  .cal-body { padding: 0 4px 4px; }
+  .month-table, table.calendar { font-size: 12px; border-radius: 6px; }
+  .month-table .month, table.calendar .month { font-size: 16px; padding: 10px 0; }
+  .month-table th, table.calendar th { font-size: 10px; padding: 6px 2px; letter-spacing: 0; }
+  .month-table td, table.calendar td {
+    height: auto;
+    min-height: 70px;
+    vertical-align: top;
+  }
+  .day-cell-inner { padding: 4px; }
+  .date { font-size: 12px; margin-bottom: 2px; }
+  .today-circle { width: 24px; height: 24px; font-size: 12px; }
+  .day-cell-header { margin-bottom: 2px; gap: 2px; }
+
+  /* Event tiles — compact but readable */
+  .calendar li.event,
+  .month-table li.event {
+    margin: 1px 0; padding: 3px 5px;
+    border-radius: 4px; font-size: 11px; border-left-width: 3px;
+  }
+  .event-title { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .event-time { display: none; }
+  .event-creator { display: none; }
+  .event-badges { display: none; }
+
+  /* "+N more" button — larger touch target */
+  .day-more-btn {
+    font-size: 12px; padding: 4px 0;
+    min-height: 32px; display: flex; align-items: center;
+  }
+
+  /* Hover-to-add — always visible on touch devices */
+  .day-add-overlay {
+    opacity: 1 !important; visibility: visible !important;
+    width: 28px; height: 28px; font-size: 18px;
+  }
+
+  /* Day-events modal — centered on screen instead of anchored */
+  .day-modal-box {
+    width: calc(100vw - 24px);
+    max-width: calc(100vw - 24px);
+    position: fixed;
+    top: 50% !important; left: 50% !important;
+    transform: translate(-50%, -50%);
+  }
+
+  /* ── Week view — horizontal scroll with sticky labels ───────── */
+  .trk-scroll-wrap { -webkit-overflow-scrolling: touch; }
+  .trk-table { min-width: 560px; }
+  .trk-label-th, .trk-label-cell { width: 80px; min-width: 70px; padding: 6px 4px; }
+  .trk-name { font-size: 11px; }
+  .trk-th { padding: 8px 4px; }
+  .wk-dayname { font-size: 10px; }
+  .wk-daynum { font-size: 15px; }
+  .wk-today-num { width: 24px; height: 24px; font-size: 13px; }
+  .trk-td { padding: 4px 3px; min-height: 60px; }
+  .trk-sublabel-cell { width: 50px; min-width: 40px; left: 80px; padding: 4px 3px; }
+  .trk-subname { font-size: 9px; }
+  .trk-events li.event { font-size: 10px; padding: 3px 4px; }
+
+  /* ── Day view (Gantt) — horizontal scroll, sticky labels ────── */
+  .calendar.gantt-view { border-radius: 6px; }
+  .day-view-title { font-size: 16px; padding: 12px 12px 10px; }
+  .gantt-scroll-container { -webkit-overflow-scrolling: touch; }
+  .gantt-track-label { width: 100px; padding: 6px 6px; font-size: 11px; }
+  .gantt-sublabel-col { width: 70px; left: 100px; }
+  .gantt-subtrack-name { font-size: 9px; padding: 0 4px; height: 48px; }
+  .gantt-block { min-height: 36px; font-size: 11px; min-width: 24px; }
+  .gantt-sub-row { height: 48px; }
+  .gantt-subtrack-row { height: 48px; }
+  .gantt-axis-row { min-width: 4170px; }
+  .gantt-body { min-width: 4170px; }
+  .gantt-now-line { width: 3px; }
+  .gantt-now-label { font-size: 10px; }
+
+  /* Gantt hour labels — show fewer on mobile (every 2h visibility via spacing) */
+  .gantt-hour-label { font-size: 9px; }
+
+  /* ── Legend — centered wrap ──────────────────────────────────── */
+  .cal-legend { padding: 8px 10px 12px; gap: 10px; justify-content: center; }
+  .legend-item { font-size: 11px; gap: 4px; }
+}
+
+
+/* ════════════════════════════════════════════════════════════════
+   RESPONSIVE — Very small phones (max-width: 480px)
+   ════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 480px) {
+
+  /* ── Month view — ultra compact ─────────────────────────────── */
+  .month-table td, table.calendar td { height: 80px; }
+  .day-cell-inner { padding: 2px 2px; }
+  .date { font-size: 10px; }
+  .today-circle { width: 20px; height: 20px; font-size: 10px; }
+  .calendar li.event, .month-table li.event { padding: 2px 3px; margin: 1px 0; }
+  .event-title { font-size: 9px; }
+  .event-time { display: none; }
+
+  /* ── Week view — tighter labels ─────────────────────────────── */
+  .wk-dayname { font-size: 9px; }
+  .wk-daynum { font-size: 13px; }
+  .trk-label-th, .trk-label-cell { width: 60px; min-width: 55px; }
+  .trk-name { font-size: 10px; }
+  .trk-sublabel-cell { width: 40px; min-width: 35px; left: 60px; }
+
+  /* ── Gantt labels narrower ──────────────────────────────────── */
+  .gantt-track-label { width: 80px; font-size: 10px; padding: 4px 4px; }
+  .gantt-sublabel-col { width: 60px; left: 80px; }
+  .gantt-axis-row { min-width: 3640px; }
+  .gantt-body { min-width: 3640px; }
+
+  /* ── Toolbar controls — slightly smaller ────────────────────── */
+  .cal-nav-arrow { width: 40px; height: 40px; }
+  .vsw { font-size: 13px; padding: 8px 6px; }
+  .btn-new-event { font-size: 13px; }
+
+  /* ── Nav links — icon-only on very small screens ─────────────── */
+  .site-nav-links a { font-size: 0; }
+  .site-nav-links a i { font-size: 14px; }
+  .site-nav-links a .nav-badge { font-size: 9px; }
+  .site-nav-user { display: none; }
+}

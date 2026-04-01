@@ -1361,10 +1361,48 @@ class RadioChannelAPITest(TestCase):
         self.track.refresh_from_db()
         self.assertIsNone(self.track.radio_channel)
 
-    def test_rejects_out_of_range(self):
+    def test_admin_can_set_channel_lower_boundary(self):
+        self.client.login(username='channeladmin', password='Testpass123!')
+        resp = self.client.post(
+            self.url, data=json.dumps({'channel': 1}),
+            content_type='application/json',
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.track.refresh_from_db()
+        self.assertEqual(self.track.radio_channel, 1)
+
+    def test_admin_can_set_channel_upper_boundary(self):
+        self.client.login(username='channeladmin', password='Testpass123!')
+        resp = self.client.post(
+            self.url, data=json.dumps({'channel': 16}),
+            content_type='application/json',
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.track.refresh_from_db()
+        self.assertEqual(self.track.radio_channel, 16)
+
+    def test_admin_can_set_channel_in_low_range(self):
         self.client.login(username='channeladmin', password='Testpass123!')
         resp = self.client.post(
             self.url, data=json.dumps({'channel': 5}),
+            content_type='application/json',
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.track.refresh_from_db()
+        self.assertEqual(self.track.radio_channel, 5)
+
+    def test_rejects_channel_zero(self):
+        self.client.login(username='channeladmin', password='Testpass123!')
+        resp = self.client.post(
+            self.url, data=json.dumps({'channel': 0}),
+            content_type='application/json',
+        )
+        self.assertEqual(resp.status_code, 400)
+
+    def test_rejects_channel_above_16(self):
+        self.client.login(username='channeladmin', password='Testpass123!')
+        resp = self.client.post(
+            self.url, data=json.dumps({'channel': 17}),
             content_type='application/json',
         )
         self.assertEqual(resp.status_code, 400)
@@ -1390,6 +1428,139 @@ class RadioChannelAPITest(TestCase):
         data = resp.json()
         track_data = data['tracks'].get('Channel Track', {})
         self.assertEqual(track_data.get('radio_channel'), 15)
+
+
+# ── Event Radio Channel API Tests ────────────────────────────────────────────
+
+class EventRadioChannelAPITest(TestCase):
+    """Tests for /cal/api/event/<id>/channel/ endpoint."""
+
+    def setUp(self):
+        self.admin = User.objects.create_user(
+            username='evtchanneladmin', password='Testpass123!', is_staff=True
+        )
+        self.regular = User.objects.create_user(
+            username='evtchanneluser', password='Testpass123!'
+        )
+        self.track = Asset.objects.create(
+            name='Evt Channel Track', asset_type=Asset.AssetType.TRACK,
+            radio_channel=11,
+        )
+        self.event = Event.objects.create(
+            title='Channel Test Event',
+            start_time=timezone.now(),
+            end_time=timezone.now() + timedelta(hours=1),
+            created_by=self.admin,
+        )
+        self.event.assets.add(self.track)
+        self.url = reverse('cal:set_event_radio_channel', args=[self.event.pk])
+
+    def test_admin_can_set_event_channel(self):
+        self.client.login(username='evtchanneladmin', password='Testpass123!')
+        resp = self.client.post(
+            self.url, data=json.dumps({'channel': 7}),
+            content_type='application/json',
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.event.refresh_from_db()
+        self.assertEqual(self.event.radio_channel, 7)
+
+    def test_admin_can_set_event_channel_lower_boundary(self):
+        self.client.login(username='evtchanneladmin', password='Testpass123!')
+        resp = self.client.post(
+            self.url, data=json.dumps({'channel': 1}),
+            content_type='application/json',
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.event.refresh_from_db()
+        self.assertEqual(self.event.radio_channel, 1)
+
+    def test_admin_can_set_event_channel_upper_boundary(self):
+        self.client.login(username='evtchanneladmin', password='Testpass123!')
+        resp = self.client.post(
+            self.url, data=json.dumps({'channel': 16}),
+            content_type='application/json',
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.event.refresh_from_db()
+        self.assertEqual(self.event.radio_channel, 16)
+
+    def test_admin_can_clear_event_channel(self):
+        self.event.radio_channel = 5
+        self.event.save()
+        self.client.login(username='evtchanneladmin', password='Testpass123!')
+        resp = self.client.post(
+            self.url, data=json.dumps({'channel': None}),
+            content_type='application/json',
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.event.refresh_from_db()
+        self.assertIsNone(self.event.radio_channel)
+
+    def test_rejects_event_channel_zero(self):
+        self.client.login(username='evtchanneladmin', password='Testpass123!')
+        resp = self.client.post(
+            self.url, data=json.dumps({'channel': 0}),
+            content_type='application/json',
+        )
+        self.assertEqual(resp.status_code, 400)
+
+    def test_rejects_event_channel_above_16(self):
+        self.client.login(username='evtchanneladmin', password='Testpass123!')
+        resp = self.client.post(
+            self.url, data=json.dumps({'channel': 17}),
+            content_type='application/json',
+        )
+        self.assertEqual(resp.status_code, 400)
+
+    def test_non_admin_gets_403(self):
+        self.client.login(username='evtchanneluser', password='Testpass123!')
+        resp = self.client.post(
+            self.url, data=json.dumps({'channel': 5}),
+            content_type='application/json',
+        )
+        self.assertEqual(resp.status_code, 403)
+
+    def test_effective_channel_uses_event_override(self):
+        self.event.radio_channel = 3
+        self.event.save()
+        self.assertEqual(self.event.effective_radio_channel, 3)
+
+    def test_effective_channel_falls_back_to_track(self):
+        self.assertIsNone(self.event.radio_channel)
+        self.assertEqual(self.event.effective_radio_channel, 11)
+
+
+# ── Radio Channel Model Choices Tests ───────────────────────────────────────
+
+class RadioChannelModelChoicesTest(TestCase):
+    """Verify that Asset and Event model RADIO_CHANNEL_CHOICES cover 1-16."""
+
+    def test_asset_choices_include_1_through_16(self):
+        numeric_choices = [ch for ch, _ in Asset.RADIO_CHANNEL_CHOICES if ch is not None]
+        self.assertEqual(numeric_choices, list(range(1, 17)))
+
+    def test_event_choices_include_1_through_16(self):
+        numeric_choices = [ch for ch, _ in Event.RADIO_CHANNEL_CHOICES]
+        self.assertEqual(numeric_choices, list(range(1, 17)))
+
+    def test_asset_radio_channel_field_accepts_low_range(self):
+        track = Asset.objects.create(
+            name='Low Ch Track', asset_type=Asset.AssetType.TRACK,
+            radio_channel=3,
+        )
+        track.refresh_from_db()
+        self.assertEqual(track.radio_channel, 3)
+
+    def test_event_radio_channel_field_accepts_low_range(self):
+        event = Event.objects.create(
+            title='Low Ch Event',
+            start_time=timezone.now(),
+            end_time=timezone.now() + timedelta(hours=1),
+            radio_channel=2,
+        )
+        event.refresh_from_db()
+        self.assertEqual(event.radio_channel, 2)
 
 
 # ── Analytics API Tests ──────────────────────────────────────────────────────
@@ -2292,3 +2463,184 @@ class ImpromptuEventTests(TestCase):
         self.assertTrue(imp_ev['is_impromptu'])
         self.assertIsNone(imp_ev['start_time'])
         self.assertIsNone(imp_ev['end_time'])
+
+
+# ── Month View "+N more" Button & Day Label Formatting ──────────────────────
+
+class MonthViewMoreButtonTest(TestCase):
+    """Month view must render a '+N more' button when a day has more events
+    than MONTH_VISIBLE_LIMIT (2), and the day label must use
+    cross-platform date formatting (no leading zero on day number)."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='moreuser', password='Testpass123!')
+        self.client.force_login(self.user)
+        self.track = Asset.objects.create(
+            name='More Track', asset_type=Asset.AssetType.TRACK
+        )
+        # Create 3 events on Wednesday, April 1, 2026 to exceed MONTH_VISIBLE_LIMIT (2)
+        for i in range(3):
+            ev = Event.objects.create(
+                title=f'More Event {i}',
+                description='',
+                start_time=datetime(2026, 4, 1, 8 + i, 0, tzinfo=_local_tz),
+                end_time=datetime(2026, 4, 1, 9 + i, 0, tzinfo=_local_tz),
+                created_by=self.user,
+                is_approved=True,
+            )
+            ev.assets.add(self.track)
+
+    def test_month_view_returns_200_with_many_events(self):
+        """Month view should render successfully even with 3+ events on one day."""
+        response = self.client.get(
+            reverse('cal:calendar') + '?view=month&year=2026&month=4'
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_month_view_shows_more_button(self):
+        """With 3 events and MONTH_VISIBLE_LIMIT=2, a '+1 more' button must appear."""
+        response = self.client.get(
+            reverse('cal:calendar') + '?view=month&year=2026&month=4'
+        )
+        self.assertContains(response, 'day-more-btn')
+        self.assertContains(response, '+1 more')
+
+    def test_month_view_day_label_no_leading_zero(self):
+        """The day label in the more-button data attribute must be formatted
+        like 'Wednesday, April 1, 2026' (no leading zero on day)."""
+        response = self.client.get(
+            reverse('cal:calendar') + '?view=month&year=2026&month=4'
+        )
+        content = response.content.decode()
+        self.assertIn('Wednesday, April 1, 2026', content)
+        # Ensure there is no leading-zero variant
+        self.assertNotIn('Wednesday, April 01, 2026', content)
+
+    def test_month_view_more_button_contains_all_events_list(self):
+        """The hidden event list for the more-button must contain all 3 events."""
+        response = self.client.get(
+            reverse('cal:calendar') + '?view=month&year=2026&month=4'
+        )
+        content = response.content.decode()
+        self.assertIn('day-all-events', content)
+        for i in range(3):
+            self.assertIn(f'More Event {i}', content)
+
+
+class MassApproveTest(TestCase):
+    """Tests for the mass-approve pending events endpoint."""
+
+    def setUp(self):
+        self.admin = User.objects.create_user(
+            username='massadmin', password='Testpass123!', is_staff=True
+        )
+        self.user = User.objects.create_user(
+            username='massuser', password='Testpass123!'
+        )
+        self.track = Asset.objects.create(
+            name='Mass Track', asset_type=Asset.AssetType.TRACK
+        )
+        self.track2 = Asset.objects.create(
+            name='Mass Track 2', asset_type=Asset.AssetType.TRACK
+        )
+        self.url = reverse('cal:mass_approve_events')
+
+    def _create_event(self, title, track, approved=False, start_hour=10, end_hour=11):
+        ev = Event.objects.create(
+            title=title,
+            start_time=datetime(2026, 4, 5, start_hour, 0, tzinfo=_local_tz),
+            end_time=datetime(2026, 4, 5, end_hour, 0, tzinfo=_local_tz),
+            created_by=self.user,
+            is_approved=approved,
+        )
+        ev.assets.add(track)
+        return ev
+
+    def test_approve_pending_events(self):
+        ev1 = self._create_event('Pending 1', self.track, start_hour=8, end_hour=9)
+        ev2 = self._create_event('Pending 2', self.track2, start_hour=10, end_hour=11)
+        self.client.force_login(self.admin)
+        resp = self.client.post(
+            self.url, json.dumps({'event_ids': [ev1.id, ev2.id]}),
+            content_type='application/json',
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data['approved'], 2)
+        self.assertEqual(data['skipped'], 0)
+        ev1.refresh_from_db()
+        ev2.refresh_from_db()
+        self.assertTrue(ev1.is_approved)
+        self.assertTrue(ev2.is_approved)
+
+    def test_non_staff_forbidden(self):
+        self.client.force_login(self.user)
+        resp = self.client.post(
+            self.url, json.dumps({'event_ids': [1]}),
+            content_type='application/json',
+        )
+        self.assertEqual(resp.status_code, 403)
+
+    def test_get_not_allowed(self):
+        self.client.force_login(self.admin)
+        resp = self.client.get(self.url)
+        self.assertEqual(resp.status_code, 405)
+
+    def test_conflicting_events_skipped(self):
+        self._create_event('Approved', self.track, approved=True, start_hour=10, end_hour=11)
+        pending = self._create_event('Conflicting', self.track, start_hour=10, end_hour=11)
+        self.client.force_login(self.admin)
+        resp = self.client.post(
+            self.url, json.dumps({'event_ids': [pending.id]}),
+            content_type='application/json',
+        )
+        data = resp.json()
+        self.assertEqual(data['approved'], 0)
+        self.assertEqual(data['skipped'], 1)
+        pending.refresh_from_db()
+        self.assertFalse(pending.is_approved)
+
+    def test_mixed_conflict_and_clean(self):
+        self._create_event('Approved', self.track, approved=True, start_hour=10, end_hour=11)
+        conflicting = self._create_event('Conflicting', self.track, start_hour=10, end_hour=11)
+        clean = self._create_event('Clean', self.track2, start_hour=10, end_hour=11)
+        self.client.force_login(self.admin)
+        resp = self.client.post(
+            self.url, json.dumps({'event_ids': [conflicting.id, clean.id]}),
+            content_type='application/json',
+        )
+        data = resp.json()
+        self.assertEqual(data['approved'], 1)
+        self.assertEqual(data['skipped'], 1)
+        conflicting.refresh_from_db()
+        clean.refresh_from_db()
+        self.assertFalse(conflicting.is_approved)
+        self.assertTrue(clean.is_approved)
+
+    def test_empty_event_ids(self):
+        self.client.force_login(self.admin)
+        resp = self.client.post(
+            self.url, json.dumps({'event_ids': []}),
+            content_type='application/json',
+        )
+        self.assertEqual(resp.status_code, 400)
+
+    def test_nonexistent_ids_handled(self):
+        self.client.force_login(self.admin)
+        resp = self.client.post(
+            self.url, json.dumps({'event_ids': [99999]}),
+            content_type='application/json',
+        )
+        data = resp.json()
+        self.assertEqual(data['approved'], 0)
+        self.assertEqual(data['skipped'], 0)
+
+    def test_pending_view_shows_conflict_status(self):
+        self._create_event('Approved', self.track, approved=True, start_hour=10, end_hour=11)
+        self._create_event('Conflicting Pending', self.track, start_hour=10, end_hour=11)
+        self._create_event('Clean Pending', self.track2, start_hour=14, end_hour=15)
+        self.client.force_login(self.admin)
+        resp = self.client.get(reverse('cal:pending_events'))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, 'fa-exclamation-triangle')
+        self.assertContains(resp, 'mass-approve-cb')

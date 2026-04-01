@@ -200,6 +200,118 @@
     background: rgba(255,255,255,0.1);
     color: #aaa;
   }
+
+  /* ── Mobile responsive ──────────────────────────────────── */
+  @media (max-width: 768px) {
+    .mgmt-container {
+      margin: 1rem auto;
+      padding: 0 8px;
+    }
+    .mgmt-header {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 4px;
+      margin-bottom: 1rem;
+    }
+    .mgmt-header h2 { font-size: 1.25rem; }
+
+    /* Hide the table header */
+    .user-table thead { display: none; }
+
+    /* Convert table rows to stacked cards */
+    .user-table,
+    .user-table tbody,
+    .user-table tbody tr,
+    .user-table tbody td {
+      display: block;
+      width: 100%;
+    }
+    .user-table {
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .user-table tbody tr {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+      position: relative;
+    }
+    .user-table tbody tr:last-child {
+      border-bottom: none;
+    }
+    .user-table tbody td {
+      padding: 2px 0;
+      border-bottom: none;
+      font-size: 0.85rem;
+    }
+
+    /* User name — prominent */
+    .user-table tbody td:nth-child(1) {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    /* Role badge */
+    .user-table tbody td:nth-child(2) {
+      margin-bottom: 6px;
+    }
+
+    /* Joined / Last login — inline, muted */
+    .user-table tbody td:nth-child(3),
+    .user-table tbody td:nth-child(4) {
+      display: inline-block;
+      width: auto;
+      color: var(--muted);
+      font-size: 0.8rem;
+    }
+    .user-table tbody td:nth-child(3)::before {
+      content: "Joined ";
+    }
+    .user-table tbody td:nth-child(4)::before {
+      content: " · Last login: ";
+    }
+
+    /* Actions row */
+    .user-table tbody td:nth-child(5) {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid var(--border);
+    }
+    .actions-cell {
+      width: 100%;
+    }
+    .role-select {
+      flex: 1;
+      padding: 8px 12px;
+      font-size: 0.9rem;
+      min-height: 40px;
+    }
+    .btn-delete {
+      padding: 8px 14px;
+      min-height: 40px;
+      margin-left: 8px;
+    }
+    .btn-promote,
+    .btn-demote {
+      flex: 1;
+      padding: 8px 14px;
+      min-height: 40px;
+      font-size: 0.85rem;
+    }
+
+    /* Toast — bottom center on mobile */
+    .toast-msg {
+      left: 50%;
+      right: auto;
+      transform: translateX(-50%) translateY(10px);
+      width: calc(100% - 32px);
+      max-width: 360px;
+      text-align: center;
+    }
+    .toast-msg.show {
+      transform: translateX(-50%) translateY(0);
+    }
+  }
 </style>
 {% endblock %}
 

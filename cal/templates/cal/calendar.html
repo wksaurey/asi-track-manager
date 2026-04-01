@@ -94,6 +94,10 @@
 
 {% endblock %}
 
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'cal/css/easter-egg.css' %}">
+{% endblock %}
+
 {% block script %}
 <script>
   // ── Pending filter toggle (client-side, no reload) ────────────────
@@ -264,4 +268,102 @@
   });
 </script>
 {% endif %}
+
+<!-- ── Konami Code Easter Egg ──────────────────────────────────── -->
+<div class="easter-egg-overlay" id="easter-egg">
+
+  <!-- Starfield background -->
+  <canvas id="starfield-canvas"></canvas>
+
+  <!-- 3D CSS scene on top -->
+  <div class="egg-scene">
+    <div class="egg-card">
+      <div class="rocket-wrapper">
+        <div class="galaxy-bg"></div>
+        <div class="rocket-orbit"><div class="rocket-emoji">🚀</div></div>
+      </div>
+      <div class="egg-label">Hollis was here</div>
+    </div>
+    <div class="egg-card">
+      <svg class="saturn-svg" xmlns="http://www.w3.org/2000/svg" viewBox="35 42 190 138" width="220" height="160">
+        <defs>
+          <clipPath id="top"><rect x="-500" y="-500" width="1000" height="575"/></clipPath>
+          <clipPath id="bottom"><rect x="-500" y="75" width="1000" height="500"/></clipPath>
+          <clipPath id="planetClip"><circle cx="100" cy="75" r="35"/></clipPath>
+        </defs>
+        <g transform="rotate(-35, 130, 110) translate(30, 35)">
+          <path d="M -10,75 A 110,24 0 1,1 210,75 A 110,24 0 1,1 -10,75 Z
+                    M 50,75 A 50,11 0 1,0 150,75 A 50,11 0 1,0 50,75 Z"
+                fill="#7c3aed" fill-rule="evenodd" opacity="0.7" clip-path="url(#top)"/>
+          <g clip-path="url(#top)" opacity="0.45">
+            <path d="M -10,75 A 110,24 0 1,1 210,75 A 110,24 0 1,1 -10,75 Z
+                      M -2,75 A 102,22 0 1,0 202,75 A 102,22 0 1,0 -2,75 Z"
+                  fill="#a78bfa" fill-rule="evenodd"/>
+            <path d="M 2,75 A 98,21 0 1,1 198,75 A 98,21 0 1,1 2,75 Z
+                      M 10,75 A 90,20 0 1,0 190,75 A 90,20 0 1,0 10,75 Z"
+                  fill="#2e1065" fill-rule="evenodd"/>
+            <path d="M 14,75 A 86,19 0 1,1 186,75 A 86,19 0 1,1 14,75 Z
+                      M 22,75 A 78,17 0 1,0 178,75 A 78,17 0 1,0 22,75 Z"
+                  fill="#6d28d9" fill-rule="evenodd"/>
+            <path d="M 26,75 A 74,16 0 1,1 174,75 A 74,16 0 1,1 26,75 Z
+                      M 32,75 A 68,15 0 1,0 168,75 A 68,15 0 1,0 32,75 Z"
+                  fill="#1e1b4b" fill-rule="evenodd"/>
+            <path d="M 35,75 A 65,14 0 1,1 165,75 A 65,14 0 1,1 35,75 Z
+                      M 40,75 A 60,13 0 1,0 160,75 A 60,13 0 1,0 40,75 Z"
+                  fill="#a78bfa" fill-rule="evenodd"/>
+            <path d="M 42,75 A 58,13 0 1,1 158,75 A 58,13 0 1,1 42,75 Z
+                      M 46,75 A 54,12 0 1,0 154,75 A 54,12 0 1,0 46,75 Z"
+                  fill="#2e1065" fill-rule="evenodd"/>
+            <path d="M 47,75 A 53,12 0 1,1 153,75 A 53,12 0 1,1 47,75 Z
+                      M 50,75 A 50,11 0 1,0 150,75 A 50,11 0 1,0 50,75 Z"
+                  fill="#6d28d9" fill-rule="evenodd"/>
+          </g>
+          <circle cx="100" cy="75" r="35" fill="#581c87"/>
+          <g clip-path="url(#planetClip)" opacity="0.35">
+            <ellipse cx="100" cy="48" rx="40" ry="3" fill="#7c3aed"/>
+            <ellipse cx="100" cy="54" rx="40" ry="4" fill="#3b0764"/>
+            <ellipse cx="100" cy="61" rx="40" ry="3" fill="#8b5cf6"/>
+            <ellipse cx="100" cy="67" rx="40" ry="5" fill="#6d28d9"/>
+            <ellipse cx="100" cy="75" rx="40" ry="3" fill="#3b0764"/>
+            <ellipse cx="100" cy="81" rx="40" ry="4" fill="#7c3aed"/>
+            <ellipse cx="100" cy="88" rx="40" ry="3" fill="#8b5cf6"/>
+            <ellipse cx="100" cy="94" rx="40" ry="5" fill="#4c1d95"/>
+            <ellipse cx="100" cy="101" rx="40" ry="3" fill="#6d28d9"/>
+          </g>
+          <path d="M -10,75 A 110,24 0 1,1 210,75 A 110,24 0 1,1 -10,75 Z
+                    M 50,75 A 50,11 0 1,0 150,75 A 50,11 0 1,0 50,75 Z"
+                fill="#7c3aed" fill-rule="evenodd" opacity="0.7" clip-path="url(#bottom)"/>
+          <g clip-path="url(#bottom)" opacity="0.45">
+            <path d="M -10,75 A 110,24 0 1,1 210,75 A 110,24 0 1,1 -10,75 Z
+                      M -2,75 A 102,22 0 1,0 202,75 A 102,22 0 1,0 -2,75 Z"
+                  fill="#a78bfa" fill-rule="evenodd"/>
+            <path d="M 2,75 A 98,21 0 1,1 198,75 A 98,21 0 1,1 2,75 Z
+                      M 10,75 A 90,20 0 1,0 190,75 A 90,20 0 1,0 10,75 Z"
+                  fill="#2e1065" fill-rule="evenodd"/>
+            <path d="M 14,75 A 86,19 0 1,1 186,75 A 86,19 0 1,1 14,75 Z
+                      M 22,75 A 78,17 0 1,0 178,75 A 78,17 0 1,0 22,75 Z"
+                  fill="#6d28d9" fill-rule="evenodd"/>
+            <path d="M 26,75 A 74,16 0 1,1 174,75 A 74,16 0 1,1 26,75 Z
+                      M 32,75 A 68,15 0 1,0 168,75 A 68,15 0 1,0 32,75 Z"
+                  fill="#1e1b4b" fill-rule="evenodd"/>
+            <path d="M 35,75 A 65,14 0 1,1 165,75 A 65,14 0 1,1 35,75 Z
+                      M 40,75 A 60,13 0 1,0 160,75 A 60,13 0 1,0 40,75 Z"
+                  fill="#a78bfa" fill-rule="evenodd"/>
+            <path d="M 42,75 A 58,13 0 1,1 158,75 A 58,13 0 1,1 42,75 Z
+                      M 46,75 A 54,12 0 1,0 154,75 A 54,12 0 1,0 46,75 Z"
+                  fill="#2e1065" fill-rule="evenodd"/>
+            <path d="M 47,75 A 53,12 0 1,1 153,75 A 53,12 0 1,1 47,75 Z
+                      M 50,75 A 50,11 0 1,0 150,75 A 50,11 0 1,0 50,75 Z"
+                  fill="#6d28d9" fill-rule="evenodd"/>
+          </g>
+        </g>
+      </svg>
+      <div class="egg-label">Kolter was here</div>
+    </div>
+  </div>
+
+  <span class="egg-hint">press any key to close</span>
+</div>
+
+<script src="{% static 'cal/js/easter-egg.js' %}"></script>
 {% endblock %}

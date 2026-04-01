@@ -562,12 +562,12 @@ function renderEventItem(ev, trackLabel, dataSource, listEl, normalizedFilter) {
     chSelect.className = "event-channel-badge";
     chSelect.title = "Event radio channel";
 
-    // Build options: Track default + Ch 11-16
+    // Build options: Track default + Ch 1-16
     const defaultOpt = document.createElement("option");
     defaultOpt.value = "";
     defaultOpt.textContent = "Track Ch";
     chSelect.appendChild(defaultOpt);
-    for (let ch = 11; ch <= 16; ch++) {
+    for (let ch = 1; ch <= 16; ch++) {
       const opt = document.createElement("option");
       opt.value = String(ch);
       opt.textContent = `Ch ${ch}`;

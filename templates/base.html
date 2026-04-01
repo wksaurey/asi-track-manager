@@ -53,7 +53,7 @@
 
     <div class="site-nav-user">
       {% if request.user.is_authenticated %}
-        <span class="nav-user-name">
+        <a href="{% url 'users:profile' %}" class="nav-user-name" style="text-decoration:none;color:inherit;">
           {% if request.user.is_developer %}
             <i class="fas fa-user-cog"></i> {{ request.user.username }}
             <span class="admin-chip" style="background:#10b981;">Staff</span>
@@ -63,7 +63,7 @@
           {% else %}
             <i class="fas fa-user"></i> {{ request.user.username }}
           {% endif %}
-        </span>
+        </a>
         <form method="post" action="{% url 'users:logout' %}" style="display:inline;">
           {% csrf_token %}
           <button type="submit" class="nav-logout" style="background:none;border:none;cursor:pointer;color:inherit;">

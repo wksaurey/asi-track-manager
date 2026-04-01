@@ -266,11 +266,85 @@ def event_unapprove(request, event_id):
 
 @login_required
 def pending_events(request):
-    """Admin only — list all events awaiting approval."""
+    """Admin only — list all events awaiting approval, with conflict status."""
     if not request.user.is_staff:
         return HttpResponseRedirect(reverse('cal:calendar'))
     events = Event.objects.filter(is_approved=False).order_by('start_time').prefetch_related('assets')
-    return render(request, 'cal/pending_events.html', {'events': events})
+
+    # Check each pending event for conflicts with approved events.
+    events_with_conflicts = []
+    for ev in events:
+        has_conflict = False
+        if ev.start_time and ev.end_time:
+            for asset in ev.assets.all():
+                conflict_ids = asset.conflicting_asset_ids()
+                conflicts = Event.objects.filter(
+                    assets__in=conflict_ids,
+                    start_time__lt=ev.end_time,
+                    end_time__gt=ev.start_time,
+                    start_time__isnull=False,
+                    is_approved=True,
+                ).exclude(pk=ev.pk).distinct()
+                if conflicts.exists():
+                    has_conflict = True
+                    break
+        ev.has_conflict = has_conflict
+        events_with_conflicts.append(ev)
+
+    return render(request, 'cal/pending_events.html', {'events': events_with_conflicts})
+
+
+@login_required
+@require_POST
+def mass_approve_events(request):
+    """Admin only — approve multiple pending events that have no conflicts."""
+    if not request.user.is_staff:
+        return JsonResponse({'error': 'Forbidden'}, status=403)
+
+    try:
+        data = json.loads(request.body)
+        event_ids = data.get('event_ids', [])
+    except (json.JSONDecodeError, AttributeError):
+        return JsonResponse({'error': 'Invalid request body'}, status=400)
+
+    if not event_ids:
+        return JsonResponse({'error': 'No events specified'}, status=400)
+
+    pending = Event.objects.filter(
+        pk__in=event_ids, is_approved=False,
+    ).prefetch_related('assets')
+    approved_count = 0
+    skipped = []
+
+    for ev in pending:
+        has_conflict = False
+        if ev.start_time and ev.end_time:
+            for asset in ev.assets.all():
+                conflict_ids = asset.conflicting_asset_ids()
+                conflicts = Event.objects.filter(
+                    assets__in=conflict_ids,
+                    start_time__lt=ev.end_time,
+                    end_time__gt=ev.start_time,
+                    start_time__isnull=False,
+                    is_approved=True,
+                ).exclude(pk=ev.pk).distinct()
+                if conflicts.exists():
+                    has_conflict = True
+                    break
+        if has_conflict:
+            skipped.append({
+                'id': ev.pk, 'title': ev.title, 'reason': 'Booking conflict',
+            })
+        else:
+            ev.is_approved = True
+            ev.save(update_fields=['is_approved'])
+            approved_count += 1
+
+    return JsonResponse({
+        'approved': approved_count,
+        'skipped': len(skipped),
+        'skipped_details': skipped,
+    })
 
 
 # ── Asset management ──────────────────────────────────────────────────────────
@@ -518,7 +592,7 @@ def dashboard_events_api(request):
 @login_required
 @require_POST
 def set_radio_channel(request, asset_id):
-    """Admin only — set or clear a track's radio channel (11–16)."""
+    """Admin only — set or clear a track's radio channel (1–16)."""
     if not request.user.is_staff:
         return JsonResponse({'error': 'Forbidden'}, status=403)
     track = get_object_or_404(Asset, pk=asset_id, asset_type=Asset.AssetType.TRACK)
@@ -531,9 +605,9 @@ def set_radio_channel(request, asset_id):
         try:
             channel = int(channel)
         except (ValueError, TypeError):
-            return JsonResponse({'error': 'Channel must be an integer (11–16) or null.'}, status=400)
-        if channel < 11 or channel > 16:
-            return JsonResponse({'error': 'Channel must be between 11 and 16.'}, status=400)
+            return JsonResponse({'error': 'Channel must be an integer (1–16) or null.'}, status=400)
+        if channel < 1 or channel > 16:
+            return JsonResponse({'error': 'Channel must be between 1 and 16.'}, status=400)
     track.radio_channel = channel
     track.save(update_fields=['radio_channel'])
     return JsonResponse({'id': track.pk, 'radio_channel': track.radio_channel})
@@ -542,7 +616,7 @@ def set_radio_channel(request, asset_id):
 @login_required
 @require_POST
 def set_event_radio_channel(request, event_id):
-    """Admin only — set or clear a per-event radio channel override (11–16)."""
+    """Admin only — set or clear a per-event radio channel override (1–16)."""
     if not request.user.is_staff:
         return JsonResponse({'error': 'Forbidden'}, status=403)
     event_obj = get_object_or_404(Event, pk=event_id)
@@ -555,9 +629,9 @@ def set_event_radio_channel(request, event_id):
         try:
             channel = int(channel)
         except (ValueError, TypeError):
-            return JsonResponse({'error': 'Channel must be an integer (11–16) or null.'}, status=400)
-        if channel < 11 or channel > 16:
-            return JsonResponse({'error': 'Channel must be between 11 and 16.'}, status=400)
+            return JsonResponse({'error': 'Channel must be an integer (1–16) or null.'}, status=400)
+        if channel < 1 or channel > 16:
+            return JsonResponse({'error': 'Channel must be between 1 and 16.'}, status=400)
     event_obj.radio_channel = channel
     event_obj.save(update_fields=['radio_channel'])
     return JsonResponse({

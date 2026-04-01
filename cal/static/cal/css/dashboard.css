@@ -335,49 +335,54 @@ select.event-channel-badge {
   appearance: none;
   margin-left: auto;
   flex-shrink: 0;
-  background-color: transparent;
-  color: var(--text, #333);
-  border: 1px solid var(--border);
+  background: #064e3b;
+  color: #6ee7b7;
+  border: 2px solid #10b981;
   padding: 2px 18px 2px 6px;
   border-radius: 6px;
   font-size: 10px;
-  font-weight: 600;
+  font-weight: 700;
   letter-spacing: 0.2px;
   cursor: pointer;
   white-space: nowrap;
   line-height: 1.6;
   outline: none;
-  transition: background-color 0.15s, border-color 0.15s;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%23999'/%3E%3C/svg%3E");
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+  color-scheme: dark;
+  box-shadow: 0 0 5px rgba(16,185,129,0.25);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%236ee7b7'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 5px center;
   background-size: 6px 4px;
 }
-select.event-channel-badge:hover {
-  border-color: var(--primary);
-  background-color: rgba(46,168,229,0.06);
-}
+select.event-channel-badge:hover,
 select.event-channel-badge:focus {
-  border-color: var(--primary);
-  box-shadow: 0 0 0 2px rgba(46,168,229,0.15);
+  border-color: #34d399;
+  background-color: #065f46;
+  box-shadow: 0 0 8px rgba(16,185,129,0.4);
+}
+select.event-channel-badge option {
+  background: #064e3b;
+  color: #6ee7b7;
 }
 html.dark-theme select.event-channel-badge {
-  color: var(--text, #c0d8e4);
-  border-color: rgba(255,255,255,0.1);
+  background: #03352a;
+  color: #6ee7b7;
+  border-color: #10b981;
   color-scheme: dark;
-  background-color: #1a2b38;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%23666'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%236ee7b7'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 5px center;
   background-size: 6px 4px;
 }
 html.dark-theme select.event-channel-badge option {
-  background: #1a2b38;
-  color: #c0d8e4;
+  background: #03352a;
+  color: #6ee7b7;
 }
-html.dark-theme select.event-channel-badge:hover {
-  border-color: var(--primary);
-  background-color: rgba(46,168,229,0.1);
+html.dark-theme select.event-channel-badge:hover,
+html.dark-theme select.event-channel-badge:focus {
+  background-color: #064e3b;
+  box-shadow: 0 0 8px rgba(16,185,129,0.4);
 }
 
 
@@ -518,23 +523,24 @@ html.dark-theme .brand-title {
 /* ============================================================
    Channel badge (track-level, card header)
    ============================================================ */
-/* Radio channel dropdown in track card header — dark in both modes */
+/* Radio channel dropdown in track card header — green accent, stands out */
 .radio-channel-select {
   flex-shrink: 0;
-  background: #073242; color: #34d399;
-  border: 1px solid rgba(52,211,153,0.35); padding: 2px 6px; border-radius: 6px;
-  font-size: 11px; font-weight: 600; cursor: pointer;
-  outline: none; transition: border-color 0.15s, background 0.15s;
+  background: #064e3b; color: #6ee7b7;
+  border: 2px solid #10b981; padding: 3px 8px; border-radius: 6px;
+  font-size: 12px; font-weight: 700; cursor: pointer;
+  outline: none; transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
   color-scheme: dark;
+  box-shadow: 0 0 5px rgba(16,185,129,0.25);
 }
 .radio-channel-select:hover,
-.radio-channel-select:focus { border-color: #34d399; background: #0a4155; }
+.radio-channel-select:focus { border-color: #34d399; background: #065f46; box-shadow: 0 0 8px rgba(16,185,129,0.4); }
 html.dark-theme .radio-channel-select {
-  background: #0f1d2a;
-  border-color: rgba(52,211,153,0.3);
+  background: #03352a;
+  border-color: #10b981;
 }
 html.dark-theme .radio-channel-select:hover,
-html.dark-theme .radio-channel-select:focus { background: #162636; }
+html.dark-theme .radio-channel-select:focus { background: #064e3b; box-shadow: 0 0 8px rgba(16,185,129,0.4); }
 
 
 /* ============================================================
@@ -846,13 +852,13 @@ html.dark-theme .event-popup-overlay { background: rgba(0,0,0,0.45); }
   width: 300px;
   max-width: calc(100vw - 24px);
   background: var(--card);
-  border: 1px solid var(--border);
+  border: 2px solid #34d399;
   border-radius: 12px;
   padding: 18px;
-  box-shadow: 0 8px 28px rgba(46,168,229,0.12);
+  box-shadow: 0 8px 28px rgba(52,211,153,0.18);
   z-index: 1001;
 }
-html.dark-theme .event-popup-box { box-shadow: 0 8px 28px rgba(0,0,0,0.55); }
+html.dark-theme .event-popup-box { border-color: #34d399; box-shadow: 0 8px 28px rgba(52,211,153,0.15); }
 .event-popup__header {
   display: flex;
   justify-content: space-between;
@@ -862,9 +868,10 @@ html.dark-theme .event-popup-box { box-shadow: 0 8px 28px rgba(0,0,0,0.55); }
 .event-popup__title {
   font-size: 15px;
   font-weight: 700;
-  color: var(--text);
+  color: #059669;
   margin: 0 0 2px 0;
 }
+html.dark-theme .event-popup__title { color: #34d399; }
 .event-popup__track {
   font-size: 11px;
   color: var(--primary);
@@ -972,13 +979,13 @@ html.dark-theme .modal-field textarea:focus { box-shadow: 0 0 0 3px rgba(96,165,
   color: #ef4444;
 }
 
-/* ── Stamp error toast ────────────────────────────────────── */
+/* ── Stamp toast ──────────────────────────────────────────── */
 .stamp-toast {
   position: fixed;
   top: 20px;
   left: 50%;
   transform: translateX(-50%);
-  background: #ef4444;
+  background: #059669;
   color: #fff;
   padding: 12px 20px;
   border-radius: 6px;
@@ -997,6 +1004,6 @@ html.dark-theme .stamp-clear-btn:hover {
   color: #f87171;
 }
 html.dark-theme .stamp-toast {
-  background: #dc2626;
+  background: #047857;
   box-shadow: 0 4px 12px rgba(0,0,0,.4);
 }

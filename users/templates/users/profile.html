@@ -1,0 +1,55 @@
+{% extends 'base.html' %}
+
+{% block title %}Profile{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+  <div class="row justify-content-center">
+    <div class="col-md-6 col-lg-5">
+
+      {% for message in messages %}
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+          {{ message }}
+          <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+      {% endfor %}
+
+      <!-- Change Username -->
+      <div class="card shadow-sm mb-4">
+        <div class="card-body p-4">
+          <h3 class="card-title text-center mb-4">Change Username</h3>
+          <p class="text-muted text-center" style="font-size: 14px;">
+            Current username: <strong>{{ request.user.username }}</strong>
+          </p>
+          <form method="post" style="align-items: flex-start;">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="change_username">
+            {{ username_form.as_p }}
+            <button type="submit" class="btn btn-primary btn-block mt-3">Update Username</button>
+          </form>
+        </div>
+      </div>
+
+      <!-- Change Password -->
+      <div class="card shadow-sm mb-4">
+        <div class="card-body p-4">
+          <h3 class="card-title text-center mb-4">Change Password</h3>
+          <form method="post" style="align-items: flex-start;">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="change_password">
+            {{ password_form.as_p }}
+            <button type="submit" class="btn btn-primary btn-block mt-3">Update Password</button>
+          </form>
+        </div>
+      </div>
+
+      <p class="text-center">
+        <a href="{% url 'cal:calendar' %}">&larr; Back to Calendar</a>
+      </p>
+
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -73,12 +73,12 @@ class Asset(models.Model):
         related_name='subtracks',
         help_text='Parent track (only for subtracks)',
     )
-    RADIO_CHANNEL_CHOICES = [(None, '—')] + [(ch, f'Ch {ch}') for ch in range(11, 17)]
+    RADIO_CHANNEL_CHOICES = [(None, '—')] + [(ch, f'Ch {ch}') for ch in range(1, 17)]
     radio_channel = models.IntegerField(
         null=True,
         blank=True,
-        choices=[(ch, f'Ch {ch}') for ch in range(11, 17)],
-        help_text='Radio channel assigned to this track (11–16).',
+        choices=[(ch, f'Ch {ch}') for ch in range(1, 17)],
+        help_text='Radio channel assigned to this track (1–16).',
     )
 
     class Meta:
@@ -180,13 +180,13 @@ class Event(models.Model):
         related_name='events',
     )
     # Per-event radio channel override (None = inherit from track)
-    RADIO_CHANNEL_CHOICES = [(ch, f'Ch {ch}') for ch in range(11, 17)]
+    RADIO_CHANNEL_CHOICES = [(ch, f'Ch {ch}') for ch in range(1, 17)]
     radio_channel = models.IntegerField(
         null=True,
         blank=True,
         default=None,
         choices=RADIO_CHANNEL_CHOICES,
-        help_text='Override radio channel for this event (11–16). Leave blank to use the track default.',
+        help_text='Override radio channel for this event (1–16). Leave blank to use the track default.',
     )
     # Auth / approval fields
     created_by  = models.ForeignKey(

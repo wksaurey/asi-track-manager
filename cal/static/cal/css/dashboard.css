@@ -1327,6 +1327,23 @@ html.dark-theme .btn-seg-toggle.active {
   min-width: 160px;
 }
 .seg-edit-box.saving { opacity: 0.6; pointer-events: none; }
+.seg-edit-error {
+  display: none;
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  padding: 4px 8px;
+  margin-top: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+html.dark-theme .seg-edit-error {
+  background: #451a1a;
+  color: #fca5a5;
+  border-color: #7f1d1d;
+}
 
 .seg-edit-header {
   margin-bottom: 4px;
@@ -1380,21 +1397,28 @@ html.dark-theme .seg-edit-box .flatpickr-time .numInputWrapper span.arrowDown::a
   border-top-color: var(--muted, #94a3b8);
 }
 
-/* "Now" button */
-.seg-pick-now {
-  display: block;
-  width: 100%;
+/* Button row */
+.seg-edit-btn-row {
+  display: flex;
+  gap: 6px;
   margin-top: 6px;
+}
+.seg-pick-pill {
+  flex: 1;
   padding: 5px 10px;
   border-radius: 999px;
-  border: 1px solid #10b981;
-  background: rgba(16, 185, 129, 0.08);
-  color: #10b981;
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
   text-align: center;
   transition: background 120ms;
+}
+
+/* "Now" button */
+.seg-pick-now {
+  border: 1px solid #10b981;
+  background: rgba(16, 185, 129, 0.08);
+  color: #10b981;
 }
 .seg-pick-now:hover {
   background: rgba(16, 185, 129, 0.18);
@@ -1405,3 +1429,19 @@ html.dark-theme .seg-pick-now {
   color: #34d399;
 }
 html.dark-theme .seg-pick-now:hover { background: rgba(52, 211, 153, 0.22); }
+
+/* "Done" button */
+.seg-pick-done {
+  border: 1px solid var(--primary, #0ea5e9);
+  background: var(--primary, #0ea5e9);
+  color: #fff;
+}
+.seg-pick-done:hover {
+  filter: brightness(1.1);
+}
+html.dark-theme .seg-pick-done {
+  background: rgba(14, 165, 233, 0.15);
+  border-color: #38bdf8;
+  color: #38bdf8;
+}
+html.dark-theme .seg-pick-done:hover { background: rgba(14, 165, 233, 0.28); }

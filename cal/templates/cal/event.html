@@ -392,10 +392,10 @@ document.addEventListener('DOMContentLoaded', function () {
     time_24hr:     false,
   };
 
-  // Helper: get current time in Eastern Time as a Date usable by Flatpickr.
-  // Returns a Date whose local-time components represent Eastern Time,
-  // so Flatpickr displays and submits the correct Eastern values.
-  const APP_TZ = 'America/Denver';
+  // Helper: get current time in the app timezone as a Date usable by Flatpickr.
+  // Returns a Date whose local-time components represent the app timezone,
+  // so Flatpickr displays and submits the correct values.
+  const APP_TZ = JSON.parse(document.getElementById('app-timezone').textContent);
   function easternNow() {
     return new Date(new Date().toLocaleString('en-US', { timeZone: APP_TZ }));
   }

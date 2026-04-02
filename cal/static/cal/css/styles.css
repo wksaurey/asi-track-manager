@@ -595,7 +595,6 @@ html.dark-theme table.calendar td:hover {
 /* Hide pending events when filter is active */
 .cal-hide-pending .event-pending { display: none !important; }
 .cal-hide-pending .event-pending.gantt-block { display: none !important; }
-.cal-hide-pending .gantt-fulltrack-overlay.event-pending { display: none !important; }
 
 .pending-badge {
   display: inline-block;
@@ -1866,7 +1865,7 @@ html.dark-theme .wk-today-num    { background: var(--primary); color: #fff; }
 /* Each subtrack within a track row — now just a lane, no inline label */
 .gantt-subtrack-row {
   position: relative;
-  height: 58px;
+  height: calc(var(--lane-rows, 1) * 58px);
   flex-shrink: 0;
   border-bottom: 1px solid rgba(46,168,229,0.07);
 }
@@ -1875,17 +1874,18 @@ html.dark-theme .wk-today-num    { background: var(--primary); color: #fff; }
 }
 
 /* Overlay for full-track (parent) events — spans all subtrack rows */
-.gantt-fulltrack-overlay {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  z-index: 2;
-  pointer-events: none;   /* subtrack events behind it remain clickable */
+/* Parent track lane — dedicated row above subtracks for parent-booked events */
+.gantt-parent-lane {
+  height: calc(var(--lane-rows, 1) * 48px);
+  border-bottom: 2px solid rgba(14, 165, 233, 0.15);
 }
-.gantt-fulltrack-overlay .gantt-block {
-  pointer-events: auto;
+.gantt-parent-lane .gantt-sub-row {
+  height: 48px;
+}
+.gantt-parent-lane-label {
+  font-weight: 600;
+  font-style: italic;
+  opacity: 0.7;
 }
 
 /* Subtrack blocks fill their row height consistently */
@@ -1900,13 +1900,6 @@ html.dark-theme .wk-today-num    { background: var(--primary); color: #fff; }
   height: calc(100% - 12px);
 }
 
-/* Full-track blocks span the full height of the overlay (both subtrack rows) */
-.gantt-block.gantt-fulltrack-block {
-  top: 6px;
-  height: calc(100% - 12px);
-  opacity: 0.88;
-  border-top: 2px solid rgba(255,255,255,0.25);
-}
 
 html.dark-theme .gantt-sublabel-col  { background: #1a2838; border-color: rgba(46,168,229,0.12); }
 html.dark-theme .gantt-subtrack-name { color: #5a8090; border-color: rgba(46,168,229,0.08); }
@@ -1925,6 +1918,7 @@ html.dark-theme .gantt-subtrack-row  { border-color: rgba(46,168,229,0.08); }
   text-decoration: none;
   font-size: 12px;
   color: #fff;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.35);
   background: var(--primary);
   min-width: 20px;
   box-sizing: border-box;
@@ -1940,20 +1934,44 @@ html.dark-theme .gantt-subtrack-row  { border-color: rgba(46,168,229,0.08); }
 .gantt-block.event-operator { background: #6366f1; }
 .gantt-block.event-multi    { background: var(--primary); }
 .gantt-block.event-pending  {
-  background: transparent !important;
+  background: color-mix(in srgb, var(--track-color, var(--primary)) 12%, transparent) !important;
   border: 2px solid var(--track-color, var(--primary));
   color: var(--track-color, var(--primary));
-  opacity: 0.85;
+  text-shadow: none;
+  font-weight: 600;
 }
 .gantt-block.event-past     { opacity: 0.45; filter: saturate(0.5); }
 .gantt-block.event-completed { opacity: 0.55; filter: saturate(0.65); }
-.gantt-block.event-noshow   { opacity: 0.55; border-left: 3px solid #f59e0b; }
+.gantt-block.event-noshow   {
+  background: rgba(245,158,11,0.10) !important;
+  border: 3px dashed #d97706;
+  color: #92400e;
+  text-shadow: none;
+  opacity: 1;
+  filter: none;
+}
 
 /* Scheduled bar — semi-transparent when segments exist.
    Text is rendered in a separate .gantt-block-text overlay (z-index: 5)
    so it isn't trapped by opacity stacking contexts on the bar. */
 .gantt-block.gantt-block--scheduled {
   opacity: 0.4;
+}
+/* Scheduled window edge markers — visible above segments */
+.gantt-sched-edge {
+  position: absolute;
+  top: 4px;
+  height: 40px;
+  width: 3px;
+  z-index: 3;
+  background: #fff;
+  opacity: 0.7;
+  border-radius: 2px;
+  pointer-events: none;
+}
+html.dark-theme .gantt-sched-edge {
+  background: #cbd5e1;
+  opacity: 0.6;
 }
 
 /* Text overlay — sits above segments, unaffected by bar opacity */
@@ -1970,6 +1988,7 @@ html.dark-theme .gantt-subtrack-row  { border-color: rgba(46,168,229,0.08); }
   text-decoration: none;
   font-size: 12px;
   color: #fff;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.35);
   z-index: 5;
   pointer-events: auto;
   box-sizing: border-box;
@@ -1986,10 +2005,6 @@ a.gantt-block-text:active { text-decoration: none; color: #fff; }
   height: calc(100% - 12px);
 }
 /* Match fulltrack overlay sizing */
-.gantt-fulltrack-overlay .gantt-block-text {
-  top: 6px;
-  height: calc(100% - 12px);
-}
 
 /* Actual segment bars — solid, overlaid on scheduled bar */
 .gantt-block-segment {
@@ -1998,16 +2013,27 @@ a.gantt-block-text:active { text-decoration: none; color: #fff; }
   height: 40px;
   border-radius: 4px;
   z-index: 2;
-  pointer-events: none;
+  pointer-events: auto;
+  cursor: pointer;
   box-sizing: border-box;
 }
 /* Match fulltrack-block sizing when inside an overlay */
-.gantt-fulltrack-overlay .gantt-block-segment {
-  top: 6px;
-  height: calc(100% - 12px);
-}
 .gantt-block--actual-segment {
   background: var(--track-color, var(--primary));
+  position: relative;
+}
+/* Left-edge marker showing where the segment begins */
+.gantt-block--actual-segment::before,
+.gantt-block--active-segment::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  border-radius: 3px 0 0 3px;
+  background: #fff;
+  opacity: 0.7;
 }
 .gantt-block--active-segment {
   background: var(--track-color, var(--primary));
@@ -2039,12 +2065,20 @@ a.gantt-block-text:active { text-decoration: none; color: #fff; }
   background: repeating-linear-gradient(
     -45deg,
     var(--track-color, var(--primary)),
-    var(--track-color, var(--primary)) 2px,
-    transparent 2px,
-    transparent 6px
+    var(--track-color, var(--primary)) 3px,
+    transparent 3px,
+    transparent 8px
   );
-  opacity: 0.25;
+  opacity: 0.45;
   border: none;
+}
+/* Active (live-growing) pause gap — subtle pulse */
+.gantt-block--active-pause {
+  animation: gantt-pause-pulse 2s ease-in-out infinite;
+}
+@keyframes gantt-pause-pulse {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 0.25; }
 }
 
 /* Overflow indicators — dotted borders when actual exceeds scheduled */
@@ -2053,6 +2087,118 @@ a.gantt-block-text:active { text-decoration: none; color: #fff; }
 }
 .gantt-block--overflow-end {
   border-right: 2px dashed var(--track-color, var(--primary));
+}
+
+/* Connector line between disconnected scheduled bar and segments */
+.gantt-connector {
+  position: absolute;
+  top: 50%;
+  height: 2px;
+  transform: translateY(-1px);
+  z-index: 1;
+  pointer-events: auto;
+  cursor: pointer;
+}
+.gantt-connector--early {
+  background: var(--track-color, var(--primary));
+  opacity: 0.6;
+}
+.gantt-connector--late {
+  background: repeating-linear-gradient(
+    to right,
+    var(--track-color, var(--primary)) 0,
+    var(--track-color, var(--primary)) 6px,
+    transparent 6px,
+    transparent 12px
+  );
+  opacity: 0.5;
+}
+
+/* Gantt tooltip */
+.gantt-tooltip {
+  position: fixed;
+  z-index: 1000;
+  background: #1e293b;
+  color: #e2e8f0;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 12px;
+  line-height: 1.5;
+  min-width: 200px;
+  max-width: 320px;
+  pointer-events: none;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.gantt-tooltip.visible { opacity: 1; }
+.gantt-tooltip-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+  gap: 8px;
+}
+.gantt-tooltip-title {
+  font-weight: 600;
+  font-size: 13px;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.gantt-tooltip-status {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.gantt-tooltip-status.status-scheduled { background: #3b82f6; color: #fff; }
+.gantt-tooltip-status.status-active { background: #10b981; color: #fff; }
+.gantt-tooltip-status.status-paused { background: #f59e0b; color: #1e293b; }
+.gantt-tooltip-status.status-completed { background: #64748b; color: #fff; }
+.gantt-tooltip-status.status-no-show { background: #d97706; color: #fff; }
+.gantt-tooltip-status.status-pending { background: transparent; color: #94a3b8; border: 1px solid #94a3b8; }
+.gantt-tooltip-row {
+  display: flex;
+  gap: 6px;
+  padding: 2px 0;
+}
+.gantt-tooltip-label {
+  color: #94a3b8;
+  min-width: 60px;
+  flex-shrink: 0;
+}
+.gantt-tooltip-value { color: #e2e8f0; }
+.gantt-tooltip-divider {
+  border-top: 1px solid #334155;
+  margin: 5px 0;
+}
+.gantt-tooltip-segments {
+  margin: 0;
+  padding: 0 0 0 14px;
+  font-size: 11px;
+  color: #cbd5e1;
+}
+.gantt-tooltip-segments li { padding: 1px 0; }
+.gantt-tooltip-desc {
+  font-size: 11px;
+  color: #94a3b8;
+  font-style: italic;
+  margin-top: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+html.dark-theme .gantt-tooltip {
+  background: #0f172a;
+  border: 1px solid #334155;
 }
 
 /* Legend swatches for the day view */
@@ -2079,11 +2225,11 @@ a.gantt-block-text:active { text-decoration: none; color: #fff; }
   background: repeating-linear-gradient(
     -45deg,
     var(--primary),
-    var(--primary) 2px,
-    transparent 2px,
-    transparent 6px
+    var(--primary) 3px,
+    transparent 3px,
+    transparent 8px
   );
-  opacity: 0.25;
+  opacity: 0.45;
 }
 .legend-swatch-completed {
   display: inline-block; width: 14px; height: 10px; border-radius: 3px;
@@ -2091,8 +2237,8 @@ a.gantt-block-text:active { text-decoration: none; color: #fff; }
 }
 .legend-swatch-noshow {
   display: inline-block; width: 14px; height: 10px; border-radius: 3px;
-  background: var(--primary); opacity: 0.55;
-  border-left: 3px solid #f59e0b;
+  background: rgba(245,158,11,0.10);
+  border: 2px dashed #d97706;
 }
 
 .gantt-block-title {
@@ -2146,7 +2292,9 @@ html.dark-theme .gantt-block.event-completed {
   opacity: 0.5;
 }
 html.dark-theme .gantt-block.event-noshow {
-  border-left-color: #f59e0b;
+  background: rgba(245,158,11,0.12) !important;
+  border-color: #f59e0b;
+  color: #fbbf24;
 }
 
 /* ── Gantt now-line ────────────────────────────────────────── */

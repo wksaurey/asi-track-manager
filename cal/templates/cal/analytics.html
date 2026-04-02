@@ -107,5 +107,8 @@
 
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script>
+  window.APP_TZ = JSON.parse(document.getElementById('app-timezone').textContent);
+</script>
 <script src="{% static 'cal/js/analytics.js' %}"></script>
 {% endblock %}

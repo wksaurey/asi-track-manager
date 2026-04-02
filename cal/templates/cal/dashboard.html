@@ -176,5 +176,8 @@
 {% endblock %}
 
 {% block script %}
+  <script>
+    window.APP_TZ = JSON.parse(document.getElementById('app-timezone').textContent);
+  </script>
   <script src="{% static 'cal/js/dashboard.js' %}"></script>
 {% endblock %}

@@ -1049,8 +1049,8 @@ class SubtrackDayViewTest(TestCase):
         self.assertContains(response, 'North Test')
         self.assertContains(response, 'gantt-block')
 
-    def test_day_view_full_track_event_shows_fulltrack_overlay(self):
-        """A full-track (parent) event must render with the gantt-fulltrack-overlay class."""
+    def test_day_view_full_track_event_shows_parent_lane(self):
+        """A full-track (parent) event must render in the gantt-parent-lane."""
         start = datetime(2026, 4, 1, 9, 0, tzinfo=_local_tz)
         end   = datetime(2026, 4, 1, 11, 0, tzinfo=_local_tz)
         ev = Event.objects.create(
@@ -1060,7 +1060,7 @@ class SubtrackDayViewTest(TestCase):
         ev.assets.add(self.parent)
         response = self.client.get(reverse('cal:calendar') + '?view=day&date=2026-4-1')
         self.assertContains(response, 'Full Track Event')
-        self.assertContains(response, 'gantt-fulltrack-overlay')
+        self.assertContains(response, 'gantt-parent-lane')
 
     def test_day_view_standalone_track_unchanged(self):
         """A track with no subtracks renders normally (no subtrack row markup)."""
@@ -3796,32 +3796,17 @@ class GanttLegendContextTest(TestCase):
 
     # ── Legend HTML reflects contextual flags ─────────────────────────────────
 
-    def test_legend_shows_pending_swatch_when_has_pending(self):
-        """When has_pending=True the legend HTML must contain a pending swatch/indicator."""
-        start = datetime(2026, 4, 2, 10, 0, tzinfo=_local_tz)
-        end   = datetime(2026, 4, 2, 12, 0, tzinfo=_local_tz)
-        ev = Event.objects.create(
-            title='Pend Lgnd', description='', start_time=start, end_time=end,
-            created_by=self.user, is_approved=False,
-        )
-        ev.assets.add(self.track)
+    def test_legend_always_shows_pending_swatch(self):
+        """Legend always shows all six state swatches including pending."""
         resp = self._get_day()
         content = resp.content.decode()
-        self.assertIn('legend-dot-pending', content)
+        self.assertIn('legend-swatch-pending', content)
 
-    def test_legend_hides_completed_swatch_when_no_completed_events(self):
-        """When there are no completed events the legend must NOT show the completed entry."""
-        # Upcoming (future) approved event — not completed
-        start = datetime(2026, 4, 2, 14, 0, tzinfo=_local_tz)
-        end   = datetime(2026, 4, 2, 16, 0, tzinfo=_local_tz)
-        ev = Event.objects.create(
-            title='Future', description='', start_time=start, end_time=end,
-            created_by=self.user, is_approved=True,
-        )
-        ev.assets.add(self.track)
+    def test_legend_always_shows_completed_swatch(self):
+        """Legend always shows all six state swatches including completed."""
         resp = self._get_day()
         content = resp.content.decode()
-        self.assertNotIn('legend-swatch-completed', content)
+        self.assertIn('legend-swatch-completed', content)
 
     def test_legend_shows_completed_swatch_when_has_completed(self):
         """When has_completed=True the legend must include a completed swatch."""
@@ -4006,3 +3991,1307 @@ class GanttCSSIntegrityTest(TestCase):
             r'html\.dark-theme[^{]*event-pending',
             'No dark-theme override found for redesigned event-pending',
         )
+
+
+# ════════════════════════════════════════════════════════════════════════════════
+# New tests: Visual extent row stacking, multi-subtrack promotion, future time
+# validation, Gantt tooltip data, connector lines, scheduled boundary markers.
+# ════════════════════════════════════════════════════════════════════════════════
+
+
+# ── 1. Visual-extent row stacking (_assign_rows) ─────────────────────────────
+
+class AssignRowsVisualExtentTest(TestCase):
+    """
+    _assign_rows() uses _visual_extent() which considers actual segments as well
+    as scheduled times.  Events that look non-overlapping on the schedule may
+    still require separate rows if their actuals overlap.
+    """
+
+    def setUp(self):
+        from cal.models import ActualTimeSegment as _ATS
+        self.ATS = _ATS
+        from cal.utils import Calendar
+        self.cal = Calendar(2026, 4)
+        self.user = User.objects.create_user(username='row_user', password='Testpass123!')
+        self.track = Asset.objects.create(
+            name='Row Track', asset_type=Asset.AssetType.TRACK
+        )
+
+    def _make_event(self, start, end, title='Event'):
+        ev = Event.objects.create(
+            title=title, description='',
+            start_time=start, end_time=end,
+            created_by=self.user, is_approved=True,
+        )
+        ev.assets.add(self.track)
+        return ev
+
+    def _add_seg(self, ev, seg_start, seg_end=None):
+        return self.ATS.objects.create(event=ev, start=seg_start, end=seg_end)
+
+    # ── Non-overlapping schedules but overlapping actuals → separate rows ─────
+
+    def test_overlapping_actuals_get_separate_rows(self):
+        """
+        Event A scheduled 9-10, Event B scheduled 11-12.
+        If A's segment runs until 11:30 it overlaps B's visual extent.
+        Both should be placed in different rows.
+        """
+        base = datetime(2026, 4, 5, 0, 0, tzinfo=_local_tz)
+        ev_a = self._make_event(base.replace(hour=9), base.replace(hour=10), 'A')
+        ev_b = self._make_event(base.replace(hour=11), base.replace(hour=12), 'B')
+        # A's actual segment runs into B's scheduled window
+        self._add_seg(ev_a,
+                      seg_start=base.replace(hour=9),
+                      seg_end=base.replace(hour=11, minute=30))
+        # Force queryset prefetch so _visual_extent sees the segments
+        events = list(
+            Event.objects.filter(pk__in=[ev_a.pk, ev_b.pk])
+            .prefetch_related('segments')
+        )
+        assignments, n_rows = self.cal._assign_rows(events)
+        row_map = {ev.pk: row for ev, row in assignments}
+        self.assertNotEqual(
+            row_map[ev_a.pk], row_map[ev_b.pk],
+            'Events with overlapping actuals must be in different rows',
+        )
+        self.assertEqual(n_rows, 2)
+
+    # ── Non-overlapping visual extents share a row ────────────────────────────
+
+    def test_non_overlapping_extents_share_row(self):
+        """
+        Event A scheduled 9-10 with actual 9:05-9:50 (extent ends 9:50).
+        Event B scheduled 11-12 with actual 11:10-11:50.
+        Extents do not overlap → both land in row 0.
+        """
+        base = datetime(2026, 4, 5, 0, 0, tzinfo=_local_tz)
+        ev_a = self._make_event(base.replace(hour=9), base.replace(hour=10), 'A')
+        ev_b = self._make_event(base.replace(hour=11), base.replace(hour=12), 'B')
+        self._add_seg(ev_a,
+                      seg_start=base.replace(hour=9, minute=5),
+                      seg_end=base.replace(hour=9, minute=50))
+        self._add_seg(ev_b,
+                      seg_start=base.replace(hour=11, minute=10),
+                      seg_end=base.replace(hour=11, minute=50))
+        events = list(
+            Event.objects.filter(pk__in=[ev_a.pk, ev_b.pk])
+            .prefetch_related('segments')
+        )
+        assignments, n_rows = self.cal._assign_rows(events)
+        row_map = {ev.pk: row for ev, row in assignments}
+        self.assertEqual(
+            row_map[ev_a.pk], row_map[ev_b.pk],
+            'Non-overlapping visual extents should share a row',
+        )
+        self.assertEqual(n_rows, 1)
+
+    # ── Open segment uses current time as visual end ──────────────────────────
+
+    def test_open_segment_extends_visual_extent(self):
+        """
+        Event A scheduled 9-10 with an open segment (end=None).
+        Event B scheduled 10:05-11 should be pushed to a separate row because
+        A's visual extent now extends to 'now' (which is past 10:05 for any
+        realistic 'now').
+        """
+        now = timezone.now()
+        # Anchor events around 'now' so the open segment always overlaps B.
+        ev_a = self._make_event(now - timedelta(hours=2), now - timedelta(hours=1), 'A Open')
+        ev_b = self._make_event(now - timedelta(minutes=30), now + timedelta(hours=1), 'B')
+        # Open segment that started before B and is still running
+        self._add_seg(ev_a, seg_start=now - timedelta(hours=2), seg_end=None)
+        events = list(
+            Event.objects.filter(pk__in=[ev_a.pk, ev_b.pk])
+            .prefetch_related('segments')
+        )
+        assignments, n_rows = self.cal._assign_rows(events)
+        row_map = {ev.pk: row for ev, row in assignments}
+        self.assertNotEqual(
+            row_map[ev_a.pk], row_map[ev_b.pk],
+            'Open segment should extend visual extent and force B to a separate row',
+        )
+
+    # ── No-segment events still work correctly ────────────────────────────────
+
+    def test_no_segments_uses_scheduled_extent_only(self):
+        """Events without segments use scheduled start/end as their visual extent."""
+        base = datetime(2026, 4, 5, 0, 0, tzinfo=_local_tz)
+        ev_a = self._make_event(base.replace(hour=9), base.replace(hour=10), 'A')
+        ev_b = self._make_event(base.replace(hour=10), base.replace(hour=11), 'B')
+        # A ends exactly when B starts — no overlap, share a row
+        events = list(
+            Event.objects.filter(pk__in=[ev_a.pk, ev_b.pk])
+            .prefetch_related('segments')
+        )
+        assignments, n_rows = self.cal._assign_rows(events)
+        row_map = {ev.pk: row for ev, row in assignments}
+        self.assertEqual(row_map[ev_a.pk], row_map[ev_b.pk],
+                         'Butting events (no overlap) should share a row')
+        self.assertEqual(n_rows, 1)
+
+    def test_single_event_always_row_zero(self):
+        """A single event is always assigned to row 0."""
+        base = datetime(2026, 4, 5, 9, 0, tzinfo=_local_tz)
+        ev = self._make_event(base, base + timedelta(hours=1))
+        events = list(Event.objects.filter(pk=ev.pk).prefetch_related('segments'))
+        assignments, n_rows = self.cal._assign_rows(events)
+        self.assertEqual(assignments[0][1], 0)
+        self.assertEqual(n_rows, 1)
+
+
+# ── 2. Multi-subtrack event promotion ────────────────────────────────────────
+
+class MultiSubtrackPromotionDayViewTest(TestCase):
+    """
+    An event booked on 2+ subtracks of the same parent must be promoted to the
+    parent's full-track lane in the day view (not appear in individual subtrack rows).
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='promo_user', password='Testpass123!')
+        self.client.force_login(self.user)
+        self.parent = Asset.objects.create(
+            name='Promo Parent', asset_type=Asset.AssetType.TRACK
+        )
+        self.sub_a = Asset.objects.create(
+            name='Sub A', asset_type=Asset.AssetType.TRACK, parent=self.parent
+        )
+        self.sub_b = Asset.objects.create(
+            name='Sub B', asset_type=Asset.AssetType.TRACK, parent=self.parent
+        )
+        self.start = datetime(2026, 4, 1, 10, 0, tzinfo=_local_tz)
+        self.end   = datetime(2026, 4, 1, 12, 0, tzinfo=_local_tz)
+
+    def _day_html(self):
+        resp = self.client.get(reverse('cal:calendar') + '?view=day&date=2026-4-1')
+        self.assertEqual(resp.status_code, 200)
+        return resp.content.decode()
+
+    def test_multi_subtrack_event_appears_in_parent_lane(self):
+        """
+        Event on 2 subtracks must appear in the gantt-parent-lane (full-track overlay).
+        """
+        ev = Event.objects.create(
+            title='Multi Sub Event', description='',
+            start_time=self.start, end_time=self.end,
+            created_by=self.user, is_approved=True,
+        )
+        ev.assets.add(self.sub_a)
+        ev.assets.add(self.sub_b)
+        html = self._day_html()
+        self.assertIn('Multi Sub Event', html)
+        # The parent lane container must be present
+        self.assertIn('gantt-parent-lane', html)
+
+    def test_multi_subtrack_event_title_in_parent_lane_section(self):
+        """
+        When an event spans 2 subtracks, the title should appear inside the
+        gantt-parent-lane block rather than only inside a subtrack row.
+        The parent lane label 'All' should be present.
+        """
+        ev = Event.objects.create(
+            title='FullTrackEvent', description='',
+            start_time=self.start, end_time=self.end,
+            created_by=self.user, is_approved=True,
+        )
+        ev.assets.add(self.sub_a)
+        ev.assets.add(self.sub_b)
+        html = self._day_html()
+        # The "All" label appears when the parent lane is rendered
+        self.assertIn('gantt-parent-lane-label', html)
+
+    def test_single_subtrack_event_not_promoted(self):
+        """
+        An event on only ONE subtrack must not be promoted to the parent lane.
+        The parent lane should not appear if there are no full-track bookings.
+        """
+        ev = Event.objects.create(
+            title='Single Sub Only', description='',
+            start_time=self.start, end_time=self.end,
+            created_by=self.user, is_approved=True,
+        )
+        ev.assets.add(self.sub_a)
+        html = self._day_html()
+        self.assertIn('Single Sub Only', html)
+        # No parent-lane label since the event only covers one subtrack
+        self.assertNotIn('gantt-parent-lane-label', html)
+
+
+class MultiSubtrackPromotionDashboardAPITest(TestCase):
+    """
+    Dashboard events API: an event booked on 2+ subtracks of the same parent
+    must appear in the parent track's events list, not in the individual
+    subtrack events lists.
+    """
+
+    def setUp(self):
+        self.admin = User.objects.create_user(
+            username='promo_api_admin', password='Testpass123!', is_staff=True
+        )
+        self.parent = Asset.objects.create(
+            name='API Promo Parent', asset_type=Asset.AssetType.TRACK
+        )
+        self.sub_a = Asset.objects.create(
+            name='Sub Alpha', asset_type=Asset.AssetType.TRACK, parent=self.parent
+        )
+        self.sub_b = Asset.objects.create(
+            name='Sub Beta', asset_type=Asset.AssetType.TRACK, parent=self.parent
+        )
+        self.client.login(username='promo_api_admin', password='Testpass123!')
+        self.url = reverse('cal:dashboard_events_api')
+        now = timezone.now()
+        self.today = now.date()
+
+    def _get_today(self):
+        resp = self.client.get(self.url, {'date': self.today.isoformat()})
+        self.assertEqual(resp.status_code, 200)
+        return resp.json()
+
+    def test_multi_subtrack_event_in_parent_events(self):
+        """
+        Event booked on both Sub Alpha and Sub Beta appears in the parent
+        track's events list.
+        """
+        now = timezone.now()
+        ev = Event.objects.create(
+            title='Promo API Event', description='',
+            start_time=now.replace(hour=9, minute=0, second=0, microsecond=0),
+            end_time=now.replace(hour=11, minute=0, second=0, microsecond=0),
+            is_approved=True,
+        )
+        ev.assets.add(self.sub_a)
+        ev.assets.add(self.sub_b)
+        data = self._get_today()
+        parent_data = data['tracks']['API Promo Parent']
+        parent_event_ids = [e['id'] for e in parent_data['events']]
+        self.assertIn(ev.pk, parent_event_ids,
+                      'Multi-subtrack event must appear in parent track events')
+
+    def test_multi_subtrack_event_absent_from_subtrack_events(self):
+        """
+        Event booked on both Sub Alpha and Sub Beta must NOT appear in
+        either subtrack's individual events list.
+        """
+        now = timezone.now()
+        ev = Event.objects.create(
+            title='Promo Absent Test', description='',
+            start_time=now.replace(hour=9, minute=0, second=0, microsecond=0),
+            end_time=now.replace(hour=11, minute=0, second=0, microsecond=0),
+            is_approved=True,
+        )
+        ev.assets.add(self.sub_a)
+        ev.assets.add(self.sub_b)
+        data = self._get_today()
+        parent_data = data['tracks']['API Promo Parent']
+        subtracks = parent_data.get('subtracks', {})
+        for sub_name, sub_data in subtracks.items():
+            sub_event_ids = [e['id'] for e in sub_data['events']]
+            self.assertNotIn(
+                ev.pk, sub_event_ids,
+                f'Multi-subtrack event must not appear in subtrack "{sub_name}" events',
+            )
+
+    def test_single_subtrack_event_stays_in_subtrack(self):
+        """
+        An event on only one subtrack must remain in that subtrack's events list
+        and not appear in the parent's events list.
+        """
+        now = timezone.now()
+        ev = Event.objects.create(
+            title='Single Sub API', description='',
+            start_time=now.replace(hour=13, minute=0, second=0, microsecond=0),
+            end_time=now.replace(hour=14, minute=0, second=0, microsecond=0),
+            is_approved=True,
+        )
+        ev.assets.add(self.sub_a)
+        data = self._get_today()
+        parent_data = data['tracks']['API Promo Parent']
+        parent_event_ids = [e['id'] for e in parent_data['events']]
+        self.assertNotIn(ev.pk, parent_event_ids,
+                         'Single-subtrack event must NOT be promoted to parent events')
+        subtracks = parent_data.get('subtracks', {})
+        sub_alpha_events = subtracks.get('Sub Alpha', {}).get('events', [])
+        sub_alpha_ids = [e['id'] for e in sub_alpha_events]
+        self.assertIn(ev.pk, sub_alpha_ids,
+                      'Single-subtrack event must stay in its own subtrack events list')
+
+
+# ── 3. Future time validation ─────────────────────────────────────────────────
+
+class StampAPIFutureTimeTest(TestCase):
+    """
+    The stamp API rejects custom times that are in the future.
+    Setting a current or past time must succeed.
+    """
+
+    def setUp(self):
+        self.admin = User.objects.create_user(
+            username='future_admin', password='Testpass123!', is_staff=True
+        )
+        self.track = Asset.objects.create(
+            name='Future Track', asset_type=Asset.AssetType.TRACK
+        )
+        now = timezone.now()
+        self.event = Event.objects.create(
+            title='Future Time Event', description='',
+            start_time=now - timedelta(hours=2),
+            end_time=now + timedelta(hours=2),
+            is_approved=True, created_by=self.admin,
+        )
+        self.event.assets.add(self.track)
+        self.client.login(username='future_admin', password='Testpass123!')
+        self.url = reverse('cal:dashboard_stamp_actual', args=[self.event.pk])
+
+    def _stamp(self, action, time_iso=None):
+        body = {'action': action}
+        if time_iso is not None:
+            body['time'] = time_iso
+        return self.client.post(
+            self.url, data=json.dumps(body),
+            content_type='application/json',
+        )
+
+    def test_future_custom_time_returns_400(self):
+        """Stamp with a custom_time in the future must return 400."""
+        future = (timezone.now() + timedelta(minutes=30)).isoformat()
+        resp = self._stamp('start', time_iso=future)
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn('future', resp.json()['error'].lower())
+
+    def test_future_custom_time_does_not_create_segment(self):
+        """A rejected future-time stamp must not create any segment."""
+        future = (timezone.now() + timedelta(hours=1)).isoformat()
+        self._stamp('start', time_iso=future)
+        self.assertEqual(self.event.segments.count(), 0)
+
+    def test_past_custom_time_succeeds(self):
+        """Stamp with a past custom_time must succeed (200)."""
+        past = (timezone.now() - timedelta(minutes=45)).isoformat()
+        resp = self._stamp('start', time_iso=past)
+        self.assertEqual(resp.status_code, 200)
+
+    def test_now_custom_time_succeeds(self):
+        """Stamp with a time at 'now' (within a few seconds) must succeed."""
+        # Use a time 1 second in the past to avoid sub-second race conditions
+        just_now = (timezone.now() - timedelta(seconds=1)).isoformat()
+        resp = self._stamp('start', time_iso=just_now)
+        self.assertEqual(resp.status_code, 200)
+
+    def test_no_custom_time_always_succeeds(self):
+        """Stamp with no custom_time (uses server now) must always succeed."""
+        resp = self._stamp('start')
+        self.assertEqual(resp.status_code, 200)
+
+
+class SegmentEditFutureTimeTest(TestCase):
+    """
+    The segment edit API rejects start or end times that are in the future.
+    """
+
+    def setUp(self):
+        from cal.models import ActualTimeSegment
+        self.admin = User.objects.create_user(
+            username='seg_edit_admin', password='Testpass123!', is_staff=True
+        )
+        self.track = Asset.objects.create(
+            name='Seg Edit Track', asset_type=Asset.AssetType.TRACK
+        )
+        now = timezone.now()
+        self.event = Event.objects.create(
+            title='Seg Edit Event', description='',
+            start_time=now - timedelta(hours=2),
+            end_time=now + timedelta(hours=2),
+            is_approved=True, created_by=self.admin,
+        )
+        self.event.assets.add(self.track)
+        self.seg = ActualTimeSegment.objects.create(
+            event=self.event,
+            start=now - timedelta(hours=1),
+            end=now - timedelta(minutes=30),
+        )
+        self.client.login(username='seg_edit_admin', password='Testpass123!')
+        self.url = reverse('cal:segment_edit', args=[self.seg.pk])
+
+    def _edit(self, **kwargs):
+        return self.client.post(
+            self.url, data=json.dumps(kwargs),
+            content_type='application/json',
+        )
+
+    def test_future_start_returns_400(self):
+        """Setting segment start to a future time must return 400."""
+        future = (timezone.now() + timedelta(minutes=10)).isoformat()
+        resp = self._edit(start=future)
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn('future', resp.json()['error'].lower())
+
+    def test_future_end_returns_400(self):
+        """Setting segment end to a future time must return 400."""
+        future = (timezone.now() + timedelta(minutes=10)).isoformat()
+        resp = self._edit(end=future)
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn('future', resp.json()['error'].lower())
+
+    def test_past_start_succeeds(self):
+        """Editing start to a valid past time must succeed."""
+        past = (timezone.now() - timedelta(hours=2)).isoformat()
+        resp = self._edit(start=past)
+        self.assertEqual(resp.status_code, 200)
+
+    def test_past_end_succeeds(self):
+        """Editing end to a valid past time (after start) must succeed."""
+        past = (timezone.now() - timedelta(minutes=10)).isoformat()
+        resp = self._edit(end=past)
+        self.assertEqual(resp.status_code, 200)
+
+    def test_non_admin_gets_403(self):
+        """Non-admin cannot edit segments."""
+        regular = User.objects.create_user(username='seg_regular', password='Testpass123!')
+        self.client.force_login(regular)
+        resp = self._edit(end=(timezone.now() - timedelta(minutes=5)).isoformat())
+        self.assertEqual(resp.status_code, 403)
+
+    def test_nonexistent_segment_returns_404(self):
+        """Editing a non-existent segment returns 404."""
+        url = reverse('cal:segment_edit', args=[99999])
+        resp = self.client.post(
+            url, data=json.dumps({'start': (timezone.now() - timedelta(hours=1)).isoformat()}),
+            content_type='application/json',
+        )
+        self.assertEqual(resp.status_code, 404)
+
+
+# ── 4. Gantt tooltip data (_gantt_tooltip_data) ───────────────────────────────
+
+class GanttTooltipDataTest(TestCase):
+    """
+    Calendar._gantt_tooltip_data() builds the JSON dict served as tooltip data.
+    Tests cover status determination, segment listing, pause time, and asset listing.
+    """
+
+    def setUp(self):
+        from cal.models import ActualTimeSegment
+        from cal.utils import Calendar
+        self.ATS = ActualTimeSegment
+        self.cal = Calendar(2026, 4)
+        self.user = User.objects.create_user(username='tip_user', password='Testpass123!')
+        self.track = Asset.objects.create(
+            name='Tip Track', asset_type=Asset.AssetType.TRACK, color='#dc2626'
+        )
+        self.vehicle = Asset.objects.create(
+            name='Tip Van', asset_type=Asset.AssetType.VEHICLE
+        )
+
+    def _make_event(self, *, title='Test', approved=True,
+                    start_offset_hours=-2, end_offset_hours=2):
+        now = timezone.now()
+        start = now + timedelta(hours=start_offset_hours)
+        end = now + timedelta(hours=end_offset_hours)
+        ev = Event.objects.create(
+            title=title, description='A description',
+            start_time=start, end_time=end,
+            created_by=self.user, is_approved=approved,
+        )
+        ev.assets.add(self.track)
+        return ev
+
+    def _load_event(self, ev):
+        """Return the event with segments prefetched (mirrors utils usage)."""
+        return Event.objects.prefetch_related('assets', 'segments').get(pk=ev.pk)
+
+    # ── Status: Scheduled ─────────────────────────────────────────────────────
+
+    def test_status_scheduled_for_future_approved_no_segments(self):
+        """Approved future event with no segments → status 'Scheduled'."""
+        ev = self._make_event(start_offset_hours=1, end_offset_hours=3)
+        ev = self._load_event(ev)
+        segs = list(ev.segments.all())
+        info = self.cal._gantt_tooltip_data(ev, segs)
+        self.assertEqual(info['status'], 'Scheduled')
+
+    # ── Status: Pending ───────────────────────────────────────────────────────
+
+    def test_status_pending_for_unapproved_event(self):
+        """Unapproved event → status 'Pending' regardless of segments."""
+        ev = self._make_event(approved=False, start_offset_hours=1, end_offset_hours=3)
+        ev = self._load_event(ev)
+        segs = list(ev.segments.all())
+        info = self.cal._gantt_tooltip_data(ev, segs)
+        self.assertEqual(info['status'], 'Pending')
+
+    # ── Status: Active ────────────────────────────────────────────────────────
+
+    def test_status_active_for_open_segment(self):
+        """Approved event with an open segment that is currently active → status 'Active'."""
+        ev = self._make_event(start_offset_hours=-1, end_offset_hours=1)
+        self.ATS.objects.create(
+            event=ev, start=timezone.now() - timedelta(minutes=30), end=None
+        )
+        ev = self._load_event(ev)
+        segs = list(ev.segments.all())
+        info = self.cal._gantt_tooltip_data(ev, segs)
+        self.assertEqual(info['status'], 'Active')
+
+    # ── Status: Paused ────────────────────────────────────────────────────────
+
+    def test_status_paused_all_segments_closed_not_stopped(self):
+        """
+        Approved event with segments all closed and not stopped and not past → 'Paused'.
+        """
+        ev = self._make_event(start_offset_hours=-1, end_offset_hours=1)
+        self.ATS.objects.create(
+            event=ev,
+            start=timezone.now() - timedelta(minutes=50),
+            end=timezone.now() - timedelta(minutes=30),
+        )
+        ev = self._load_event(ev)
+        segs = list(ev.segments.all())
+        info = self.cal._gantt_tooltip_data(ev, segs)
+        self.assertEqual(info['status'], 'Paused')
+
+    # ── Status: Completed ─────────────────────────────────────────────────────
+
+    def test_status_completed_for_stopped_event_with_segments(self):
+        """
+        Approved event with segments and is_stopped=True → status 'Completed'.
+        (is_stopped is the flag that marks an event as definitively done.)
+        """
+        ev = self._make_event(start_offset_hours=-4, end_offset_hours=2)
+        self.ATS.objects.create(
+            event=ev,
+            start=timezone.now() - timedelta(hours=3, minutes=30),
+            end=timezone.now() - timedelta(hours=2),
+        )
+        ev.is_stopped = True
+        ev.save(update_fields=['is_stopped'])
+        ev = self._load_event(ev)
+        segs = list(ev.segments.all())
+        info = self.cal._gantt_tooltip_data(ev, segs)
+        self.assertEqual(info['status'], 'Completed')
+
+    # ── Status: No-show ───────────────────────────────────────────────────────
+
+    def test_status_noshow_for_past_event_without_segments(self):
+        """Past approved event with no segments → status 'No-show'."""
+        ev = self._make_event(start_offset_hours=-4, end_offset_hours=-1)
+        ev = self._load_event(ev)
+        segs = list(ev.segments.all())
+        info = self.cal._gantt_tooltip_data(ev, segs)
+        self.assertEqual(info['status'], 'No-show')
+
+    # ── Segment list ──────────────────────────────────────────────────────────
+
+    def test_segments_listed_with_closed_segment(self):
+        """Closed segments appear in info['segments'] list."""
+        ev = self._make_event(start_offset_hours=-2, end_offset_hours=2)
+        self.ATS.objects.create(
+            event=ev,
+            start=timezone.now() - timedelta(hours=1),
+            end=timezone.now() - timedelta(minutes=30),
+        )
+        ev = self._load_event(ev)
+        segs = list(ev.segments.all())
+        info = self.cal._gantt_tooltip_data(ev, segs)
+        self.assertIn('segments', info)
+        self.assertEqual(len(info['segments']), 1)
+
+    def test_open_segment_listed_with_now_label(self):
+        """Open segments appear with 'now' in the label."""
+        ev = self._make_event(start_offset_hours=-1, end_offset_hours=1)
+        self.ATS.objects.create(
+            event=ev, start=timezone.now() - timedelta(minutes=20), end=None
+        )
+        ev = self._load_event(ev)
+        segs = list(ev.segments.all())
+        info = self.cal._gantt_tooltip_data(ev, segs)
+        self.assertTrue(
+            any('now' in s for s in info['segments']),
+            'Open segment must include "now" in its label',
+        )
+
+    def test_two_segments_pause_time_calculated(self):
+        """
+        Two closed segments with a 15-minute gap → info['pauseTime'] is present
+        and reflects the inter-segment gap.
+        """
+        ev = self._make_event(start_offset_hours=-3, end_offset_hours=1)
+        t0 = timezone.now() - timedelta(hours=2)
+        self.ATS.objects.create(event=ev, start=t0, end=t0 + timedelta(minutes=30))
+        # 15-minute gap
+        self.ATS.objects.create(
+            event=ev,
+            start=t0 + timedelta(minutes=45),
+            end=t0 + timedelta(hours=1, minutes=15),
+        )
+        ev = self._load_event(ev)
+        segs = list(ev.segments.all())
+        info = self.cal._gantt_tooltip_data(ev, segs)
+        self.assertIn('pauseTime', info,
+                      'Pause time should be reported when there is a gap between segments')
+
+    def test_no_pause_time_stopped_single_segment(self):
+        """
+        Stopped event with a single closed segment has no inter-segment gaps
+        and the trailing-pause rule does not apply (status is Completed).
+        No 'pauseTime' key in info.
+        """
+        ev = self._make_event(start_offset_hours=-2, end_offset_hours=2)
+        self.ATS.objects.create(
+            event=ev,
+            start=timezone.now() - timedelta(hours=1),
+            end=timezone.now() - timedelta(minutes=30),
+        )
+        ev.is_stopped = True
+        ev.save(update_fields=['is_stopped'])
+        ev = self._load_event(ev)
+        segs = list(ev.segments.all())
+        info = self.cal._gantt_tooltip_data(ev, segs)
+        self.assertNotIn('pauseTime', info)
+
+    # ── Asset listing ─────────────────────────────────────────────────────────
+
+    def test_tracks_included_in_info(self):
+        """Track-type assets attached to the event appear in info['tracks']."""
+        ev = self._make_event()
+        ev = self._load_event(ev)
+        segs = list(ev.segments.all())
+        info = self.cal._gantt_tooltip_data(ev, segs)
+        self.assertIn('tracks', info)
+        self.assertIn('Tip Track', info['tracks'])
+
+    def test_vehicles_included_in_info(self):
+        """Vehicle-type assets appear in info['vehicles']."""
+        ev = self._make_event(start_offset_hours=-1, end_offset_hours=1)
+        ev.assets.add(self.vehicle)
+        ev = self._load_event(ev)
+        segs = list(ev.segments.all())
+        info = self.cal._gantt_tooltip_data(ev, segs)
+        self.assertIn('vehicles', info)
+        self.assertIn('Tip Van', info['vehicles'])
+
+    def test_no_vehicle_key_when_no_vehicles(self):
+        """If no vehicle assets, 'vehicles' key is absent."""
+        ev = self._make_event()
+        ev = self._load_event(ev)
+        segs = list(ev.segments.all())
+        info = self.cal._gantt_tooltip_data(ev, segs)
+        self.assertNotIn('vehicles', info)
+
+    def test_title_and_creator_present(self):
+        """Basic fields title and creator are always present."""
+        ev = self._make_event(title='Tooltip Title')
+        ev = self._load_event(ev)
+        segs = list(ev.segments.all())
+        info = self.cal._gantt_tooltip_data(ev, segs)
+        self.assertEqual(info['title'], 'Tooltip Title')
+        self.assertEqual(info['creator'], 'tip_user')
+
+
+# ── 5. Connector line rendering ───────────────────────────────────────────────
+
+class GanttConnectorLineTest(TestCase):
+    """
+    _make_block() renders connector lines (gantt-connector--late / --early)
+    when actual segments are disconnected from the scheduled bar.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='conn_user', password='Testpass123!')
+        self.client.force_login(self.user)
+        self.track = Asset.objects.create(
+            name='Conn Track', asset_type=Asset.AssetType.TRACK, color='#dc2626'
+        )
+
+    def _day_html(self):
+        resp = self.client.get(reverse('cal:calendar') + '?view=day&date=2026-4-1')
+        self.assertEqual(resp.status_code, 200)
+        return resp.content.decode()
+
+    def _make_event(self, title, start, end):
+        ev = Event.objects.create(
+            title=title, description='',
+            start_time=start, end_time=end,
+            created_by=self.user, is_approved=True,
+        )
+        ev.assets.add(self.track)
+        return ev
+
+    def _add_seg(self, ev, seg_start, seg_end):
+        from cal.models import ActualTimeSegment
+        return ActualTimeSegment.objects.create(event=ev, start=seg_start, end=seg_end)
+
+    def test_late_start_renders_connector_late(self):
+        """
+        When all segments start AFTER the scheduled bar ends, a
+        gantt-connector--late div must be rendered.
+        """
+        base = datetime(2026, 4, 1, 0, 0, tzinfo=_local_tz)
+        # Scheduled 9-10, actual segment starts at 11 (late)
+        ev = self._make_event('Late Conn', base.replace(hour=9), base.replace(hour=10))
+        self._add_seg(ev,
+                      seg_start=base.replace(hour=11),
+                      seg_end=base.replace(hour=11, minute=45))
+        html = self._day_html()
+        self.assertIn('gantt-connector--late', html)
+
+    def test_early_start_renders_connector_early(self):
+        """
+        When all segments end BEFORE the scheduled bar starts, a
+        gantt-connector--early div must be rendered.
+        """
+        base = datetime(2026, 4, 1, 0, 0, tzinfo=_local_tz)
+        # Scheduled 11-12, actual segment ends at 10 (early)
+        ev = self._make_event('Early Conn', base.replace(hour=11), base.replace(hour=12))
+        self._add_seg(ev,
+                      seg_start=base.replace(hour=9),
+                      seg_end=base.replace(hour=10))
+        html = self._day_html()
+        self.assertIn('gantt-connector--early', html)
+
+    def test_overlapping_segment_no_connector(self):
+        """
+        When a segment overlaps the scheduled bar, no connector div is rendered.
+        """
+        base = datetime(2026, 4, 1, 0, 0, tzinfo=_local_tz)
+        # Scheduled 9-11, actual 9:15-10:30 (inside)
+        ev = self._make_event('No Conn', base.replace(hour=9), base.replace(hour=11))
+        self._add_seg(ev,
+                      seg_start=base.replace(hour=9, minute=15),
+                      seg_end=base.replace(hour=10, minute=30))
+        html = self._day_html()
+        self.assertNotIn('gantt-connector--late', html)
+        self.assertNotIn('gantt-connector--early', html)
+
+    def test_segment_starting_inside_bar_no_connector(self):
+        """
+        Segment that starts inside the scheduled bar but extends beyond
+        it: not a disconnected case, so no connector.
+        """
+        base = datetime(2026, 4, 1, 0, 0, tzinfo=_local_tz)
+        # Scheduled 9-10, segment 9:30-11 (starts inside, ends past bar)
+        ev = self._make_event('Overflow No Conn',
+                              base.replace(hour=9), base.replace(hour=10))
+        self._add_seg(ev,
+                      seg_start=base.replace(hour=9, minute=30),
+                      seg_end=base.replace(hour=11))
+        html = self._day_html()
+        self.assertNotIn('gantt-connector--late', html)
+        self.assertNotIn('gantt-connector--early', html)
+
+
+# ── 6. Scheduled boundary markers (gantt-sched-edge) ─────────────────────────
+
+class GanttSchedEdgeMarkerTest(TestCase):
+    """
+    gantt-sched-edge markers appear only when a segment straddles the edge of
+    the scheduled bar — i.e., partially overlaps the scheduled start or end.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='edge_user', password='Testpass123!')
+        self.client.force_login(self.user)
+        self.track = Asset.objects.create(
+            name='Edge Track', asset_type=Asset.AssetType.TRACK, color='#dc2626'
+        )
+
+    def _day_html(self):
+        resp = self.client.get(reverse('cal:calendar') + '?view=day&date=2026-4-1')
+        self.assertEqual(resp.status_code, 200)
+        return resp.content.decode()
+
+    def _make_event(self, title, start, end):
+        ev = Event.objects.create(
+            title=title, description='',
+            start_time=start, end_time=end,
+            created_by=self.user, is_approved=True,
+        )
+        ev.assets.add(self.track)
+        return ev
+
+    def _add_seg(self, ev, seg_start, seg_end):
+        from cal.models import ActualTimeSegment
+        return ActualTimeSegment.objects.create(event=ev, start=seg_start, end=seg_end)
+
+    def test_left_edge_marker_when_segment_covers_scheduled_start(self):
+        """
+        Segment starts before the scheduled bar and ends inside it →
+        left edge marker rendered.
+        """
+        base = datetime(2026, 4, 1, 0, 0, tzinfo=_local_tz)
+        # Scheduled 10-12, segment 9:30-11 → straddles left edge at 10:00
+        ev = self._make_event('Left Edge', base.replace(hour=10), base.replace(hour=12))
+        self._add_seg(ev,
+                      seg_start=base.replace(hour=9, minute=30),
+                      seg_end=base.replace(hour=11))
+        html = self._day_html()
+        self.assertIn('gantt-sched-edge', html)
+
+    def test_right_edge_marker_when_segment_covers_scheduled_end(self):
+        """
+        Segment starts inside the scheduled bar and ends after it →
+        right edge marker rendered.
+        """
+        base = datetime(2026, 4, 1, 0, 0, tzinfo=_local_tz)
+        # Scheduled 9-11, segment 10-12 → straddles right edge at 11:00
+        ev = self._make_event('Right Edge', base.replace(hour=9), base.replace(hour=11))
+        self._add_seg(ev,
+                      seg_start=base.replace(hour=10),
+                      seg_end=base.replace(hour=12))
+        html = self._day_html()
+        self.assertIn('gantt-sched-edge', html)
+
+    def test_segment_inside_bar_no_edge_markers(self):
+        """
+        Segment that stays entirely within the scheduled bar must not produce
+        any edge markers.
+        """
+        base = datetime(2026, 4, 1, 0, 0, tzinfo=_local_tz)
+        # Scheduled 9-12, segment 10-11 (entirely inside)
+        ev = self._make_event('Inside No Edge', base.replace(hour=9), base.replace(hour=12))
+        self._add_seg(ev,
+                      seg_start=base.replace(hour=10),
+                      seg_end=base.replace(hour=11))
+        html = self._day_html()
+        self.assertNotIn('gantt-sched-edge', html)
+
+    def test_segment_entirely_outside_bar_no_edge_markers(self):
+        """
+        Segment entirely before the scheduled bar (late-start case) produces
+        a connector but no edge markers.
+        """
+        base = datetime(2026, 4, 1, 0, 0, tzinfo=_local_tz)
+        # Scheduled 11-13, segment 9-10 (entirely before)
+        ev = self._make_event('Outside No Edge', base.replace(hour=11), base.replace(hour=13))
+        self._add_seg(ev,
+                      seg_start=base.replace(hour=9),
+                      seg_end=base.replace(hour=10))
+        html = self._day_html()
+        self.assertNotIn('gantt-sched-edge', html)
+
+
+# ════════════════════════════════════════════════════════════════════════════════
+# New tests: decorators, helpers, api_event_approve, RADIO_CHANNEL_CHOICES
+# ════════════════════════════════════════════════════════════════════════════════
+
+
+# ── StaffRequiredDecoratorTest ────────────────────────────────────────────────
+
+class StaffRequiredDecoratorTest(TestCase):
+    """Tests for @staff_required (HTML) and @staff_required_api (JSON) decorators."""
+
+    def setUp(self):
+        self.staff = User.objects.create_user(
+            username='dec_staff', password='Testpass123!', is_staff=True
+        )
+        self.regular = User.objects.create_user(
+            username='dec_user', password='Testpass123!'
+        )
+        self.asset = Asset.objects.create(
+            name='Dec Track', asset_type=Asset.AssetType.TRACK
+        )
+        now = timezone.now()
+        self.event = Event.objects.create(
+            title='Dec Event',
+            description='',
+            start_time=now + timedelta(hours=1),
+            end_time=now + timedelta(hours=3),
+            is_approved=True,
+            created_by=self.staff,
+        )
+        self.event.assets.add(self.asset)
+
+    # ── @staff_required (HTML views) ──────────────────────────────────────────
+
+    def test_html_view_unauthenticated_redirects_to_login(self):
+        """Unauthenticated request to a @staff_required view redirects to login."""
+        url = reverse('cal:event_delete', args=[self.event.pk])
+        resp = self.client.post(url)
+        self.assertEqual(resp.status_code, 302)
+        self.assertIn('/users/login/', resp['Location'])
+
+    def test_html_view_non_staff_redirected_to_calendar(self):
+        """Non-staff user on a @staff_required view is redirected to the calendar."""
+        self.client.login(username='dec_user', password='Testpass123!')
+        url = reverse('cal:event_delete', args=[self.event.pk])
+        resp = self.client.post(url)
+        self.assertEqual(resp.status_code, 302)
+        self.assertIn('/cal/calendar/', resp['Location'])
+        # Event must not have been deleted
+        self.assertTrue(Event.objects.filter(pk=self.event.pk).exists())
+
+    def test_html_view_staff_allowed_through(self):
+        """Staff user on a @staff_required view is allowed through (not redirected to login or calendar)."""
+        self.client.login(username='dec_staff', password='Testpass123!')
+        url = reverse('cal:event_delete', args=[self.event.pk])
+        resp = self.client.post(url)
+        # Should redirect to calendar (success), not to /users/login/ or /cal/calendar/
+        self.assertEqual(resp.status_code, 302)
+        self.assertNotIn('/users/login/', resp['Location'])
+        # Event should now be deleted
+        self.assertFalse(Event.objects.filter(pk=self.event.pk).exists())
+
+    def test_html_view_pending_events_non_staff_redirected(self):
+        """Non-staff request to @staff_required pending_events is redirected to calendar."""
+        self.client.login(username='dec_user', password='Testpass123!')
+        resp = self.client.get(reverse('cal:pending_events'))
+        self.assertEqual(resp.status_code, 302)
+        self.assertIn('/cal/calendar/', resp['Location'])
+
+    def test_html_view_pending_events_staff_gets_200(self):
+        """Staff request to @staff_required pending_events returns 200."""
+        self.client.login(username='dec_staff', password='Testpass123!')
+        resp = self.client.get(reverse('cal:pending_events'))
+        self.assertEqual(resp.status_code, 200)
+
+    # ── @staff_required_api (JSON API views) ─────────────────────────────────
+
+    def test_api_view_unauthenticated_redirects(self):
+        """Unauthenticated request to a @staff_required_api view redirects (login_required)."""
+        resp = self.client.get(reverse('cal:dashboard_events_api'))
+        self.assertEqual(resp.status_code, 302)
+
+    def test_api_view_non_staff_returns_403_json(self):
+        """Non-staff user on a @staff_required_api view gets 403 with JSON error."""
+        self.client.login(username='dec_user', password='Testpass123!')
+        resp = self.client.get(reverse('cal:dashboard_events_api'))
+        self.assertEqual(resp.status_code, 403)
+        data = resp.json()
+        self.assertIn('error', data)
+
+    def test_api_view_staff_gets_200(self):
+        """Staff user on a @staff_required_api view gets 200."""
+        self.client.login(username='dec_staff', password='Testpass123!')
+        resp = self.client.get(reverse('cal:dashboard_events_api'))
+        self.assertEqual(resp.status_code, 200)
+
+
+# ── ParseApiDatetimeTest ──────────────────────────────────────────────────────
+
+class ParseApiDatetimeTest(TestCase):
+    """Tests for helpers.parse_api_datetime()."""
+
+    def setUp(self):
+        from cal.helpers import parse_api_datetime
+        self.parse = parse_api_datetime
+        self.user = User.objects.create_user(username='padt_user', password='Testpass123!')
+        now = timezone.now()
+        self.event = Event.objects.create(
+            title='PADT Event',
+            description='',
+            start_time=now,
+            end_time=now + timedelta(hours=2),
+            created_by=self.user,
+        )
+
+    def test_iso_z_suffix_parsed_as_utc(self):
+        """ISO 8601 string with Z suffix is parsed correctly as UTC-aware datetime."""
+        result = self.parse('2026-04-01T10:00:00Z')
+        self.assertIsNotNone(result)
+        self.assertIsNotNone(result.tzinfo)
+        self.assertEqual(result.hour, 10)
+        self.assertEqual(result.minute, 0)
+
+    def test_iso_with_offset_parsed_correctly(self):
+        """ISO 8601 string with explicit timezone offset is parsed to an aware datetime."""
+        result = self.parse('2026-04-01T10:00:00+05:00')
+        self.assertIsNotNone(result)
+        self.assertIsNotNone(result.tzinfo)
+
+    def test_naive_iso_string_made_aware(self):
+        """Naive ISO string (no timezone) is made aware using the current timezone."""
+        result = self.parse('2026-04-01T14:30:00')
+        self.assertIsNotNone(result)
+        self.assertIsNotNone(result.tzinfo)
+        self.assertEqual(result.hour, 14)
+        self.assertEqual(result.minute, 30)
+
+    def test_hhmm_with_reference_event_uses_event_date(self):
+        """HH:MM string with a reference_event returns a datetime on the event's start date."""
+        result = self.parse('09:30', reference_event=self.event)
+        self.assertIsNotNone(result)
+        self.assertIsNotNone(result.tzinfo)
+        self.assertEqual(result.hour, 9)
+        self.assertEqual(result.minute, 30)
+        # Date must match the event's start date in local time
+        from django.utils.timezone import localtime
+        self.assertEqual(result.date(), localtime(self.event.start_time).date())
+
+    def test_hhmm_without_reference_event_returns_none(self):
+        """HH:MM string without a reference_event returns None (no date anchor)."""
+        result = self.parse('09:30')
+        self.assertIsNone(result)
+
+    def test_empty_string_returns_none(self):
+        """Empty string returns None."""
+        result = self.parse('')
+        self.assertIsNone(result)
+
+    def test_none_returns_none(self):
+        """None input returns None."""
+        result = self.parse(None)
+        self.assertIsNone(result)
+
+    def test_invalid_string_returns_none(self):
+        """Completely invalid string returns None."""
+        result = self.parse('not-a-date-at-all')
+        self.assertIsNone(result)
+
+    def test_invalid_string_with_reference_event_returns_none(self):
+        """Invalid string with reference_event still returns None when parse fails."""
+        result = self.parse('99:99', reference_event=self.event)
+        self.assertIsNone(result)
+
+
+# ── ValidateRadioChannelTest ──────────────────────────────────────────────────
+
+class ValidateRadioChannelTest(TestCase):
+    """Tests for helpers.validate_radio_channel()."""
+
+    def setUp(self):
+        from cal.helpers import validate_radio_channel
+        self.validate = validate_radio_channel
+
+    def _body(self, channel):
+        import json as _json
+        return _json.dumps({'channel': channel}).encode()
+
+    def test_valid_channel_11_returns_11(self):
+        """Channel 11 (lower bound) is accepted and returned as int."""
+        ch, err = self.validate(self._body(11))
+        self.assertEqual(ch, 11)
+        self.assertIsNone(err)
+
+    def test_valid_channel_16_returns_16(self):
+        """Channel 16 (upper bound) is accepted and returned as int."""
+        ch, err = self.validate(self._body(16))
+        self.assertEqual(ch, 16)
+        self.assertIsNone(err)
+
+    def test_valid_channel_14_returns_14(self):
+        """Channel 14 (mid-range) is accepted."""
+        ch, err = self.validate(self._body(14))
+        self.assertEqual(ch, 14)
+        self.assertIsNone(err)
+
+    def test_null_channel_accepted(self):
+        """null channel (clears the value) is accepted with ch=None and no error."""
+        ch, err = self.validate(self._body(None))
+        self.assertIsNone(ch)
+        self.assertIsNone(err)
+
+    def test_channel_10_out_of_range(self):
+        """Channel 10 (below minimum) is rejected with 400 error response."""
+        ch, err = self.validate(self._body(10))
+        self.assertIsNone(ch)
+        self.assertIsNotNone(err)
+        self.assertEqual(err.status_code, 400)
+
+    def test_channel_17_out_of_range(self):
+        """Channel 17 (above maximum) is rejected with 400 error response."""
+        ch, err = self.validate(self._body(17))
+        self.assertIsNone(ch)
+        self.assertIsNotNone(err)
+        self.assertEqual(err.status_code, 400)
+
+    def test_non_integer_channel_rejected(self):
+        """Non-integer channel string is rejected with 400 error response."""
+        import json as _json
+        ch, err = self.validate(_json.dumps({'channel': 'abc'}).encode())
+        self.assertIsNone(ch)
+        self.assertIsNotNone(err)
+        self.assertEqual(err.status_code, 400)
+
+    def test_invalid_json_body_rejected(self):
+        """Malformed JSON body returns 400 error response."""
+        ch, err = self.validate(b'not json at all')
+        self.assertIsNone(ch)
+        self.assertIsNotNone(err)
+        self.assertEqual(err.status_code, 400)
+
+    def test_channel_string_number_coerced(self):
+        """Channel sent as the string '13' is coerced to int 13 (int() accepts this)."""
+        import json as _json
+        ch, err = self.validate(_json.dumps({'channel': '13'}).encode())
+        self.assertEqual(ch, 13)
+        self.assertIsNone(err)
+
+
+# ── ApiEventApproveTest ───────────────────────────────────────────────────────
+
+class ApiEventApproveTest(TestCase):
+    """Tests for POST /cal/api/event/<id>/approve/ endpoint."""
+
+    def setUp(self):
+        self.staff = User.objects.create_user(
+            username='apv_staff', password='Testpass123!', is_staff=True
+        )
+        self.regular = User.objects.create_user(
+            username='apv_user', password='Testpass123!'
+        )
+        self.track = Asset.objects.create(
+            name='Approve Track', asset_type=Asset.AssetType.TRACK
+        )
+        now = timezone.now()
+        self.pending = Event.objects.create(
+            title='Pending to Approve',
+            description='',
+            start_time=now + timedelta(hours=2),
+            end_time=now + timedelta(hours=4),
+            is_approved=False,
+            created_by=self.regular,
+        )
+        self.pending.assets.add(self.track)
+
+    def _url(self, event_id=None):
+        return reverse('cal:api_event_approve', args=[event_id or self.pending.pk])
+
+    def _post(self, event_id=None):
+        self.client.login(username='apv_staff', password='Testpass123!')
+        return self.client.post(self._url(event_id))
+
+    def test_approve_pending_event_returns_approved_true(self):
+        """Staff POST to approve a pending event returns {approved: True}."""
+        resp = self._post()
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertTrue(data.get('approved'))
+
+    def test_approve_pending_event_sets_is_approved(self):
+        """After approval, event.is_approved is True in the database."""
+        self._post()
+        self.pending.refresh_from_db()
+        self.assertTrue(self.pending.is_approved)
+
+    def test_approve_response_includes_event_id(self):
+        """Successful approval response includes the event id."""
+        resp = self._post()
+        data = resp.json()
+        self.assertEqual(data.get('id'), self.pending.pk)
+
+    def test_approve_with_conflict_returns_409(self):
+        """Approving when an approved event conflicts returns 409 with error and conflicts list."""
+        # Create a conflicting approved event on the same track and time
+        conflicting = Event.objects.create(
+            title='Conflicting Approved',
+            description='',
+            start_time=self.pending.start_time,
+            end_time=self.pending.end_time,
+            is_approved=True,
+            created_by=self.staff,
+        )
+        conflicting.assets.add(self.track)
+
+        resp = self._post()
+        self.assertEqual(resp.status_code, 409)
+        data = resp.json()
+        self.assertIn('error', data)
+        self.assertIn('conflicts', data)
+        self.assertGreater(len(data['conflicts']), 0)
+
+    def test_approve_with_conflict_does_not_approve(self):
+        """When conflict is found, the event remains unapproved."""
+        conflicting = Event.objects.create(
+            title='Blocker',
+            description='',
+            start_time=self.pending.start_time,
+            end_time=self.pending.end_time,
+            is_approved=True,
+            created_by=self.staff,
+        )
+        conflicting.assets.add(self.track)
+        self._post()
+        self.pending.refresh_from_db()
+        self.assertFalse(self.pending.is_approved)
+
+    def test_approve_conflict_response_names_conflicting_event(self):
+        """409 error message includes the title of the conflicting event."""
+        conflicting = Event.objects.create(
+            title='Named Blocker',
+            description='',
+            start_time=self.pending.start_time,
+            end_time=self.pending.end_time,
+            is_approved=True,
+            created_by=self.staff,
+        )
+        conflicting.assets.add(self.track)
+        resp = self._post()
+        data = resp.json()
+        self.assertIn('Named Blocker', data.get('error', ''))
+
+    def test_non_staff_returns_403(self):
+        """Non-staff POST to api_event_approve returns 403."""
+        self.client.login(username='apv_user', password='Testpass123!')
+        resp = self.client.post(self._url())
+        self.assertEqual(resp.status_code, 403)
+        self.pending.refresh_from_db()
+        self.assertFalse(self.pending.is_approved)
+
+    def test_nonexistent_event_returns_404(self):
+        """POST for a non-existent event ID returns 404."""
+        resp = self._post(event_id=99999)
+        self.assertEqual(resp.status_code, 404)
+
+    def test_get_request_returns_405(self):
+        """GET to api_event_approve returns 405 (POST-only endpoint)."""
+        self.client.login(username='apv_staff', password='Testpass123!')
+        resp = self.client.get(self._url())
+        self.assertEqual(resp.status_code, 405)
+
+    def test_unauthenticated_redirects(self):
+        """Unauthenticated request to api_event_approve redirects to login."""
+        resp = self.client.post(self._url())
+        self.assertEqual(resp.status_code, 302)
+        self.assertIn('/users/login/', resp['Location'])
+
+    def test_no_conflict_non_overlapping_times_approves(self):
+        """Approving an event with a non-overlapping approved event on the same track succeeds."""
+        # Approved event at a completely different time
+        other = Event.objects.create(
+            title='Different Time',
+            description='',
+            start_time=self.pending.start_time + timedelta(hours=8),
+            end_time=self.pending.end_time + timedelta(hours=8),
+            is_approved=True,
+            created_by=self.staff,
+        )
+        other.assets.add(self.track)
+        resp = self._post()
+        self.assertEqual(resp.status_code, 200)
+        self.pending.refresh_from_db()
+        self.assertTrue(self.pending.is_approved)
+
+
+# ── RadioChannelChoicesTest ───────────────────────────────────────────────────
+
+class RadioChannelChoicesTest(TestCase):
+    """Tests for the module-level RADIO_CHANNEL_CHOICES constant in cal.models."""
+
+    def test_radio_channel_choices_exists_at_module_level(self):
+        """RADIO_CHANNEL_CHOICES is importable directly from cal.models."""
+        from cal.models import RADIO_CHANNEL_CHOICES
+        self.assertIsNotNone(RADIO_CHANNEL_CHOICES)
+
+    def test_radio_channel_choices_covers_11_to_16(self):
+        """RADIO_CHANNEL_CHOICES contains exactly channels 11 through 16."""
+        from cal.models import RADIO_CHANNEL_CHOICES
+        values = [ch for ch, _ in RADIO_CHANNEL_CHOICES]
+        self.assertEqual(values, list(range(11, 17)))
+
+    def test_radio_channel_choices_has_six_entries(self):
+        """RADIO_CHANNEL_CHOICES has exactly 6 entries (channels 11-16)."""
+        from cal.models import RADIO_CHANNEL_CHOICES
+        self.assertEqual(len(RADIO_CHANNEL_CHOICES), 6)
+
+    def test_asset_uses_radio_channel_choices(self):
+        """Asset.radio_channel field uses the module-level RADIO_CHANNEL_CHOICES."""
+        from cal.models import RADIO_CHANNEL_CHOICES
+        field = Asset._meta.get_field('radio_channel')
+        self.assertEqual(list(field.choices), list(RADIO_CHANNEL_CHOICES))
+
+    def test_event_uses_radio_channel_choices(self):
+        """Event.radio_channel field uses the module-level RADIO_CHANNEL_CHOICES."""
+        from cal.models import RADIO_CHANNEL_CHOICES
+        field = Event._meta.get_field('radio_channel')
+        self.assertEqual(list(field.choices), list(RADIO_CHANNEL_CHOICES))

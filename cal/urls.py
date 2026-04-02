@@ -40,6 +40,7 @@ urlpatterns = [
     path('api/track/<int:asset_id>/active/',        views.track_active_toggle,    name='track_active_toggle'),
     path('api/track/<int:asset_id>/channel/',      views.set_radio_channel,      name='set_radio_channel'),
     path('api/event/<int:event_id>/channel/',     views.set_event_radio_channel, name='set_event_radio_channel'),
+    path('api/event/<int:event_id>/approve/',     views.api_event_approve,       name='api_event_approve'),
     path('analytics/',                              views.analytics,              name='analytics'),
     path('api/analytics/',                          views.analytics_api,          name='analytics_api'),
     path('api/event/impromptu/',                     views.event_impromptu,        name='event_impromptu'),

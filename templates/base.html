@@ -310,6 +310,8 @@
   </script>
   {% endif %}
 
+  {{ app_timezone|json_script:"app-timezone" }}
+
   {% block extra_js %}{% endblock %}
 
   {% block script %}

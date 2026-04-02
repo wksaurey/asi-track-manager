@@ -16,26 +16,29 @@ from django.utils.timezone import localtime
 # color; all 16 are available for manual override via the asset edit form.
 TRACK_COLOR_PALETTE = [
     # Reds / oranges / yellows  (~0° → 60° hue)
-    '#dc2626',  # red-600
-    '#ea580c',  # orange-600
-    '#d97706',  # amber-600
-    '#ca8a04',  # yellow-600
+    '#dc2626',  # red-600      — 4.69:1
+    '#c2410c',  # orange-700   — 5.17:1
+    '#b45309',  # amber-700    — 5.05:1
+    '#a16207',  # yellow-700   — 4.93:1
     # Greens  (~80° → 175° hue)
-    '#65a30d',  # lime-600
-    '#16a34a',  # green-600
-    '#059669',  # emerald-600
-    '#0d9488',  # teal-600
+    '#4d7c0f',  # lime-700     — 5.00:1
+    '#15803d',  # green-700    — 5.07:1
+    '#047857',  # emerald-700  — 5.53:1
+    '#0f766e',  # teal-700     — 5.50:1
     # Blues  (~185° → 240° hue)
-    '#0891b2',  # cyan-600
-    '#0284c7',  # sky-600
-    '#2563eb',  # blue-600
-    '#4f46e5',  # indigo-600
+    '#0e7490',  # cyan-700     — 5.38:1
+    '#0369a1',  # sky-700      — 5.97:1
+    '#2563eb',  # blue-600     — 5.20:1
+    '#4f46e5',  # indigo-600   — 6.29:1
     # Purples / pinks  (~260° → 340° hue)
-    '#7c3aed',  # violet-600
-    '#9333ea',  # purple-600
-    '#c026d3',  # fuchsia-600
-    '#db2777',  # pink-600
+    '#7c3aed',  # violet-600   — 5.71:1
+    '#9333ea',  # purple-600   — 5.38:1
+    '#c026d3',  # fuchsia-600  — 4.71:1
+    '#db2777',  # pink-600     — 4.61:1
 ]
+
+# Radio channel choices shared by Asset and Event models.
+RADIO_CHANNEL_CHOICES = [(ch, f'Ch {ch}') for ch in range(11, 17)]
 
 
 class Asset(models.Model):
@@ -73,11 +76,10 @@ class Asset(models.Model):
         related_name='subtracks',
         help_text='Parent track (only for subtracks)',
     )
-    RADIO_CHANNEL_CHOICES = [(None, '—')] + [(ch, f'Ch {ch}') for ch in range(11, 17)]
     radio_channel = models.IntegerField(
         null=True,
         blank=True,
-        choices=[(ch, f'Ch {ch}') for ch in range(11, 17)],
+        choices=RADIO_CHANNEL_CHOICES,
         help_text='Radio channel assigned to this track (11–16).',
     )
     is_active = models.BooleanField(
@@ -182,7 +184,6 @@ class Event(models.Model):
         related_name='events',
     )
     # Per-event radio channel override (None = inherit from track)
-    RADIO_CHANNEL_CHOICES = [(ch, f'Ch {ch}') for ch in range(11, 17)]
     radio_channel = models.IntegerField(
         null=True,
         blank=True,

@@ -2,7 +2,7 @@
   "use strict";
 
   const API_URL = "/cal/api/analytics/";
-  const APP_TZ = "America/Denver";
+  const APP_TZ = window.APP_TZ || "America/Denver";
 
   // Chart instances (for destruction on re-render)
   let charts = {};

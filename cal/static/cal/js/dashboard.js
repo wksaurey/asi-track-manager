@@ -50,7 +50,7 @@
 
 const CURRENT_USER_NAME = (document.getElementById("currentUserName") || {}).value || "";
 const API_URL = "/cal/api/dashboard-events/";
-const APP_TZ = "America/Denver";
+const APP_TZ = window.APP_TZ || "America/Denver";
 
 
 // ============================================================
@@ -407,14 +407,13 @@ async function saveSegmentTime(segmentId, field, timeStr) {
     });
     if (!resp.ok) {
       const data = await resp.json().catch(() => ({}));
-      showStampToast(data.error || `Failed to update segment (${resp.status})`);
-      return null;
+      const msg = data.error || `Failed to update segment (${resp.status})`;
+      return { _error: msg };
     }
     return await resp.json();
   } catch (err) {
     console.error("Segment edit error:", err);
-    showStampToast("Network error — could not reach server.");
-    return null;
+    return { _error: "Network error — could not reach server." };
   }
 }
 
@@ -442,6 +441,21 @@ function openSegmentEditPopup(segmentId, field, currentValue, eventId, anchorEl)
   input.className = "seg-edit-fp-input";
   box.appendChild(input);
 
+  // Error display
+  const errorEl = document.createElement("div");
+  errorEl.className = "seg-edit-error";
+  box.appendChild(errorEl);
+
+  function showInlineError(msg) {
+    errorEl.textContent = msg;
+    errorEl.style.display = "block";
+    setTimeout(() => { errorEl.style.display = "none"; }, 4000);
+  }
+
+  // Button row
+  const btnRow = document.createElement("div");
+  btnRow.className = "seg-edit-btn-row";
+
   // "Now" button
   const nowBtn = document.createElement("button");
   nowBtn.className = "seg-pick-pill seg-pick-now";
@@ -450,7 +464,10 @@ function openSegmentEditPopup(segmentId, field, currentValue, eventId, anchorEl)
     e.stopPropagation();
     box.classList.add("saving");
     const result = await saveSegmentTime(segmentId, field, nowHHMM());
-    if (result) {
+    if (result && result._error) {
+      showInlineError(result._error);
+      box.classList.remove("saving");
+    } else if (result) {
       cleanup();
       await fetchAndLoadData();
       render();
@@ -458,7 +475,37 @@ function openSegmentEditPopup(segmentId, field, currentValue, eventId, anchorEl)
       box.classList.remove("saving");
     }
   });
-  box.appendChild(nowBtn);
+  btnRow.appendChild(nowBtn);
+
+  // "Done" button
+  const doneBtn = document.createElement("button");
+  doneBtn.className = "seg-pick-pill seg-pick-done";
+  doneBtn.textContent = "Done";
+  doneBtn.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    if (input.value && input.value !== currentValue) {
+      if (saveTimer) clearTimeout(saveTimer);
+      box.classList.add("saving");
+      const result = await saveSegmentTime(segmentId, field, input.value);
+      if (result && result._error) {
+        showInlineError(result._error);
+        box.classList.remove("saving");
+        return;
+      }
+      if (result) {
+        cleanup();
+        await fetchAndLoadData();
+        render();
+        return;
+      }
+      box.classList.remove("saving");
+    } else {
+      cleanup();
+    }
+  });
+  btnRow.appendChild(doneBtn);
+
+  box.appendChild(btnRow);
 
   document.body.appendChild(box);
 
@@ -501,7 +548,11 @@ function openSegmentEditPopup(segmentId, field, currentValue, eventId, anchorEl)
     saving = true;
     box.classList.add("saving");
     const result = await saveSegmentTime(segmentId, field, val);
-    if (result) {
+    if (result && result._error) {
+      showInlineError(result._error);
+      saving = false;
+      box.classList.remove("saving");
+    } else if (result) {
       currentValue = val; // update so repeated saves don't re-save same value
       saving = false;
       box.classList.remove("saving");
@@ -548,6 +599,11 @@ function openSegmentEditPopup(segmentId, field, currentValue, eventId, anchorEl)
   setTimeout(() => document.addEventListener("mousedown", onClickOutside), 0);
   function onKey(e) {
     if (e.key === "Escape") cleanup();
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (saveTimer) clearTimeout(saveTimer);
+      doSave();
+    }
   }
   document.addEventListener("keydown", onKey);
 }
@@ -988,29 +1044,17 @@ function renderEventItem(ev, trackLabel, dataSource, listEl, normalizedFilter) {
 async function approveEvent(eventId) {
   const csrf = document.querySelector('meta[name="csrf-token"]')?.content || "";
   try {
-    const resp = await fetch(`/cal/event/approve/${eventId}/`, {
+    const resp = await fetch(`/cal/api/event/${eventId}/approve/`, {
       method: "POST",
       headers: { "X-CSRFToken": csrf },
-      redirect: "manual",
     });
-    // Refresh data to check if the event was actually approved
-    await fetchAndLoadData();
-    // Find the event in the refreshed data to check if it's now approved
-    let wasApproved = false;
-    for (const entries of Object.values(data)) {
-      const ev = entries.find(e => e.eventId === eventId);
-      if (ev && ev.isApproved) { wasApproved = true; break; }
+    const result = await resp.json();
+    if (result.approved) {
+      await fetchAndLoadData();
+      render();
+    } else if (result.error) {
+      showStampToast(result.error);
     }
-    for (const subs of Object.values(trackSubtracks)) {
-      for (const sub of Object.values(subs)) {
-        const ev = (sub.events || []).find(e => e.eventId === eventId);
-        if (ev && ev.isApproved) { wasApproved = true; break; }
-      }
-    }
-    if (!wasApproved) {
-      showStampToast("Cannot approve — conflicts with another approved event.");
-    }
-    render();
   } catch (err) {
     console.error("Approve error:", err);
     showStampToast("Network error — could not approve event.");

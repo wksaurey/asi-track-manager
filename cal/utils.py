@@ -6,6 +6,7 @@ views populated with Event data.  Each view supports optional asset filtering
 and highlights today's date and weekends with CSS classes.
 """
 
+import json
 from datetime import datetime, timedelta, date as date_type
 from calendar import HTMLCalendar
 
@@ -85,25 +86,119 @@ class Calendar(HTMLCalendar):
         return localtime(dt).strftime('%I:%M %p').lstrip('0') or '12:00 AM'
 
     @staticmethod
-    def _assign_rows(events):
+    def _fmt_duration(seconds):
+        """Format seconds as a human-readable duration like '1h 30m' or '45m'."""
+        if seconds < 60:
+            return '<1m'
+        m = int(seconds) // 60
+        h, m = divmod(m, 60)
+        if h and m:
+            return f'{h}h {m}m'
+        return f'{h}h' if h else f'{m}m'
+
+    def _gantt_tooltip_data(self, ev, segs):
+        """Build JSON-safe dict for Gantt block hover tooltip."""
+        now = timezone.now()
+        fmt = self._fmt_time
+        dur = self._fmt_duration
+
+        # Determine event state
+        is_past = ev.end_time <= now
+        has_segs = len(segs) > 0
+        if not ev.is_approved:
+            status = 'Pending'
+        elif has_segs and ev.is_currently_active:
+            status = 'Active'
+        elif has_segs and not ev.is_stopped and all(s.end for s in segs):
+            status = 'Paused'
+        elif has_segs and (ev.is_stopped or is_past):
+            status = 'Completed'
+        elif is_past and not has_segs:
+            status = 'No-show'
+        else:
+            status = 'Scheduled'
+
+        sched_secs = (ev.end_time - ev.start_time).total_seconds()
+        info = {
+            'title': ev.title,
+            'creator': ev.created_by.username if ev.created_by else None,
+            'status': status,
+            'scheduled': f'{fmt(ev.start_time)} – {fmt(ev.end_time)} ({dur(sched_secs)})',
+            'description': ev.description or None,
+        }
+
+        if has_segs:
+            seg_list = []
+            for i, s in enumerate(segs):
+                if s.end:
+                    seg_secs = (s.end - s.start).total_seconds()
+                    seg_list.append(f'{fmt(s.start)} – {fmt(s.end)} ({dur(seg_secs)})')
+                else:
+                    elapsed = (now - s.start).total_seconds()
+                    seg_list.append(f'{fmt(s.start)} – now ({dur(elapsed)})')
+            info['segments'] = seg_list
+            info['totalActual'] = dur(ev.total_actual_seconds)
+
+            # Pause time = gaps between consecutive segments
+            pause_secs = 0
+            for i in range(len(segs) - 1):
+                if segs[i].end and segs[i + 1].start:
+                    pause_secs += (segs[i + 1].start - segs[i].end).total_seconds()
+            # Trailing pause (paused now)
+            if status == 'Paused':
+                pause_secs += (now - segs[-1].end).total_seconds()
+            if pause_secs > 0:
+                info['pauseTime'] = dur(pause_secs)
+
+        # Assets
+        assets = list(ev.assets.all())
+        tracks = [a.name for a in assets if a.asset_type == 'track']
+        vehicles = [a.name for a in assets if a.asset_type == 'vehicle']
+        if tracks:
+            info['tracks'] = ', '.join(tracks)
+        if vehicles:
+            info['vehicles'] = ', '.join(vehicles)
+
+        return info
+
+    @staticmethod
+    def _visual_extent(ev):
+        """Return (visual_start, visual_end) covering both scheduled and actual time."""
+        now = timezone.now()
+        v_start = ev.start_time
+        v_end = ev.end_time
+        for seg in ev.segments.all():  # prefetched
+            if seg.start < v_start:
+                v_start = seg.start
+            seg_end = seg.end or now
+            if seg_end > v_end:
+                v_end = seg_end
+        return v_start, v_end
+
+    @classmethod
+    def _assign_rows(cls, events):
         """
         Assign each event to a sub-row index (0-based) such that no two events
-        in the same sub-row overlap. O(N²), acceptable at this scale.
+        in the same sub-row overlap. Uses visual extent (scheduled + actual).
+        O(N²), acceptable at this scale.
         Returns (assignments, n_rows) where assignments is a list of (event, row_idx).
         """
+        # Precompute visual extents
+        extents = {ev.pk: cls._visual_extent(ev) for ev in events}
         assignments = []
         row_end_times = []
-        for ev in sorted(events, key=lambda e: e.start_time):
+        for ev in sorted(events, key=lambda e: extents[e.pk][0]):
+            v_start, v_end = extents[ev.pk]
             placed = False
             for i, row_end in enumerate(row_end_times):
-                if ev.start_time >= row_end:
+                if v_start >= row_end:
                     assignments.append((ev, i))
-                    row_end_times[i] = ev.end_time
+                    row_end_times[i] = v_end
                     placed = True
                     break
             if not placed:
                 assignments.append((ev, len(row_end_times)))
-                row_end_times.append(ev.end_time)
+                row_end_times.append(v_end)
         return assignments, len(row_end_times)
 
     # ── Month view ─────────────────────────────────────────────────────────
@@ -210,6 +305,173 @@ class Calendar(HTMLCalendar):
         cal += '</table>'
         return cal
 
+    # ── Gantt block rendering helpers ─────────────────────────────────────
+
+    def _render_scheduled_bar(self, ev, segs, edit_url, base_css, color_style,
+                               bg_style, tooltip_json, left_pct, width_pct,
+                               t_start, t_end, width_m):
+        """Render the scheduled-time background bar for a Gantt event."""
+        if width_m <= 0:
+            return []
+        has_segments = len(segs) > 0
+        end_iso = ev.end_time.isoformat()
+        creator_name = escape(ev.created_by.username) if ev.created_by else ''
+        creator_attr = f' data-creator="{creator_name}"' if creator_name else ''
+        sched_cls = ' gantt-block--scheduled' if has_segments else ''
+        text_html = (
+            f'<span class="gantt-block-title">{escape(ev.title)}</span>'
+            f'<span class="gantt-block-time">{t_start}&ndash;{t_end}</span>'
+        ) if not has_segments else ''
+        return [
+            f'<a class="gantt-block {base_css}{sched_cls}" href="{edit_url}"'
+            f' style="left:{left_pct}%;width:{width_pct}%;{color_style}{bg_style}"'
+            f' data-gantt-info="{tooltip_json}"'
+            f' data-event-id="{ev.pk}"'
+            f' data-is-approved="{str(ev.is_approved).lower()}"'
+            f' data-end="{end_iso}"{creator_attr}>'
+            f'{text_html}'
+            f'</a>'
+        ]
+
+    def _render_segments(self, ev, segs, origin, gantt_mins, local_start,
+                          local_end, tooltip_json, color_style):
+        """Render actual segment bars and inter-segment pause gaps."""
+        parts = []
+        for i, seg in enumerate(segs):
+            seg_start = localtime(seg.start)
+            is_open = seg.end is None
+            seg_end = localtime(seg.end) if seg.end else localtime(timezone.now())
+
+            seg_start_off = max(0, int((seg_start - origin).total_seconds()) // 60)
+            seg_end_off   = min(gantt_mins, int((seg_end - origin).total_seconds()) // 60)
+            seg_width     = max(0, seg_end_off - seg_start_off)
+
+            if seg_width > 0:
+                seg_left      = round(seg_start_off / gantt_mins * 100, 4)
+                seg_width_pct = round(seg_width / gantt_mins * 100, 4)
+
+                overflow_start = seg_start < local_start
+                overflow_end = (seg.end and localtime(seg.end) > local_end) or (is_open and localtime(timezone.now()) > local_end)
+                overflow_cls = ''
+                if overflow_start:
+                    overflow_cls += ' gantt-block--overflow-start'
+                if overflow_end:
+                    overflow_cls += ' gantt-block--overflow-end'
+
+                active_cls = ' gantt-block--active-segment' if is_open else ' gantt-block--actual-segment'
+                data_attrs = f' data-segment-start="{seg.start.isoformat()}"' if is_open else ''
+
+                parts.append(
+                    f'<div class="gantt-block-segment{active_cls}{overflow_cls}"'
+                    f' data-gantt-info="{tooltip_json}" data-event-id="{ev.pk}"'
+                    f' style="left:{seg_left}%;width:{seg_width_pct}%;{color_style}"'
+                    f'{data_attrs}>'
+                    f'</div>'
+                )
+
+            # Pause gap between this segment and the next
+            if i + 1 < len(segs) and seg.end:
+                next_seg = segs[i + 1]
+                gap_start = localtime(seg.end)
+                gap_end   = localtime(next_seg.start)
+                gap_start_off = max(0, int((gap_start - origin).total_seconds()) // 60)
+                gap_end_off   = min(gantt_mins, int((gap_end - origin).total_seconds()) // 60)
+                gap_width     = max(0, gap_end_off - gap_start_off)
+                if gap_width > 0:
+                    gap_left      = round(gap_start_off / gantt_mins * 100, 4)
+                    gap_width_pct = round(gap_width / gantt_mins * 100, 4)
+                    parts.append(
+                        f'<div class="gantt-block-segment gantt-block--pause-gap"'
+                        f' data-gantt-info="{tooltip_json}" data-event-id="{ev.pk}"'
+                        f' style="left:{gap_left}%;width:{gap_width_pct}%;{color_style}">'
+                        f'</div>'
+                    )
+        return parts
+
+    def _render_trailing_pause(self, ev, segs, origin, gantt_mins, tooltip_json,
+                                color_style):
+        """Render the trailing pause gap from last segment end to now."""
+        if not segs or not all(s.end is not None for s in segs) or ev.is_stopped:
+            return []
+        now = timezone.now()
+        pause_start = localtime(segs[-1].end)
+        pause_end = localtime(now)
+        is_today = localtime(now).date() == origin.date()
+        ps_off = max(0, int((pause_start - origin).total_seconds()) // 60)
+        pe_off = min(gantt_mins, int((pause_end - origin).total_seconds()) // 60)
+        pw = max(0, pe_off - ps_off)
+        if pw <= 0:
+            return []
+        pl = round(ps_off / gantt_mins * 100, 4)
+        pw_pct = round(pw / gantt_mins * 100, 4)
+        live_cls = ' gantt-block--active-pause' if is_today else ''
+        live_attr = f' data-pause-start="{segs[-1].end.isoformat()}"' if is_today else ''
+        return [
+            f'<div class="gantt-block-segment gantt-block--pause-gap{live_cls}"'
+            f' data-gantt-info="{tooltip_json}" data-event-id="{ev.pk}"'
+            f'{live_attr}'
+            f' style="left:{pl}%;width:{pw_pct}%;{color_style}">'
+            f'</div>'
+        ]
+
+    def _render_connectors(self, ev, segs, origin, gantt_mins, start_off, end_off,
+                            left_pct, width_pct, tooltip_json, color_style, width_m):
+        """Render connector lines and edge markers between scheduled bar and segments."""
+        if not segs or width_m <= 0:
+            return []
+        parts = []
+        now_ts = timezone.now()
+        actual_min = min(
+            max(0, int((localtime(s.start) - origin).total_seconds()) // 60)
+            for s in segs
+        )
+        actual_max = max(
+            min(gantt_mins, int(((localtime(s.end) if s.end else localtime(now_ts)) - origin).total_seconds()) // 60)
+            for s in segs
+        )
+        if actual_min > end_off:
+            conn_left = round(end_off / gantt_mins * 100, 4)
+            conn_width = round((actual_min - end_off) / gantt_mins * 100, 4)
+            parts.append(
+                f'<div class="gantt-connector gantt-connector--late"'
+                f' data-gantt-info="{tooltip_json}" data-event-id="{ev.pk}"'
+                f' style="left:{conn_left}%;width:{conn_width}%;{color_style}"></div>'
+            )
+        elif actual_max < start_off:
+            conn_left = round(actual_max / gantt_mins * 100, 4)
+            conn_width = round((start_off - actual_max) / gantt_mins * 100, 4)
+            parts.append(
+                f'<div class="gantt-connector gantt-connector--early"'
+                f' data-gantt-info="{tooltip_json}" data-event-id="{ev.pk}"'
+                f' style="left:{conn_left}%;width:{conn_width}%;{color_style}"></div>'
+            )
+        # Edge markers where segments straddle scheduled bar boundaries
+        if actual_min < start_off and actual_max > start_off:
+            parts.append(
+                f'<div class="gantt-sched-edge"'
+                f' style="left:{left_pct}%;{color_style}"></div>'
+            )
+        if actual_min < end_off and actual_max > end_off:
+            right_pct = round((left_pct + width_pct), 4)
+            parts.append(
+                f'<div class="gantt-sched-edge"'
+                f' style="left:{right_pct}%;{color_style}"></div>'
+            )
+        return parts
+
+    @staticmethod
+    def _render_text_overlay(ev, edit_url, left_pct, width_pct, tooltip_json,
+                              t_start, t_end):
+        """Render the text overlay that floats above segments (avoids opacity stacking)."""
+        return [
+            f'<a class="gantt-block-text" href="{edit_url}"'
+            f' style="left:{left_pct}%;width:{width_pct}%;"'
+            f' data-gantt-info="{tooltip_json}">'
+            f'<span class="gantt-block-title">{escape(ev.title)}</span>'
+            f'<span class="gantt-block-time">{t_start}&ndash;{t_end}</span>'
+            f'</a>'
+        ]
+
     # ── Day view ───────────────────────────────────────────────────────────
 
     def formatdayview(self, day_date):
@@ -303,129 +565,60 @@ class Calendar(HTMLCalendar):
         def _make_block(ev, extra_css='', track_color=None):
             """Build the HTML for a single Gantt event block.
 
-            Renders a single visual line per event with layered elements:
-            - Scheduled bar (semi-transparent background, always visible)
-            - Actual segment bars (solid, one per closed segment)
-            - Active segment bar (solid + pulse animation, grows live)
-            - Pause gaps (dotted outline between segments)
-            - Overflow indicators (dotted borders when actuals exceed scheduled)
+            Delegates to _render_* methods on Calendar for each rendering concern:
+            scheduled bar, segment bars, pause gaps, trailing pause,
+            connectors, edge markers, and text overlay.
             """
             local_start = localtime(ev.start_time)
             local_end   = localtime(ev.end_time)
             origin    = local_start.replace(hour=GANTT_START, minute=0, second=0, microsecond=0)
-            edit_url  = reverse('cal:event_edit', args=(ev.id,))
-            # Strip asset-type classes that are overridden by inline track_color in Gantt
-            base_css  = self._event_classes(ev)
-            for cls in ('event-track', 'event-vehicle', 'event-operator', 'event-multi'):
-                base_css = base_css.replace(cls, '')
-            base_css = ' '.join(base_css.split())  # clean up double spaces
-            if extra_css:
-                base_css += f' {extra_css}'
-            is_pending = not ev.is_approved
-            color_style = f'--track-color:{track_color};' if track_color else ''
-            bg_style    = f'background:{track_color};' if track_color and not is_pending else ''
-            end_iso   = ev.end_time.isoformat()
-            creator_name = escape(ev.created_by.username) if ev.created_by else ''
-            creator_attr = f' data-creator="{creator_name}"' if creator_name else ''
-            title_suffix = f' — {creator_name}' if creator_name else ''
 
             segs = list(ev.segments.all())  # prefetched
             has_segments = len(segs) > 0
 
-            # --- scheduled bar offset ---
             start_off = max(0, int((local_start - origin).total_seconds()) // 60)
             end_off   = min(GANTT_MINS, int((local_end - origin).total_seconds()) // 60)
             width_m   = max(0, end_off - start_off)
             if width_m == 0 and not has_segments:
                 return ''
 
+            # Shared computed values
+            edit_url  = reverse('cal:event_edit', args=(ev.id,))
+            base_css  = self._event_classes(ev)
+            for cls in ('event-track', 'event-vehicle', 'event-operator', 'event-multi'):
+                base_css = base_css.replace(cls, '')
+            base_css = ' '.join(base_css.split())
+            if extra_css:
+                base_css += f' {extra_css}'
+            is_pending   = not ev.is_approved
+            color_style  = f'--track-color:{track_color};' if track_color else ''
+            bg_style     = f'background:{track_color};' if track_color and not is_pending else ''
+            tooltip_json = escape(json.dumps(self._gantt_tooltip_data(ev, segs)))
+            left_pct     = round(start_off / GANTT_MINS * 100, 4) if width_m > 0 else 0
+            width_pct    = round(width_m   / GANTT_MINS * 100, 4) if width_m > 0 else 0
+            t_start      = self._fmt_time(ev.start_time)
+            t_end        = self._fmt_time(ev.end_time)
+
             parts = []
-
-            # --- Scheduled bar (always shown) ---
-            if width_m > 0:
-                left_pct  = round(start_off / GANTT_MINS * 100, 4)
-                width_pct = round(width_m   / GANTT_MINS * 100, 4)
-                t_start   = self._fmt_time(ev.start_time)
-                t_end     = self._fmt_time(ev.end_time)
-                sched_cls = ' gantt-block--scheduled' if has_segments else ''
-                # When segments exist, text goes in a separate overlay
-                # so it isn't trapped by opacity stacking contexts
-                text_html = (
-                    f'<span class="gantt-block-title">{escape(ev.title)}</span>'
-                    f'<span class="gantt-block-time">{t_start}&ndash;{t_end}</span>'
-                ) if not has_segments else ''
-                parts.append(
-                    f'<a class="gantt-block {base_css}{sched_cls}" href="{edit_url}"'
-                    f' style="left:{left_pct}%;width:{width_pct}%;{color_style}{bg_style}"'
-                    f' title="{escape(ev.title)}{title_suffix}"'
-                    f' data-event-id="{ev.pk}"'
-                    f' data-is-approved="{str(ev.is_approved).lower()}"'
-                    f' data-end="{end_iso}"{creator_attr}>'
-                    f'{text_html}'
-                    f'</a>'
-                )
-
-            # --- Actual segment bars ---
-            for i, seg in enumerate(segs):
-                seg_start = localtime(seg.start)
-                is_open = seg.end is None
-                seg_end = localtime(seg.end) if seg.end else localtime(timezone.now())
-
-                seg_start_off = max(0, int((seg_start - origin).total_seconds()) // 60)
-                seg_end_off   = min(GANTT_MINS, int((seg_end - origin).total_seconds()) // 60)
-                seg_width     = max(0, seg_end_off - seg_start_off)
-
-                if seg_width > 0:
-                    seg_left     = round(seg_start_off / GANTT_MINS * 100, 4)
-                    seg_width_pct = round(seg_width / GANTT_MINS * 100, 4)
-
-                    # Overflow detection
-                    overflow_start = seg_start < local_start
-                    overflow_end = (seg.end and localtime(seg.end) > local_end) or (is_open and localtime(timezone.now()) > local_end)
-                    overflow_cls = ''
-                    if overflow_start:
-                        overflow_cls += ' gantt-block--overflow-start'
-                    if overflow_end:
-                        overflow_cls += ' gantt-block--overflow-end'
-
-                    active_cls = ' gantt-block--active-segment' if is_open else ' gantt-block--actual-segment'
-                    data_attrs = f' data-segment-start="{seg.start.isoformat()}"' if is_open else ''
-
-                    parts.append(
-                        f'<div class="gantt-block-segment{active_cls}{overflow_cls}"'
-                        f' style="left:{seg_left}%;width:{seg_width_pct}%;{color_style}"'
-                        f'{data_attrs}>'
-                        f'</div>'
-                    )
-
-                # Pause gap between this segment and the next
-                if i + 1 < len(segs) and seg.end:
-                    next_seg = segs[i + 1]
-                    gap_start = localtime(seg.end)
-                    gap_end   = localtime(next_seg.start)
-                    gap_start_off = max(0, int((gap_start - origin).total_seconds()) // 60)
-                    gap_end_off   = min(GANTT_MINS, int((gap_end - origin).total_seconds()) // 60)
-                    gap_width     = max(0, gap_end_off - gap_start_off)
-                    if gap_width > 0:
-                        gap_left     = round(gap_start_off / GANTT_MINS * 100, 4)
-                        gap_width_pct = round(gap_width / GANTT_MINS * 100, 4)
-                        parts.append(
-                            f'<div class="gantt-block-segment gantt-block--pause-gap"'
-                            f' style="left:{gap_left}%;width:{gap_width_pct}%;{color_style}">'
-                            f'</div>'
-                        )
-
-            # --- Text overlay (above segments, avoids opacity stacking) ---
+            parts += self._render_scheduled_bar(
+                ev, segs, edit_url, base_css, color_style, bg_style,
+                tooltip_json, left_pct, width_pct, t_start, t_end, width_m,
+            )
+            parts += self._render_segments(
+                ev, segs, origin, GANTT_MINS, local_start, local_end,
+                tooltip_json, color_style,
+            )
+            parts += self._render_trailing_pause(
+                ev, segs, origin, GANTT_MINS, tooltip_json, color_style,
+            )
+            parts += self._render_connectors(
+                ev, segs, origin, GANTT_MINS, start_off, end_off,
+                left_pct, width_pct, tooltip_json, color_style, width_m,
+            )
             if has_segments and width_m > 0:
-                parts.append(
-                    f'<a class="gantt-block-text" href="{edit_url}"'
-                    f' style="left:{left_pct}%;width:{width_pct}%;"'
-                    f' title="{escape(ev.title)}{title_suffix}">'
-                    f'<span class="gantt-block-title">{escape(ev.title)}</span>'
-                    f'<span class="gantt-block-time">{t_start}&ndash;{t_end}</span>'
-                    f'</a>'
+                parts += self._render_text_overlay(
+                    ev, edit_url, left_pct, width_pct, tooltip_json, t_start, t_end,
                 )
-
             return ''.join(parts)
 
         # ── Track rows ───────────────────────────────────────────────
@@ -443,6 +636,20 @@ class Calendar(HTMLCalendar):
                     [ev for ev in all_events if track.pk in event_asset_ids[ev.pk]],
                     key=lambda ev: ev.start_time,
                 )
+
+                # Events booked on ≥2 subtracks of this parent → promote to full-track
+                subtrack_pks = {sub.pk for sub in subtracks}
+                multi_sub_pks = {
+                    ev.pk for ev in all_events
+                    if len(event_asset_ids[ev.pk] & subtrack_pks) >= 2
+                    and ev.pk not in {e.pk for e in parent_events}
+                }
+                if multi_sub_pks:
+                    parent_events = sorted(
+                        parent_events + [ev for ev in all_events if ev.pk in multi_sub_pks],
+                        key=lambda ev: ev.start_time,
+                    )
+
                 n_sub = len(subtracks)
 
                 # Build one sub-row per subtrack (label lives in the track-label column)
@@ -450,7 +657,9 @@ class Calendar(HTMLCalendar):
                 subtrack_names_html = ''
                 for sub in subtracks:
                     sub_events = sorted(
-                        [ev for ev in all_events if sub.pk in event_asset_ids[ev.pk]],
+                        [ev for ev in all_events
+                         if sub.pk in event_asset_ids[ev.pk]
+                         and ev.pk not in multi_sub_pks],
                         key=lambda ev: ev.start_time,
                     )
                     assigned, n_rows = self._assign_rows(sub_events)
@@ -463,18 +672,34 @@ class Calendar(HTMLCalendar):
                         blocks = ''.join(_make_block(ev, track_color=track.color) for ev in bucket)
                         inner_rows += f'<div class="gantt-sub-row">{blocks}</div>'
 
-                    sub_rows_html += f'<div class="gantt-subtrack-row">{inner_rows}</div>'
+                    sub_style = f' style="--lane-rows:{n_rows}"' if n_rows > 1 else ''
+                    sub_rows_html += f'<div class="gantt-subtrack-row"{sub_style}>{inner_rows}</div>'
+                    name_style = f' style="height:calc(var(--lane-rows,1)*58px);--lane-rows:{n_rows}"' if n_rows > 1 else ''
                     subtrack_names_html += (
-                        f'<span class="gantt-subtrack-name">{escape(sub.name)}</span>'
+                        f'<span class="gantt-subtrack-name"{name_style}>{escape(sub.name)}</span>'
                     )
 
-                # Full-track (parent) events rendered as an overlay spanning all sub-rows.
-                parent_blocks = ''.join(_make_block(ev, 'gantt-fulltrack-block', track_color=track.color) for ev in parent_events)
-                parent_overlay = (
-                    f'<div class="gantt-fulltrack-overlay" style="--subtrack-count:{n_sub}">'
-                    f'{parent_blocks}'
-                    f'</div>'
-                ) if parent_blocks else ''
+                # Full-track (parent) events get their own lane above subtracks
+                parent_lane_html = ''
+                if parent_events:
+                    assigned, p_n_rows = self._assign_rows(parent_events)
+                    p_buckets = [[] for _ in range(max(p_n_rows, 1))]
+                    for ev, row_idx in assigned:
+                        p_buckets[row_idx].append(ev)
+                    parent_rows = ''
+                    for bucket in p_buckets:
+                        blocks = ''.join(_make_block(ev, track_color=track.color) for ev in bucket)
+                        parent_rows += f'<div class="gantt-sub-row">{blocks}</div>'
+                    parent_lane_html = (
+                        f'<div class="gantt-subtrack-row gantt-parent-lane"'
+                        f' style="--lane-rows:{p_n_rows}">'
+                        f'{parent_rows}'
+                        f'</div>'
+                    )
+                    subtrack_names_html = (
+                        f'<span class="gantt-subtrack-name gantt-parent-lane-label">All</span>'
+                        + subtrack_names_html
+                    )
 
                 label_style = f'border-left:3px solid {track.color};' if track.color else ''
                 rows_html += (
@@ -482,7 +707,7 @@ class Calendar(HTMLCalendar):
                     f'<div class="gantt-track-label" style="{label_style}">{escape(track.name)}</div>'
                     f'<div class="gantt-sublabel-col">{subtrack_names_html}</div>'
                     f'<div class="gantt-lane gantt-lane-subtracks">'
-                    f'{parent_overlay}'
+                    f'{parent_lane_html}'
                     f'{sub_rows_html}'
                     f'</div>'
                     f'</div>'

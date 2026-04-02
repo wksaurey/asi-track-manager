@@ -11,7 +11,7 @@ from datetime import timedelta
 from django import forms
 from django.forms import ModelForm, TextInput, CheckboxSelectMultiple, ValidationError
 from django.utils.timezone import localtime
-from cal.models import Event, Asset, Feedback
+from cal.models import Event, Asset, Feedback, RADIO_CHANNEL_CHOICES
 
 
 class AssetForm(ModelForm):
@@ -153,7 +153,7 @@ class EventForm(ModelForm):
         self.fields['assets'].queryset = Asset.objects.all()
         self.fields['assets'].choices = _build_grouped_asset_choices()
         # Configure radio_channel dropdown with a "Use track default" empty label
-        self.fields['radio_channel'].choices = [('', 'Use track default')] + Event.RADIO_CHANNEL_CHOICES
+        self.fields['radio_channel'].choices = [('', 'Use track default')] + RADIO_CHANNEL_CHOICES
         self.fields['radio_channel'].label = 'Radio Channel'
         self.fields['radio_channel'].required = False
         # Add Bootstrap form-control to all fields except the checkbox group

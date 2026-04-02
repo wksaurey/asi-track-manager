@@ -176,7 +176,8 @@ class Command(BaseCommand):
         # Stats
         approved = Event.objects.filter(is_approved=True).count()
         pending = Event.objects.filter(is_approved=False).count()
-        stamped = Event.objects.exclude(actual_start=None).count()
+        from cal.models import ActualTimeSegment
+        stamped = Event.objects.filter(segments__isnull=False).distinct().count()
 
         self.stdout.write(self.style.SUCCESS(
             f"\nCreated {total} events ({start_date} to {end_date})"
@@ -291,14 +292,16 @@ class Command(BaseCommand):
         return created
 
     def _stamp(self, event, sched_start, sched_end, partial=False):
-        """Add realistic actual start/end timestamps."""
+        """Add realistic actual start/end timestamps as segments."""
+        from cal.models import ActualTimeSegment
         offset = max(-15, min(15, random.gauss(0, 5)))
-        event.actual_start = sched_start + timedelta(minutes=offset)
+        actual_start = sched_start + timedelta(minutes=offset)
+        actual_end = None
 
         if not partial:
             end_offset = max(-20, min(30, random.gauss(0, 7)))
-            event.actual_end = sched_end + timedelta(minutes=end_offset)
-            if event.actual_end <= event.actual_start:
-                event.actual_end = event.actual_start + timedelta(minutes=30)
+            actual_end = sched_end + timedelta(minutes=end_offset)
+            if actual_end <= actual_start:
+                actual_end = actual_start + timedelta(minutes=30)
 
-        event.save()
+        ActualTimeSegment.objects.create(event=event, start=actual_start, end=actual_end)

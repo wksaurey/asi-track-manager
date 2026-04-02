@@ -204,23 +204,26 @@
           return;
         }
         if (!pendingForm) return;
-        var action = pendingForm.getAttribute('action');
-        var csrf   = pendingForm.querySelector('[name=csrfmiddlewaretoken]').value;
-        var card   = pendingForm.closest('.asset-card, .event-row, tr, .form-page');
+        var form   = pendingForm;
+        var action = form.getAttribute('action');
+        var csrf   = form.querySelector('[name=csrfmiddlewaretoken]').value;
+        var card   = form.closest('.asset-card, .event-row, tr, .form-page');
         close();
-        fetch(action, {
-          method: 'POST',
-          headers: { 'X-CSRFToken': csrf },
-          redirect: 'follow',
-        }).then(function() {
-          if (card && !card.classList.contains('form-page')) {
+        if (card && !card.classList.contains('form-page')) {
+          // Inline context (list/table row) — use fetch for fade-out animation
+          fetch(action, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrf },
+            redirect: 'follow',
+          }).then(function() {
             card.style.transition = 'opacity .25s';
             card.style.opacity = '0';
             setTimeout(function() { card.remove(); }, 250);
-          } else {
-            window.location.href = '{% url "cal:calendar" %}';
-          }
-        });
+          });
+        } else {
+          // Form page context — native submit to follow server redirects properly
+          form.submit();
+        }
       });
 
       // Form-based: used by onsubmit="return confirmDelete(this, msg, opts)"

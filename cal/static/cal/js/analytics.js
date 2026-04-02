@@ -2,6 +2,7 @@
   "use strict";
 
   const API_URL = "/cal/api/analytics/";
+  const APP_TZ = "America/Denver";
 
   // Chart instances (for destruction on re-render)
   let charts = {};
@@ -9,12 +10,13 @@
   // ── Date Range Helpers ──
 
   function toDateStr(d) {
-    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    return d.toLocaleDateString("en-CA", { timeZone: APP_TZ });
   }
 
   function getRange(preset) {
     const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const etNow = new Date(now.toLocaleString("en-US", { timeZone: APP_TZ }));
+    const today = new Date(etNow.getFullYear(), etNow.getMonth(), etNow.getDate());
     let start, end;
 
     switch (preset) {
@@ -110,6 +112,19 @@
       withActuals > 0 ? `${deltaSign}${avgDelta.toFixed(1)} min` : 'N/A';
 
     document.getElementById('trackedRate').textContent = `${rate}%`;
+
+    // Unapproved waste hours
+    const wasteEl = document.getElementById('unapprovedWaste');
+    if (wasteEl) {
+      const waste = data.unapproved_waste_hours || 0;
+      wasteEl.textContent = `${waste}h`;
+    }
+
+    // Impromptu count
+    const impromptuEl = document.getElementById('impromptuCount');
+    if (impromptuEl) {
+      impromptuEl.textContent = data.impromptu_count || 0;
+    }
   }
 
   function updateRangeDisplay(start, end) {

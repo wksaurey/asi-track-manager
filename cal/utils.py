@@ -10,10 +10,30 @@ from datetime import datetime, timedelta, date as date_type
 from calendar import HTMLCalendar
 
 from django.urls import reverse
+from django.utils import timezone
 from django.utils.html import escape
 from django.utils.timezone import localtime
 
 from cal.models import Asset, Event
+
+
+def get_asset_conflicts(asset, start_time, end_time, exclude_event_id=None, approved_only=False):
+    """
+    Return a QuerySet of Events that conflict with the given asset/time range.
+    Expands to parent/subtrack conflict IDs via Asset.conflicting_asset_ids().
+    If approved_only=True, only checks approved events.
+    """
+    qs = Event.objects.filter(
+        start_time__lt=end_time,
+        end_time__gt=start_time,
+    )
+    if approved_only:
+        qs = qs.filter(is_approved=True)
+    if exclude_event_id:
+        qs = qs.exclude(pk=exclude_event_id)
+
+    conflict_ids = asset.conflicting_asset_ids()
+    return qs.filter(assets__in=conflict_ids).distinct()
 
 
 class Calendar(HTMLCalendar):
@@ -38,16 +58,25 @@ class Calendar(HTMLCalendar):
 
     def _base_queryset(self):
         """Return the Event queryset, optionally filtered by asset_id."""
-        qs = Event.objects.select_related('created_by').prefetch_related('assets')
+        qs = Event.objects.select_related('created_by').prefetch_related('assets', 'segments')
         if self.asset_id:
             qs = qs.filter(assets__id=self.asset_id)
         return qs
 
     def _event_classes(self, event):
-        """Build a CSS class string for an event (type colour + pending state)."""
+        """Build a CSS class string for an event (type colour + pending/operational state)."""
         classes = f'event {event.asset_css_class}'
         if not event.is_approved:
             classes += ' event-pending'
+        else:
+            now = timezone.now()
+            is_past = event.end_time <= now
+            if is_past:
+                has_segments = len(event.segments.all()) > 0
+                if has_segments:
+                    classes += ' event-completed'
+                else:
+                    classes += ' event-noshow'
         return classes
 
     @staticmethod
@@ -235,7 +264,7 @@ class Calendar(HTMLCalendar):
                 start_time__year=day_date.year,
                 start_time__month=day_date.month,
                 start_time__day=day_date.day,
-            ).select_related('created_by').prefetch_related('assets').distinct()
+            ).select_related('created_by').prefetch_related('assets', 'segments').distinct()
         )
 
         # Build a helper: event_asset_ids[ev.pk] = set of asset PKs for fast lookup
@@ -274,69 +303,128 @@ class Calendar(HTMLCalendar):
         def _make_block(ev, extra_css='', track_color=None):
             """Build the HTML for a single Gantt event block.
 
-            When an event has actual_start/actual_end, two blocks are returned:
-            a ghost (scheduled) bar and a solid (actual) bar.  Otherwise a
-            single solid bar is returned for the scheduled time.
+            Renders a single visual line per event with layered elements:
+            - Scheduled bar (semi-transparent background, always visible)
+            - Actual segment bars (solid, one per closed segment)
+            - Active segment bar (solid + pulse animation, grows live)
+            - Pause gaps (dotted outline between segments)
+            - Overflow indicators (dotted borders when actuals exceed scheduled)
             """
             local_start = localtime(ev.start_time)
             local_end   = localtime(ev.end_time)
             origin    = local_start.replace(hour=GANTT_START, minute=0, second=0, microsecond=0)
             edit_url  = reverse('cal:event_edit', args=(ev.id,))
-            base_css  = self._event_classes(ev) + (f' {extra_css}' if extra_css else '')
-            color_style = f'background:{track_color};' if track_color else ''
+            # Strip asset-type classes that are overridden by inline track_color in Gantt
+            base_css  = self._event_classes(ev)
+            for cls in ('event-track', 'event-vehicle', 'event-operator', 'event-multi'):
+                base_css = base_css.replace(cls, '')
+            base_css = ' '.join(base_css.split())  # clean up double spaces
+            if extra_css:
+                base_css += f' {extra_css}'
+            is_pending = not ev.is_approved
+            color_style = f'--track-color:{track_color};' if track_color else ''
+            bg_style    = f'background:{track_color};' if track_color and not is_pending else ''
             end_iso   = ev.end_time.isoformat()
             creator_name = escape(ev.created_by.username) if ev.created_by else ''
             creator_attr = f' data-creator="{creator_name}"' if creator_name else ''
             title_suffix = f' — {creator_name}' if creator_name else ''
 
-            has_actual = ev.actual_start or ev.actual_end
+            segs = list(ev.segments.all())  # prefetched
+            has_segments = len(segs) > 0
 
-            # --- scheduled bar (ghost when actuals exist) ---
+            # --- scheduled bar offset ---
             start_off = max(0, int((local_start - origin).total_seconds()) // 60)
             end_off   = min(GANTT_MINS, int((local_end - origin).total_seconds()) // 60)
             width_m   = max(0, end_off - start_off)
-            if width_m == 0 and not has_actual:
+            if width_m == 0 and not has_segments:
                 return ''
 
             parts = []
 
+            # --- Scheduled bar (always shown) ---
             if width_m > 0:
                 left_pct  = round(start_off / GANTT_MINS * 100, 4)
                 width_pct = round(width_m   / GANTT_MINS * 100, 4)
                 t_start   = self._fmt_time(ev.start_time)
                 t_end     = self._fmt_time(ev.end_time)
-                ghost_cls = ' gantt-block--ghost' if has_actual else ''
+                sched_cls = ' gantt-block--scheduled' if has_segments else ''
+                # When segments exist, text goes in a separate overlay
+                # so it isn't trapped by opacity stacking contexts
+                text_html = (
+                    f'<span class="gantt-block-title">{escape(ev.title)}</span>'
+                    f'<span class="gantt-block-time">{t_start}&ndash;{t_end}</span>'
+                ) if not has_segments else ''
                 parts.append(
-                    f'<a class="gantt-block {base_css}{ghost_cls}" href="{edit_url}"'
-                    f' style="left:{left_pct}%;width:{width_pct}%;{color_style}"'
+                    f'<a class="gantt-block {base_css}{sched_cls}" href="{edit_url}"'
+                    f' style="left:{left_pct}%;width:{width_pct}%;{color_style}{bg_style}"'
                     f' title="{escape(ev.title)}{title_suffix}"'
+                    f' data-event-id="{ev.pk}"'
+                    f' data-is-approved="{str(ev.is_approved).lower()}"'
                     f' data-end="{end_iso}"{creator_attr}>'
+                    f'{text_html}'
+                    f'</a>'
+                )
+
+            # --- Actual segment bars ---
+            for i, seg in enumerate(segs):
+                seg_start = localtime(seg.start)
+                is_open = seg.end is None
+                seg_end = localtime(seg.end) if seg.end else localtime(timezone.now())
+
+                seg_start_off = max(0, int((seg_start - origin).total_seconds()) // 60)
+                seg_end_off   = min(GANTT_MINS, int((seg_end - origin).total_seconds()) // 60)
+                seg_width     = max(0, seg_end_off - seg_start_off)
+
+                if seg_width > 0:
+                    seg_left     = round(seg_start_off / GANTT_MINS * 100, 4)
+                    seg_width_pct = round(seg_width / GANTT_MINS * 100, 4)
+
+                    # Overflow detection
+                    overflow_start = seg_start < local_start
+                    overflow_end = (seg.end and localtime(seg.end) > local_end) or (is_open and localtime(timezone.now()) > local_end)
+                    overflow_cls = ''
+                    if overflow_start:
+                        overflow_cls += ' gantt-block--overflow-start'
+                    if overflow_end:
+                        overflow_cls += ' gantt-block--overflow-end'
+
+                    active_cls = ' gantt-block--active-segment' if is_open else ' gantt-block--actual-segment'
+                    data_attrs = f' data-segment-start="{seg.start.isoformat()}"' if is_open else ''
+
+                    parts.append(
+                        f'<div class="gantt-block-segment{active_cls}{overflow_cls}"'
+                        f' style="left:{seg_left}%;width:{seg_width_pct}%;{color_style}"'
+                        f'{data_attrs}>'
+                        f'</div>'
+                    )
+
+                # Pause gap between this segment and the next
+                if i + 1 < len(segs) and seg.end:
+                    next_seg = segs[i + 1]
+                    gap_start = localtime(seg.end)
+                    gap_end   = localtime(next_seg.start)
+                    gap_start_off = max(0, int((gap_start - origin).total_seconds()) // 60)
+                    gap_end_off   = min(GANTT_MINS, int((gap_end - origin).total_seconds()) // 60)
+                    gap_width     = max(0, gap_end_off - gap_start_off)
+                    if gap_width > 0:
+                        gap_left     = round(gap_start_off / GANTT_MINS * 100, 4)
+                        gap_width_pct = round(gap_width / GANTT_MINS * 100, 4)
+                        parts.append(
+                            f'<div class="gantt-block-segment gantt-block--pause-gap"'
+                            f' style="left:{gap_left}%;width:{gap_width_pct}%;{color_style}">'
+                            f'</div>'
+                        )
+
+            # --- Text overlay (above segments, avoids opacity stacking) ---
+            if has_segments and width_m > 0:
+                parts.append(
+                    f'<a class="gantt-block-text" href="{edit_url}"'
+                    f' style="left:{left_pct}%;width:{width_pct}%;"'
+                    f' title="{escape(ev.title)}{title_suffix}">'
                     f'<span class="gantt-block-title">{escape(ev.title)}</span>'
                     f'<span class="gantt-block-time">{t_start}&ndash;{t_end}</span>'
                     f'</a>'
                 )
-
-            # --- actual bar (solid) ---
-            if has_actual:
-                act_start = localtime(ev.actual_start or ev.start_time)
-                act_end   = localtime(ev.actual_end or ev.end_time)
-                a_start_off = max(0, int((act_start - origin).total_seconds()) // 60)
-                a_end_off   = min(GANTT_MINS, int((act_end - origin).total_seconds()) // 60)
-                a_width_m   = max(0, a_end_off - a_start_off)
-                if a_width_m > 0:
-                    a_left_pct  = round(a_start_off / GANTT_MINS * 100, 4)
-                    a_width_pct = round(a_width_m   / GANTT_MINS * 100, 4)
-                    a_t_start   = self._fmt_time(act_start)
-                    a_t_end     = self._fmt_time(act_end)
-                    parts.append(
-                        f'<a class="gantt-block gantt-block--actual {base_css}" href="{edit_url}"'
-                        f' style="left:{a_left_pct}%;width:{a_width_pct}%;{color_style}"'
-                        f' title="{escape(ev.title)} (actual){title_suffix}"'
-                        f' data-end="{end_iso}"{creator_attr}>'
-                        f'<span class="gantt-block-title">{escape(ev.title)}</span>'
-                        f'<span class="gantt-block-time">{a_t_start}&ndash;{a_t_end}</span>'
-                        f'</a>'
-                    )
 
             return ''.join(parts)
 
@@ -425,6 +513,22 @@ class Calendar(HTMLCalendar):
                     f'</div>'
                 )
 
+        # Set legend context flags on the Calendar instance for the view to read.
+        # Use current time-of-day projected onto the viewed date so that past
+        # events on any viewed day are classified correctly.
+        now_local = localtime(timezone.now())
+        cutoff = now_local.replace(
+            year=day_date.year, month=day_date.month, day=day_date.day,
+        )
+        self.gantt_has_pending = any(not ev.is_approved for ev in all_events)
+        self.gantt_has_active = any(
+            any(seg.end is None for seg in ev.segments.all())
+            for ev in all_events
+        )
+        past_approved = [ev for ev in all_events if ev.end_time <= cutoff and ev.is_approved]
+        self.gantt_has_completed = any(len(ev.segments.all()) > 0 for ev in past_approved)
+        self.gantt_has_noshow = any(len(ev.segments.all()) == 0 for ev in past_approved)
+
         data_attrs = f' data-gantt-start="{GANTT_START}" data-gantt-mins="{GANTT_MINS}"'
         if data_earliest is not None:
             data_attrs += f' data-event-earliest="{data_earliest}" data-event-latest="{data_latest}"'
@@ -477,7 +581,7 @@ class Calendar(HTMLCalendar):
                 assets__asset_type=Asset.AssetType.TRACK,
                 start_time__date__gte=start,
                 start_time__date__lte=end,
-            ).select_related('created_by').prefetch_related('assets').distinct()
+            ).select_related('created_by').prefetch_related('assets', 'segments').distinct()
         )
 
         # Build a lookup: event_asset_ids[ev.pk] = set of asset PKs

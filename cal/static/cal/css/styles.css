@@ -594,7 +594,7 @@ html.dark-theme table.calendar td:hover {
 
 /* Hide pending events when filter is active */
 .cal-hide-pending .event-pending { display: none !important; }
-.cal-hide-pending .gantt-block.event-pending { display: none !important; }
+.cal-hide-pending .event-pending.gantt-block { display: none !important; }
 .cal-hide-pending .gantt-fulltrack-overlay.event-pending { display: none !important; }
 
 .pending-badge {
@@ -771,13 +771,67 @@ html.dark-theme table.calendar td:hover {
 }
 
 
-/* ── Legend ─────────────────────────────────────────────────── */
+/* ── Legend (sticky, collapsible) ──────────────────────────── */
+.cal-legend-wrapper {
+  position: fixed;
+  bottom: 12px;
+  left: 0;
+  z-index: 100;
+}
 .cal-legend {
   display: flex;
-  gap: 20px;
   align-items: center;
-  padding: 10px 18px 16px;
-  flex-wrap: wrap;
+  padding: 6px 14px 6px 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-left: none;
+  border-radius: 0 8px 8px 0;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  white-space: nowrap;
+}
+.cal-legend-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px 2px 6px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--muted);
+  flex-shrink: 0;
+  border-radius: 4px;
+}
+.cal-legend-toggle:hover { color: var(--text); background: rgba(0,0,0,0.04); }
+.cal-legend-arrow {
+  display: inline-block;
+  font-size: 18px;
+  transform: rotate(180deg);
+  transition: transform 200ms ease;
+}
+.cal-legend-collapsed .cal-legend-arrow {
+  transform: rotate(0deg);
+}
+.cal-legend-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+.cal-legend-divider {
+  width: 1px;
+  height: 16px;
+  background: var(--border);
+  flex-shrink: 0;
+  margin-right: 14px;
+}
+/* Collapsed: hide items + divider */
+.cal-legend-collapsed .legend-item,
+.cal-legend-collapsed .cal-legend-divider {
+  display: none;
+}
+/* Expanded: gap between legend items */
+.cal-legend .legend-item {
+  margin-left: 14px;
 }
 .legend-item  { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
 .legend-dot   { display: inline-block; width: 12px; height: 12px; border-radius: 3px; }
@@ -788,6 +842,12 @@ html.dark-theme table.calendar td:hover {
 
 /* Day-view legend extras */
 .legend-separator  { width: 1px; height: 14px; background: var(--border); margin: 0 2px; }
+.legend-swatch-pending {
+  display: inline-block; width: 14px; height: 10px; border-radius: 3px;
+  background: transparent;
+  border: 2px solid var(--primary);
+  opacity: 0.85;
+}
 .legend-dot-pending {
   display: inline-block; width: 12px; height: 12px; border-radius: 3px;
   background: var(--primary); opacity: 0.7;
@@ -1454,7 +1514,10 @@ html.dark-theme .card a            { color: var(--primary); }
 
 /* Cal-body dark bg fill */
 html.dark-theme .cal-body { background: var(--bg); }
-html.dark-theme .cal-legend { background: var(--bg); }
+html.dark-theme .cal-legend { background: var(--bg); border-color: rgba(46,168,229,0.18); box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
+html.dark-theme .cal-legend-toggle { color: #7090a0; }
+html.dark-theme .cal-legend-toggle:hover { color: #c0d8e4; background: rgba(255,255,255,0.05); }
+html.dark-theme .cal-legend-divider { background: rgba(46,168,229,0.18); }
 html.dark-theme .legend-item { color: #7090a0; }
 html.dark-theme .legend-separator { background: rgba(46,168,229,0.18); }
 
@@ -1825,6 +1888,18 @@ html.dark-theme .wk-today-num    { background: var(--primary); color: #fff; }
   pointer-events: auto;
 }
 
+/* Subtrack blocks fill their row height consistently */
+.gantt-subtrack-row .gantt-block,
+.gantt-sub-row .gantt-block {
+  top: 6px;
+  height: calc(100% - 12px);
+}
+.gantt-subtrack-row .gantt-block-segment,
+.gantt-sub-row .gantt-block-segment {
+  top: 6px;
+  height: calc(100% - 12px);
+}
+
 /* Full-track blocks span the full height of the overlay (both subtrack rows) */
 .gantt-block.gantt-fulltrack-block {
   top: 6px;
@@ -1858,55 +1933,166 @@ html.dark-theme .gantt-subtrack-row  { border-color: rgba(46,168,229,0.08); }
 .gantt-block:hover {
   filter: brightness(1.12);
   text-decoration: none;
+  color: #fff;
 }
 .gantt-block.event-track    { background: #10b981; }
 .gantt-block.event-vehicle  { background: #f59e0b; }
 .gantt-block.event-operator { background: #6366f1; }
 .gantt-block.event-multi    { background: var(--primary); }
 .gantt-block.event-pending  {
-  opacity: 0.7;
-  border: 2px dashed rgba(255,255,255,0.85);
+  background: transparent !important;
+  border: 2px solid var(--track-color, var(--primary));
+  color: var(--track-color, var(--primary));
+  opacity: 0.85;
 }
 .gantt-block.event-past     { opacity: 0.45; filter: saturate(0.5); }
+.gantt-block.event-completed { opacity: 0.55; filter: saturate(0.65); }
+.gantt-block.event-noshow   { opacity: 0.55; border-left: 3px solid #f59e0b; }
 
-/* Ghost bar (scheduled time when actuals exist) — offset below actual */
-.gantt-block.gantt-block--ghost {
-  top: 32px;
-  height: 22px;
-  opacity: 0.7;
-  border: 2px dashed rgba(108,117,125,0.6);
-  background: rgba(108,117,125,0.12) !important;
-  font-size: 10px;
-  padding: 0 5px;
-}
-.gantt-block.gantt-block--ghost .gantt-block-title { display: none; }
-.gantt-block.gantt-block--ghost .gantt-block-time {
-  color: var(--muted); font-size: 10px; opacity: 0.85;
+/* Scheduled bar — semi-transparent when segments exist.
+   Text is rendered in a separate .gantt-block-text overlay (z-index: 5)
+   so it isn't trapped by opacity stacking contexts on the bar. */
+.gantt-block.gantt-block--scheduled {
+  opacity: 0.4;
 }
 
-/* Actual bar (solid, occupies top portion of lane) */
-.gantt-block.gantt-block--actual {
+/* Text overlay — sits above segments, unaffected by bar opacity */
+.gantt-block-text {
+  position: absolute;
   top: 4px;
-  height: 26px;
-  border: 1.5px solid rgba(255,255,255,0.35);
+  height: 40px;
+  border-radius: 4px;
+  padding: 0 6px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
+  text-decoration: none;
+  font-size: 12px;
+  color: #fff;
+  z-index: 5;
+  pointer-events: auto;
+  box-sizing: border-box;
+}
+a.gantt-block-text,
+a.gantt-block-text:link,
+a.gantt-block-text:visited,
+a.gantt-block-text:hover,
+a.gantt-block-text:active { text-decoration: none; color: #fff; }
+/* Match subtrack row sizing */
+.gantt-subtrack-row .gantt-block-text,
+.gantt-sub-row .gantt-block-text {
+  top: 6px;
+  height: calc(100% - 12px);
+}
+/* Match fulltrack overlay sizing */
+.gantt-fulltrack-overlay .gantt-block-text {
+  top: 6px;
+  height: calc(100% - 12px);
+}
+
+/* Actual segment bars — solid, overlaid on scheduled bar */
+.gantt-block-segment {
+  position: absolute;
+  top: 4px;
+  height: 40px;
+  border-radius: 4px;
+  z-index: 2;
+  pointer-events: none;
+  box-sizing: border-box;
+}
+/* Match fulltrack-block sizing when inside an overlay */
+.gantt-fulltrack-overlay .gantt-block-segment {
+  top: 6px;
+  height: calc(100% - 12px);
+}
+.gantt-block--actual-segment {
+  background: var(--track-color, var(--primary));
+}
+.gantt-block--active-segment {
+  background: var(--track-color, var(--primary));
+  position: relative;
+}
+.gantt-block--active-segment::after {
+  content: '';
+  position: absolute;
+  right: -1px;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  border-radius: 0 3px 3px 0;
+  background: var(--track-color, var(--primary));
+  filter: brightness(1.4);
+  animation: gantt-edge-pulse 1.5s ease-in-out infinite;
+}
+@keyframes gantt-edge-pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 6px var(--track-color, var(--primary)); }
+  50% { opacity: 0.6; box-shadow: 0 0 2px var(--track-color, var(--primary)); }
+}
+@keyframes gantt-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+/* Pause gap — diagonal stripe between segments */
+.gantt-block--pause-gap {
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--track-color, var(--primary)),
+    var(--track-color, var(--primary)) 2px,
+    transparent 2px,
+    transparent 6px
+  );
+  opacity: 0.25;
+  border: none;
+}
+
+/* Overflow indicators — dotted borders when actual exceeds scheduled */
+.gantt-block--overflow-start {
+  border-left: 2px dashed var(--track-color, var(--primary));
+}
+.gantt-block--overflow-end {
+  border-right: 2px dashed var(--track-color, var(--primary));
 }
 
 /* Legend swatches for the day view */
-.legend-swatch-actual {
+.legend-swatch-scheduled {
   display: inline-block; width: 14px; height: 10px; border-radius: 3px;
-  background: var(--primary); border: 1.5px solid rgba(255,255,255,0.35);
+  background: var(--primary); opacity: 0.4;
 }
-.legend-swatch-dual {
-  display: inline-flex; flex-direction: column; gap: 1px; vertical-align: middle;
+.legend-swatch-active {
+  display: inline-block; width: 14px; height: 10px; border-radius: 3px;
+  background: var(--primary);
+  position: relative;
 }
-.legend-swatch-dual__actual {
-  width: 14px; height: 7px; border-radius: 2px;
-  background: var(--primary); border: 1px solid rgba(255,255,255,0.3);
+.legend-swatch-active::after {
+  content: '';
+  position: absolute;
+  right: -1px; top: 0; bottom: 0; width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--primary);
+  filter: brightness(1.4);
+  animation: gantt-edge-pulse 1.5s ease-in-out infinite;
 }
-.legend-swatch-dual__ghost {
-  width: 14px; height: 5px; border-radius: 2px;
-  border: 1.5px dashed rgba(108,117,125,0.6);
-  background: rgba(108,117,125,0.12); opacity: 0.7;
+.legend-swatch-paused {
+  display: inline-block; width: 14px; height: 10px; border-radius: 3px;
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--primary),
+    var(--primary) 2px,
+    transparent 2px,
+    transparent 6px
+  );
+  opacity: 0.25;
+}
+.legend-swatch-completed {
+  display: inline-block; width: 14px; height: 10px; border-radius: 3px;
+  background: var(--primary); opacity: 0.55; filter: saturate(0.65);
+}
+.legend-swatch-noshow {
+  display: inline-block; width: 14px; height: 10px; border-radius: 3px;
+  background: var(--primary); opacity: 0.55;
+  border-left: 3px solid #f59e0b;
 }
 
 .gantt-block-title {
@@ -1952,6 +2138,16 @@ html.dark-theme .gantt-lane   {
   );
 }
 html.dark-theme .gantt-axis-row { border-color: rgba(46,168,229,0.15); }
+html.dark-theme .gantt-block.event-pending {
+  border-color: var(--track-color, var(--primary));
+  color: var(--track-color, var(--primary));
+}
+html.dark-theme .gantt-block.event-completed {
+  opacity: 0.5;
+}
+html.dark-theme .gantt-block.event-noshow {
+  border-left-color: #f59e0b;
+}
 
 /* ── Gantt now-line ────────────────────────────────────────── */
 .gantt-now-line {

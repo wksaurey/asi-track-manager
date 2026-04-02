@@ -80,6 +80,10 @@ class Asset(models.Model):
         choices=[(ch, f'Ch {ch}') for ch in range(11, 17)],
         help_text='Radio channel assigned to this track (11–16).',
     )
+    is_active = models.BooleanField(
+        default=False,
+        help_text='Whether this track is currently active/unsafe to approach.',
+    )
 
     class Meta:
         ordering = ['asset_type', 'name']
@@ -171,8 +175,7 @@ class Event(models.Model):
     description = models.TextField(blank=True)
     start_time   = models.DateTimeField()
     end_time     = models.DateTimeField()
-    actual_start = models.DateTimeField(null=True, blank=True)
-    actual_end   = models.DateTimeField(null=True, blank=True)
+    is_stopped  = models.BooleanField(default=False)
     assets      = models.ManyToManyField(
         Asset,
         blank=True,
@@ -196,10 +199,45 @@ class Event(models.Model):
         related_name='events',
     )
     is_approved = models.BooleanField(default=False)
+    is_impromptu = models.BooleanField(
+        default=False,
+        help_text='Set automatically for unplanned events created from the dashboard.',
+    )
     created_at  = models.DateTimeField(auto_now_add=True, null=True)
 
     def __str__(self):
         return self.title
+
+    # ── Segment-based computed properties ─────────────────────────────────
+
+    @property
+    def current_segment(self):
+        """Return the open (end=None) segment, or None."""
+        return self.segments.filter(end__isnull=True).first()
+
+    @property
+    def is_currently_active(self):
+        return self.current_segment is not None
+
+    @property
+    def total_actual_seconds(self):
+        total = 0
+        for seg in self.segments.all():
+            if seg.end:
+                total += (seg.end - seg.start).total_seconds()
+        return total
+
+    @property
+    def actual_start(self):
+        """First segment start (backward compat)."""
+        first = self.segments.order_by('start').first()
+        return first.start if first else None
+
+    @property
+    def actual_end(self):
+        """Last closed segment end, or None."""
+        last = self.segments.filter(end__isnull=False).order_by('-end').first()
+        return last.end if last else None
 
     @property
     def effective_radio_channel(self):
@@ -291,6 +329,19 @@ class Event(models.Model):
             f'{self.asset_badge_html}'
             f'</a>'
         )
+
+
+class ActualTimeSegment(models.Model):
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='segments')
+    start = models.DateTimeField()
+    end = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['start']
+
+    def __str__(self):
+        end_str = localtime(self.end).isoformat() if self.end else 'open'
+        return f'Segment {self.pk}: {localtime(self.start).isoformat()} — {end_str}'
 
 
 class Feedback(models.Model):

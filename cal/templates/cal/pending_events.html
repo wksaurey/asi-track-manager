@@ -15,6 +15,12 @@
     </a>
   </div>
 
+  {% if messages %}
+  {% for message in messages %}
+  <div class="alert alert-{{ message.tags }}" style="margin-bottom:16px;">{{ message }}</div>
+  {% endfor %}
+  {% endif %}
+
   {% if events %}
   <div class="schedule-list">
     {% for ev in events %}

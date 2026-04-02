@@ -41,6 +41,12 @@
   </p>
   {% endif %}
 
+  {% if messages %}
+  {% for message in messages %}
+  <div class="alert alert-{{ message.tags }}" style="margin-bottom:16px;">{{ message }}</div>
+  {% endfor %}
+  {% endif %}
+
   <!-- Form errors -->
   {% if form.errors %}
   <div class="form-errors">
@@ -114,6 +120,19 @@
     <button type="submit" id="event-save-hidden" hidden></button>
   </form>
 
+  {% if segments %}
+  <div class="actual-segments-section">
+    <h4>Actual Time Segments</h4>
+    {% for seg in segments %}
+    <div class="actual-segment">
+      <span class="segment-start">{{ seg.start }}</span>
+      &mdash;
+      <span class="segment-end">{% if seg.end %}{{ seg.end }}{% else %}In progress{% endif %}</span>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
   {% if can_edit %}
   <div class="event-action-bar">
     <button type="button" class="btn" onclick="document.getElementById('event-save-hidden').click()">
@@ -133,7 +152,7 @@
       <form method="post" action="{% url 'cal:event_unapprove' event.id %}"
             onsubmit="return confirmDelete(this, 'Revoke approval for &quot;{{ event.title|escapejs }}&quot;? It will return to pending status.', {confirmLabel:'Revoke', confirmClass:'btn-warning'})">
         {% csrf_token %}
-        <input type="hidden" name="next" value="{% url 'cal:event_edit' event.id %}{% if next_url %}?next={{ next_url|urlencode }}{% endif %}">
+        {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
         <button type="submit" class="btn btn-warning">
           <i class="fas fa-undo"></i> Revoke Approval
         </button>
@@ -373,14 +392,22 @@ document.addEventListener('DOMContentLoaded', function () {
     time_24hr:     false,
   };
 
+  // Helper: get current time in Eastern Time as a Date usable by Flatpickr.
+  // Returns a Date whose local-time components represent Eastern Time,
+  // so Flatpickr displays and submits the correct Eastern values.
+  const APP_TZ = 'America/Denver';
+  function easternNow() {
+    return new Date(new Date().toLocaleString('en-US', { timeZone: APP_TZ }));
+  }
+
   // Compute default start/end times for new events only
   const startInput = document.getElementById('id_start_time');
   const endInput   = document.getElementById('id_end_time');
 
   let endOpts;
   if (!startInput.value) {
-    const now  = new Date();
-    const mins = now.getMinutes();
+    const etNow = easternNow();
+    const mins  = etNow.getMinutes();
     // Round UP strictly to next half-hour boundary
     let nextMin;
     if (mins < 30) {
@@ -398,12 +425,12 @@ document.addEventListener('DOMContentLoaded', function () {
       baseMonth = parseInt(parts[1], 10) - 1;  // 0-indexed
       baseDay   = parseInt(parts[2], 10);
     } else {
-      baseYear  = now.getFullYear();
-      baseMonth = now.getMonth();
-      baseDay   = now.getDate();
+      baseYear  = etNow.getFullYear();
+      baseMonth = etNow.getMonth();
+      baseDay   = etNow.getDate();
     }
 
-    const defStart = new Date(baseYear, baseMonth, baseDay, now.getHours(), nextMin, 0, 0);
+    const defStart = new Date(baseYear, baseMonth, baseDay, etNow.getHours(), nextMin, 0, 0);
     const defEnd = new Date(defStart.getTime() + 60 * 60 * 1000);
     fpOpts.defaultDate = defStart;
     endOpts = Object.assign({}, fpOpts, { defaultDate: defEnd });
@@ -418,13 +445,13 @@ document.addEventListener('DOMContentLoaded', function () {
   if (fpOpts.defaultDate) fpStart.setDate(fpOpts.defaultDate, true);
   if (endOpts.defaultDate) fpEnd.setDate(endOpts.defaultDate, true);
 
-  // "Now" button — sets start time to current time (rounded to nearest minute)
+  // "Now" button — sets start time to current Eastern Time (rounded to nearest minute)
   const btnNow = document.getElementById('btn-now');
   if (btnNow) {
     btnNow.addEventListener('click', function() {
-      const now = new Date();
-      now.setSeconds(0, 0);
-      fpStart.setDate(now, true);
+      const etNow = easternNow();
+      etNow.setSeconds(0, 0);
+      fpStart.setDate(etNow, true);
     });
   }
 

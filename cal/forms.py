@@ -190,27 +190,25 @@ class EventForm(ModelForm):
             raise ValidationError('End time must be after start time.')
 
 
-        # Conflict check — delegates to Asset.conflicting_asset_ids() for
-        # parent/subtrack rules.
+        # Conflict check — warn only, don't block saves.
+        # Hard-blocking moved to the approval step (event_approve view).
         if assets and start_time and end_time:
+            from cal.utils import get_asset_conflicts
+            exclude_id = self.instance.pk if self.instance and self.instance.pk else None
             for asset in assets:
-                conflict_ids = asset.conflicting_asset_ids()
-                conflicts = Event.objects.filter(
-                    assets__in=conflict_ids,
-                    start_time__lt=end_time,
-                    end_time__gt=start_time,
-                ).distinct()
-                if self.instance and self.instance.pk:
-                    conflicts = conflicts.exclude(pk=self.instance.pk)
-                if conflicts.exists():
-                    conflict = conflicts.first()
-                    conflict_asset = conflict.assets.filter(pk__in=conflict_ids).first()
-                    raise ValidationError(
-                        f'Scheduling conflict: "{conflict.title}" already has '
-                        f'{conflict_asset or asset} booked from '
-                        f'{localtime(conflict.start_time).strftime("%b %d %I:%M %p")} to '
-                        f'{localtime(conflict.end_time).strftime("%I:%M %p")}.'
+                all_conflicts = get_asset_conflicts(
+                    asset, start_time, end_time,
+                    exclude_event_id=exclude_id,
+                    approved_only=False,
+                )
+                if all_conflicts.exists():
+                    conflict = all_conflicts.first()
+                    self._conflict_warnings = getattr(self, '_conflict_warnings', [])
+                    self._conflict_warnings.append(
+                        f'Warning: "{conflict.title}" is already booked in this time slot. '
+                        f'This event will be created as pending and require admin approval.'
                     )
+                    break
 
         return cleaned
 

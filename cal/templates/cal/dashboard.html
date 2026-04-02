@@ -5,6 +5,7 @@
 
 {% block extra_css %}
   <link rel="stylesheet" href="{% static 'cal/css/dashboard.css' %}" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
 {% endblock %}
 
 {% block extra_head %}
@@ -29,6 +30,10 @@
       </div>
       <button id="dateNextBtn" class="date-nav-arrow" aria-label="Next day">&#9654;</button>
       <button id="dateTodayBtn" class="date-today-btn">Today</button>
+      <label class="pending-filter" title="Show or hide unapproved events">
+        <input type="checkbox" id="show-unapproved-toggle" checked />
+        <span>Show unapproved</span>
+      </label>
     </div>
 
     <main>
@@ -61,14 +66,8 @@
             </select>
             <h2 class="track-name"></h2>
             <div class="track-actions">
+              <button class="btn btn-xxs active-toggle-btn" title="Toggle track active state">Inactive</button>
               <button class="icon-btn add-event-btn" title="Add event">&#xff0b;</button>
-              <div class="menu-wrap">
-                <button class="menu-btn">&#8942;</button>
-                <div class="menu">
-                  <button class="menu-item add-note-toggle">Add Note</button>
-                  <button class="menu-item delete-track">Delete Track</button>
-                </div>
-              </div>
             </div>
           </header>
 
@@ -170,6 +169,10 @@
       </div>
     </div>
 
+{% endblock %}
+
+{% block extra_js %}
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 {% endblock %}
 
 {% block script %}

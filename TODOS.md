@@ -9,6 +9,11 @@
 
 ## V2 Priorities
 
+- [ ] Admin setting: block impromptu event creation when an active/approved event exists on the same track
+  - **Why:** Safety procedure — prevents accidental overlap on active tracks. Currently uses a confirmation popup instead of a hard block
+  - **Context:** Add a site-wide or per-track admin toggle. When enabled, the dashboard "mark active" flow should refuse to create an impromptu event if a conflicting active/approved event exists, instead of just warning
+  - **Depends on:** v1.1 impromptu event + active track features
+
 - [ ] PostgreSQL migration
   - **Why:** SQLite doesn't support concurrent writes from multiple processes. Currently pinned to 1 Gunicorn worker as a workaround. Also enables proper ORM aggregation for analytics
   - **Trigger:** If >1 Gunicorn worker needed, or "database is locked" errors appear, or when adding dashboard auto-refresh polling

@@ -12,6 +12,7 @@ import json
 from collections import defaultdict
 from datetime import datetime, timedelta, date
 
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Count, Prefetch, Q
@@ -21,12 +22,13 @@ from django.shortcuts import render, get_object_or_404, redirect
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
+from django.utils.timezone import localtime
 from django.utils.safestring import mark_safe
 from django.views import generic
 from django.views.decorators.http import require_POST
 
-from .models import Asset, Event, Feedback
-from .utils import Calendar
+from .models import ActualTimeSegment, Asset, Event, Feedback
+from .utils import Calendar, get_asset_conflicts
 from .forms import EventForm, AssetForm, FeedbackForm, get_asset_tree
 
 
@@ -81,6 +83,10 @@ class CalendarView(LoginRequiredMixin, generic.ListView):
             html_cal = cal.formatweekview(d)
         elif view == 'day':
             html_cal = cal.formatdayview(d)
+            context['has_pending'] = getattr(cal, 'gantt_has_pending', False)
+            context['has_active'] = getattr(cal, 'gantt_has_active', False)
+            context['has_completed'] = getattr(cal, 'gantt_has_completed', False)
+            context['has_noshow'] = getattr(cal, 'gantt_has_noshow', False)
         else:
             html_cal = cal.formatmonth(withyear=True)
 
@@ -108,7 +114,7 @@ class CalendarView(LoginRequiredMixin, generic.ListView):
                 asset_type=Asset.AssetType.TRACK,
                 parent__isnull=True,
             ).order_by('name')
-            context['is_today'] = (d == timezone.now().date())
+            context['is_today'] = (d == localtime(timezone.now()).date())
 
         return context
 
@@ -132,7 +138,7 @@ def get_date(req_str, view='month'):
                 return date(year, month, day)
         except Exception:
             pass
-    return timezone.now().date()
+    return localtime(timezone.now()).date()
 
 
 def prev_for(d, view):
@@ -207,8 +213,8 @@ def event(request, event_id=None):
         if form.is_valid():
             ev = form.save(commit=False)
             if not event_id:
-                ev.created_by  = request.user
-                ev.is_approved = request.user.is_staff  # admin = auto-approve; user = pending
+                ev.created_by = request.user
+                # All events default to unapproved — must go through approval workflow
             ev.save()
             form.save_m2m()   # persist ManyToMany (assets) after the instance is saved
             default = reverse('cal:calendar')
@@ -216,6 +222,7 @@ def event(request, event_id=None):
 
     # Carry ?next= through to the template so the hidden field can persist it
     next_url = request.GET.get('next', '')
+    segments = list(instance.segments.all()) if event_id else []
     return render(request, 'cal/event.html', {
         'form':            form,
         'event':           instance if event_id else None,
@@ -223,6 +230,7 @@ def event(request, event_id=None):
         'can_edit':        can_edit,
         'asset_data_json': get_asset_tree(),
         'next_url':        next_url,
+        'segments':        segments,
     })
 
 
@@ -245,6 +253,29 @@ def event_approve(request, event_id):
     if not request.user.is_staff:
         return HttpResponseRedirect(reverse('cal:calendar'))
     event_obj = get_object_or_404(Event, pk=event_id)
+
+    # Check for conflicts with other approved events before approving
+    for asset in event_obj.assets.all():
+        conflicts = get_asset_conflicts(
+            asset,
+            event_obj.start_time,
+            event_obj.end_time,
+            exclude_event_id=event_obj.pk,
+            approved_only=True,
+        )
+        if conflicts.exists():
+            conflict = conflicts.first()
+            messages.error(
+                request,
+                f'Cannot approve: conflicts with approved event "{conflict.title}".',
+            )
+            # Redirect back to the event edit page so user sees the error
+            next_url = request.POST.get('next') or ''
+            event_url = reverse('cal:event_edit', args=[event_id])
+            if next_url:
+                event_url += f'?next={next_url}'
+            return HttpResponseRedirect(event_url)
+
     event_obj.is_approved = True
     event_obj.save(update_fields=['is_approved'])
     default = reverse('cal:pending_events')
@@ -355,7 +386,7 @@ def asset_detail(request, asset_id):
     - The 10 most recent past events for historical reference.
     """
     asset   = get_object_or_404(Asset, pk=asset_id)
-    today   = timezone.now().date()
+    today   = localtime(timezone.now()).date()
     horizon = today + timedelta(days=30)
 
     upcoming = asset.events.prefetch_related('assets').filter(
@@ -425,7 +456,7 @@ def dashboard_events_api(request):
     if not request.user.is_staff:
         return JsonResponse({'error': 'Forbidden'}, status=403)
 
-    today = timezone.now().date()
+    today = localtime(timezone.now()).date()
     date_param = request.GET.get('date')
     if date_param:
         try:
@@ -436,8 +467,8 @@ def dashboard_events_api(request):
         target_date = today
 
     track_events_qs = Event.objects.filter(
-        is_approved=True, start_time__date=target_date
-    ).order_by('start_time')
+        start_time__date=target_date
+    ).prefetch_related('segments').order_by('start_time')
 
     all_tracks = Asset.objects.filter(
         asset_type=Asset.AssetType.TRACK
@@ -452,13 +483,25 @@ def dashboard_events_api(request):
                 'id': ev.pk,
                 'title': ev.title,
                 'description': ev.description,
-                'start_time': ev.start_time.isoformat(),
-                'end_time': ev.end_time.isoformat(),
+                'start_time': localtime(ev.start_time).isoformat(),
+                'end_time': localtime(ev.end_time).isoformat(),
                 'is_approved': ev.is_approved,
-                'actual_start': ev.actual_start.isoformat() if ev.actual_start else None,
-                'actual_end': ev.actual_end.isoformat() if ev.actual_end else None,
+                'is_impromptu': ev.is_impromptu,
+                'actual_start': localtime(ev.actual_start).isoformat() if ev.actual_start else None,
+                'actual_end': localtime(ev.actual_end).isoformat() if ev.actual_end else None,
                 'radio_channel': ev.radio_channel,
                 'effective_radio_channel': ev.effective_radio_channel,
+                'is_stopped': ev.is_stopped,
+                'is_currently_active': ev.is_currently_active,
+                'total_actual_seconds': ev.total_actual_seconds,
+                'segments': [
+                    {
+                        'id': s.pk,
+                        'start': localtime(s.start).isoformat(),
+                        'end': localtime(s.end).isoformat() if s.end else None,
+                    }
+                    for s in ev.segments.all()
+                ],
             }
             for ev in track.day_events
         ]
@@ -477,6 +520,7 @@ def dashboard_events_api(request):
             'id': track.pk,
             'color': track.color,
             'radio_channel': track.radio_channel,
+            'is_active': track.is_active,
             'events': _serialize_events(track),
         }
         if subs:
@@ -484,6 +528,7 @@ def dashboard_events_api(request):
                 sub.name: {
                     'id': sub.pk,
                     'radio_channel': sub.radio_channel,
+                    'is_active': sub.is_active,
                     'events': _serialize_events(sub),
                 }
                 for sub in sorted(subs, key=lambda s: s.name)
@@ -494,6 +539,27 @@ def dashboard_events_api(request):
 
 
 # ── Analytics ─────────────────────────────────────────────────────────────────
+
+@login_required
+@require_POST
+def track_active_toggle(request, asset_id):
+    """Admin only — toggle a track's active/unsafe state."""
+    if not request.user.is_staff:
+        return JsonResponse({'error': 'Forbidden'}, status=403)
+    track = get_object_or_404(Asset, pk=asset_id, asset_type=Asset.AssetType.TRACK)
+    try:
+        body = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+    is_active = body.get('is_active')
+    if isinstance(is_active, bool):
+        track.is_active = is_active
+    else:
+        # No explicit value — toggle
+        track.is_active = not track.is_active
+    track.save(update_fields=['is_active'])
+    return JsonResponse({'id': track.pk, 'is_active': track.is_active})
+
 
 @login_required
 @require_POST
@@ -559,7 +625,7 @@ def analytics_api(request):
     if not request.user.is_staff:
         return JsonResponse({'error': 'Forbidden'}, status=403)
 
-    today = timezone.now().date()
+    today = localtime(timezone.now()).date()
     start_str = request.GET.get('start')
     end_str = request.GET.get('end')
 
@@ -581,7 +647,7 @@ def analytics_api(request):
 
     # Prefetch all events once to avoid N+1 queries per asset.
     # SQLite lacks duration math, so we compute in Python from a single queryset.
-    all_events = list(events.prefetch_related('assets'))
+    all_events = list(events.prefetch_related('assets', 'segments'))
 
     # Build asset_id → [event, ...] mapping for O(1) lookups
     events_by_asset = defaultdict(list)
@@ -697,6 +763,15 @@ def analytics_api(request):
             'total_hours': round(sched_secs / 3600, 1),
         })
 
+    # 7. Wasted time by unapproved events (use all_events_in_range, already queried)
+    unapproved_secs = sum(
+        (e.end_time - e.start_time).total_seconds()
+        for e in all_events_in_range.filter(is_approved=False).only('start_time', 'end_time')
+    )
+
+    # 8. Impromptu event count (use all_events_in_range, already queried)
+    impromptu_count = all_events_in_range.filter(is_impromptu=True).count()
+
     return JsonResponse({
         'range': {'start': str(start_date), 'end': str(end_date)},
         'track_utilization': track_utilization,
@@ -705,7 +780,76 @@ def analytics_api(request):
         'peak_hours': peak_hours,
         'user_activity': user_activity,
         'asset_usage': asset_usage,
+        'unapproved_waste_hours': round(unapproved_secs / 3600, 1),
+        'impromptu_count': impromptu_count,
     })
+
+
+@login_required
+@require_POST
+def event_impromptu(request):
+    """Admin only — create an impromptu event from the dashboard."""
+    if not request.user.is_staff:
+        return JsonResponse({'error': 'Forbidden'}, status=403)
+    try:
+        body = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+    track_id = body.get('track_id')
+    title = body.get('title', '').strip()
+    start_time = body.get('start_time')
+    end_time = body.get('end_time')
+    confirmed = body.get('confirmed', False)
+
+    if not all([track_id, title, start_time, end_time]):
+        return JsonResponse({'error': 'Missing required fields: track_id, title, start_time, end_time'}, status=400)
+
+    track = get_object_or_404(Asset, pk=track_id, asset_type=Asset.AssetType.TRACK)
+
+    try:
+        start_dt = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
+        end_dt = datetime.fromisoformat(end_time.replace('Z', '+00:00'))
+        if timezone.is_naive(start_dt):
+            start_dt = timezone.make_aware(start_dt)
+        if timezone.is_naive(end_dt):
+            end_dt = timezone.make_aware(end_dt)
+    except (ValueError, TypeError, AttributeError):
+        return JsonResponse({'error': 'Invalid datetime format.'}, status=400)
+
+    if start_dt >= end_dt:
+        return JsonResponse({'error': 'End time must be after start time.'}, status=400)
+
+    conflicts = get_asset_conflicts(track, start_dt, end_dt, approved_only=True)
+    if conflicts.exists() and not confirmed:
+        return JsonResponse({
+            'requires_confirmation': True,
+            'conflicts': [
+                {
+                    'id': c.pk,
+                    'title': c.title,
+                    'start_time': localtime(c.start_time).isoformat(),
+                    'end_time': localtime(c.end_time).isoformat(),
+                }
+                for c in conflicts[:5]
+            ]
+        })
+
+    ev = Event.objects.create(
+        title=title,
+        start_time=start_dt,
+        end_time=end_dt,
+        is_impromptu=True,
+        is_approved=True,
+        created_by=request.user,
+    )
+    ev.assets.add(track)
+
+    return JsonResponse({
+        'id': ev.pk,
+        'is_impromptu': True,
+        'is_approved': True,
+    }, status=201)
 
 
 @login_required
@@ -714,16 +858,8 @@ def dashboard_stamp_actual(request, event_id):
     """
     JSON API — admin only.
 
-    Stamps actual start or end times on an event.
-    Accepts POST with a JSON body containing an ``action`` field:
-
-    - ``"start"``       — sets ``actual_start`` to now (or ``time`` if provided).
-    - ``"end"``         — sets ``actual_end`` to now (or ``time`` if provided).
-    - ``"clear_start"`` — clears ``actual_start``.
-    - ``"clear_end"``   — clears ``actual_end``.
-
-    Optional ``time`` field: an ISO 8601 string or ``"HH:MM"`` (combined with
-    the event's date).  When omitted, the current time is used.
+    Stamps actual start/end times via segments.  Supports both legacy
+    actions (start/end/clear_start/clear_end) and new play/pause/stop/clear.
 
     URL: /cal/api/event/<event_id>/stamp/
     """
@@ -740,19 +876,17 @@ def dashboard_stamp_actual(request, event_id):
     except (json.JSONDecodeError, ValueError):
         return JsonResponse({'error': 'Invalid JSON'}, status=400)
     action = body.get('action')
-    time_str = body.get('time')  # Optional: ISO 8601 string or "HH:MM"
+    time_str = body.get('time')
 
     # Parse the custom time if provided
     custom_time = None
     if time_str:
         try:
-            # Try full ISO format first
             custom_time = datetime.fromisoformat(time_str.replace('Z', '+00:00'))
             if timezone.is_naive(custom_time):
                 custom_time = timezone.make_aware(custom_time)
         except (ValueError, TypeError):
             try:
-                # Try HH:MM format — combine with event's date
                 parts = time_str.strip().split(':')
                 if len(parts) == 2:
                     h, m = int(parts[0]), int(parts[1])
@@ -762,46 +896,188 @@ def dashboard_stamp_actual(request, event_id):
             except (ValueError, TypeError):
                 pass
 
-    # ── Validation ──────────────────────────────────────────────
-    if action == 'end':
+    # ── Legacy actions (backward compat) ────────────────────────
+    if action == 'start':
+        # Validation
+        if custom_time:
+            event_date = event.start_time.date()
+            event_midnight = timezone.make_aware(datetime.combine(event_date, datetime.min.time()))
+            if custom_time < event_midnight - timedelta(hours=24) or custom_time > event_midnight + timedelta(hours=48):
+                return JsonResponse(
+                    {'error': 'Custom time must be within 24 hours of the event date.'},
+                    status=400,
+                )
+        # Clear existing segments and create a new open one
+        event.segments.all().delete()
+        ActualTimeSegment.objects.create(event=event, start=custom_time or timezone.now())
+    elif action == 'end':
         if not event.actual_start:
             return JsonResponse(
                 {'error': 'Cannot stamp end time before start time is recorded.'},
                 status=400,
             )
+        stamp_time = custom_time or timezone.now()
         if custom_time and custom_time < event.actual_start:
             return JsonResponse(
                 {'error': 'End time cannot be before start time.'},
                 status=400,
             )
-    if action == 'start' and custom_time:
-        event_date = event.start_time.date()
-        event_midnight = timezone.make_aware(datetime.combine(event_date, datetime.min.time()))
-        if custom_time < event_midnight - timedelta(hours=24) or custom_time > event_midnight + timedelta(hours=48):
-            return JsonResponse(
-                {'error': 'Custom time must be within 24 hours of the event date.'},
-                status=400,
+        # Close the open segment
+        seg = event.current_segment
+        if seg:
+            seg.end = stamp_time
+            seg.save()
+        else:
+            # No open segment — create a closed one from actual_start to now
+            ActualTimeSegment.objects.create(
+                event=event, start=event.actual_start, end=stamp_time,
             )
-
-    if action == 'start':
-        event.actual_start = custom_time or timezone.now()
-        event.save(update_fields=['actual_start'])
-    elif action == 'end':
-        event.actual_end = custom_time or timezone.now()
-        event.save(update_fields=['actual_end'])
     elif action == 'clear_start':
-        event.actual_start = None
-        event.save(update_fields=['actual_start'])
+        event.segments.all().delete()
     elif action == 'clear_end':
-        event.actual_end = None
-        event.save(update_fields=['actual_end'])
+        seg = event.segments.filter(end__isnull=False).order_by('-end').first()
+        if seg:
+            seg.end = None
+            seg.save()
+
+    # ── New play/pause/stop/clear actions ───────────────────────
+    elif action == 'play':
+        if event.is_stopped:
+            return JsonResponse({'error': 'Event is stopped.'}, status=400)
+        if event.current_segment is not None:
+            return JsonResponse({'error': 'Already playing.'}, status=400)
+        ActualTimeSegment.objects.create(event=event, start=custom_time or timezone.now())
+    elif action == 'pause':
+        seg = event.current_segment
+        if seg is None:
+            return JsonResponse({'error': 'Not playing.'}, status=400)
+        seg.end = custom_time or timezone.now()
+        seg.save()
+    elif action == 'stop':
+        seg = event.current_segment
+        if seg is None:
+            return JsonResponse({'error': 'Not playing.'}, status=400)
+        seg.end = custom_time or timezone.now()
+        seg.save()
+        event.is_stopped = True
+        event.save(update_fields=['is_stopped'])
+    elif action == 'undo':
+        # Undo the most recent stamp action:
+        #   stopped  → un-stop + reopen last segment (undo "stop")
+        #   paused   → delete last closed segment (undo "pause")
+        #   active   → delete the open segment (undo "play")
+        if event.is_stopped:
+            event.is_stopped = False
+            event.save(update_fields=['is_stopped'])
+            last_seg = event.segments.order_by('-start').first()
+            if last_seg and last_seg.end:
+                last_seg.end = None
+                last_seg.save()
+        elif event.current_segment is not None:
+            # Active — delete the open segment
+            event.current_segment.delete()
+        else:
+            # Paused — delete the most recent closed segment
+            last_seg = event.segments.order_by('-start').first()
+            if last_seg:
+                last_seg.delete()
+    elif action == 'clear':
+        event.segments.all().delete()
+        event.is_stopped = False
+        event.save(update_fields=['is_stopped'])
     else:
         return JsonResponse({'error': 'Invalid action'}, status=400)
 
+    # Refresh to get up-to-date segment data
+    event.refresh_from_db()
     return JsonResponse({
         'id': event.pk,
-        'actual_start': event.actual_start.isoformat() if event.actual_start else None,
-        'actual_end':   event.actual_end.isoformat() if event.actual_end else None,
+        'actual_start': localtime(event.actual_start).isoformat() if event.actual_start else None,
+        'actual_end': localtime(event.actual_end).isoformat() if event.actual_end else None,
+        'is_stopped': event.is_stopped,
+        'segments': [
+            {
+                'id': s.pk,
+                'start': localtime(s.start).isoformat(),
+                'end': localtime(s.end).isoformat() if s.end else None,
+            }
+            for s in event.segments.all()
+        ],
+    })
+
+
+@login_required
+@require_POST
+def segment_edit(request, segment_id):
+    """
+    JSON API — admin only.
+    Edit an individual ActualTimeSegment's start and/or end times.
+    URL: /cal/api/segment/<segment_id>/edit/
+    """
+    if not request.user.is_staff:
+        return JsonResponse({'error': 'Forbidden'}, status=403)
+
+    try:
+        seg = ActualTimeSegment.objects.select_related('event').get(pk=segment_id)
+    except ActualTimeSegment.DoesNotExist:
+        return JsonResponse({'error': 'Segment not found'}, status=404)
+
+    try:
+        body = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+    def parse_time(val, event):
+        if not val:
+            return None
+        try:
+            dt = datetime.fromisoformat(val.replace('Z', '+00:00'))
+            if timezone.is_naive(dt):
+                dt = timezone.make_aware(dt)
+            return dt
+        except (ValueError, TypeError):
+            pass
+        try:
+            parts = val.strip().split(':')
+            if len(parts) == 2:
+                h, m = int(parts[0]), int(parts[1])
+                event_date = event.start_time.date()
+                naive = datetime.combine(event_date, datetime.min.time().replace(hour=h, minute=m))
+                return timezone.make_aware(naive)
+        except (ValueError, TypeError):
+            pass
+        return None
+
+    event = seg.event
+    new_start = parse_time(body.get('start'), event)
+    new_end = parse_time(body.get('end'), event)
+
+    if new_start:
+        seg.start = new_start
+    if new_end:
+        seg.end = new_end
+    if body.get('end') is None and 'end' in body:
+        seg.end = None
+
+    if seg.end and seg.start and seg.end < seg.start:
+        return JsonResponse({'error': 'End time cannot be before start time.'}, status=400)
+
+    seg.save()
+
+    event.refresh_from_db()
+    return JsonResponse({
+        'id': event.pk,
+        'actual_start': localtime(event.actual_start).isoformat() if event.actual_start else None,
+        'actual_end': localtime(event.actual_end).isoformat() if event.actual_end else None,
+        'is_stopped': event.is_stopped,
+        'segments': [
+            {
+                'id': s.pk,
+                'start': localtime(s.start).isoformat(),
+                'end': localtime(s.end).isoformat() if s.end else None,
+            }
+            for s in event.segments.all()
+        ],
     })
 
 

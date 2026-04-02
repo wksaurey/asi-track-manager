@@ -70,32 +70,64 @@
   {{ calendar }}
 </div>
 
-<!-- ── Legend ───────────────────────────────────────────────────── -->
-{% if view == 'day' %}
-<div class="cal-legend">
-  <span class="legend-item">
-    <span class="legend-swatch-actual"></span> Scheduled
-  </span>
-  <span class="legend-item">
-    <span class="legend-swatch-dual"><span class="legend-swatch-dual__actual"></span><span class="legend-swatch-dual__ghost"></span></span> Actual <span class="text-muted" style="font-size:0.8em">(scheduled shown below)</span>
-  </span>
-  <span class="legend-item">
-    <span class="legend-dot legend-dot-pending"></span> Pending
-  </span>
+<!-- ── Legend (sticky, collapsible) ─────────────────────────────── -->
+<div class="cal-legend-wrapper" id="cal-legend-wrapper">
+  <div class="cal-legend" id="cal-legend">
+    <button class="cal-legend-toggle" onclick="toggleLegend()" aria-label="Toggle key">
+      <span class="cal-legend-arrow">&#8250;</span>
+      <span class="cal-legend-label">Key</span>
+    </button>
+    <span class="cal-legend-divider"></span>
+  {% if view == 'day' %}
+    <span class="legend-item">
+      <span class="legend-swatch-scheduled"></span> Scheduled
+    </span>
+    <span class="legend-item">
+      <span class="legend-swatch-active"></span> Active
+    </span>
+    <span class="legend-item">
+      <span class="legend-swatch-paused"></span> Paused
+    </span>
+    <span class="legend-item">
+      <span class="legend-swatch-completed"></span> Completed
+    </span>
+    <span class="legend-item">
+      <span class="legend-swatch-noshow"></span> No-show
+    </span>
+    <span class="legend-item">
+      <span class="legend-swatch-pending"></span> Pending
+    </span>
+  {% else %}
+    <span class="legend-item"><span class="legend-dot dot-vehicle"></span> Vehicle</span>
+    <span class="legend-item"><span class="legend-dot dot-track"></span> Track</span>
+    <span class="legend-item"><span class="legend-dot dot-operator"></span> Operator</span>
+    <span class="legend-item"><span class="legend-dot dot-pending"></span> Pending Approval</span>
+  {% endif %}
+  </div>
 </div>
-{% else %}
-<div class="cal-legend">
-  <span class="legend-item"><span class="legend-dot dot-vehicle"></span> Vehicle</span>
-  <span class="legend-item"><span class="legend-dot dot-track"></span> Track</span>
-  <span class="legend-item"><span class="legend-dot dot-operator"></span> Operator</span>
-  <span class="legend-item"><span class="legend-dot dot-pending"></span> Pending Approval</span>
-</div>
-{% endif %}
+<script>
+  // Restore collapsed state immediately (before paint) to prevent flash
+  function toggleLegend() {
+    var w = document.getElementById('cal-legend-wrapper');
+    if (w) w.classList.toggle('cal-legend-collapsed');
+    try {
+      localStorage.setItem('cal-legend-collapsed', w.classList.contains('cal-legend-collapsed') ? '1' : '');
+    } catch(e) {}
+  }
+  (function() {
+    try {
+      if (localStorage.getItem('cal-legend-collapsed') === '1') {
+        document.getElementById('cal-legend-wrapper').classList.add('cal-legend-collapsed');
+      }
+    } catch(e) {}
+  })();
+</script>
 
 {% endblock %}
 
 {% block script %}
 <script>
+
   // ── Pending filter toggle (client-side, no reload) ────────────────
   function togglePending(cb) {
     var body = document.querySelector('.cal-body');
@@ -210,11 +242,17 @@
     // ── Now line (only on today's date) ──────────────────────────
     {% if is_today %}
     (function() {
+      var APP_TZ = 'America/Denver';
       var nowLines = [];
 
+      function getEasternMinutes() {
+        var hhmm = new Date().toLocaleTimeString('en-GB', { timeZone: APP_TZ, hour: '2-digit', minute: '2-digit', hour12: false });
+        var parts = hhmm.split(':');
+        return parseInt(parts[0]) * 60 + parseInt(parts[1]);
+      }
+
       function getNowPct() {
-        var d = new Date();
-        var mins = d.getHours() * 60 + d.getMinutes();
+        var mins = getEasternMinutes();
         var offset = mins - (ganttStart * 60);
         return (offset / ganttMins) * 100;
       }
@@ -254,12 +292,42 @@
       var container = document.querySelector('.gantt-scroll-container');
       if (!container) return;
 
-      var now = new Date();
-      var nowMin = now.getHours() * 60 + now.getMinutes();
+      var APP_TZ = 'America/Denver';
+      var hhmm = new Date().toLocaleTimeString('en-GB', { timeZone: APP_TZ, hour: '2-digit', minute: '2-digit', hour12: false });
+      var parts = hhmm.split(':');
+      var nowMin = parseInt(parts[0]) * 60 + parseInt(parts[1]);
       var scrollableWidth = container.scrollWidth;
       var viewportWidth = container.clientWidth;
       var nowPx = ((nowMin - ganttStart * 60) / ganttMins) * scrollableWidth;
       container.scrollLeft = Math.max(0, nowPx - viewportWidth / 2);
+    })();
+
+    // ── Live update active segment widths ────────────────────────
+    (function() {
+      var APP_TZ = 'America/Denver';
+      function updateActiveSegments() {
+        document.querySelectorAll('.gantt-block--active-segment').forEach(function(el) {
+          var segStartISO = el.getAttribute('data-segment-start');
+          if (!segStartISO) return;
+          var segStartDate = new Date(segStartISO);
+          // Get current time in app timezone as minutes since midnight
+          var hhmm = new Date().toLocaleTimeString('en-GB', { timeZone: APP_TZ, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+          var parts = hhmm.split(':');
+          var nowMin = parseInt(parts[0]) * 60 + parseInt(parts[1]) + parseInt(parts[2]) / 60;
+          // Get segment start as minutes since midnight in app timezone
+          var startHHMM = segStartDate.toLocaleTimeString('en-GB', { timeZone: APP_TZ, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+          var startParts = startHHMM.split(':');
+          var startMin = parseInt(startParts[0]) * 60 + parseInt(startParts[1]) + parseInt(startParts[2]) / 60;
+          var elapsedMin = nowMin - startMin;
+          if (elapsedMin < 0) return;
+          var leftPct = (startMin - ganttStart * 60) / ganttMins * 100;
+          var widthPct = elapsedMin / ganttMins * 100;
+          el.style.left = Math.max(0, leftPct) + '%';
+          el.style.width = widthPct + '%';
+        });
+      }
+      updateActiveSegments();
+      setInterval(updateActiveSegments, 60000);
     })();
   });
 </script>

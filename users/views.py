@@ -1,11 +1,12 @@
-from django.contrib.auth import login
+from django.contrib import messages
+from django.contrib.auth import login, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
-from .forms import UserRegistrationForm
+from .forms import UserRegistrationForm, UsernameChangeForm, CustomPasswordChangeForm
 from .models import User
 
 
@@ -22,6 +23,37 @@ def register(request):
     else:
         form = UserRegistrationForm()
     return render(request, 'users/register.html', {'form': form})
+
+
+@login_required
+def profile(request):
+    """Allow users to change their username and/or password."""
+    username_form = UsernameChangeForm(user=request.user)
+    password_form = CustomPasswordChangeForm(user=request.user)
+
+    if request.method == 'POST':
+        action = request.POST.get('action')
+
+        if action == 'change_username':
+            username_form = UsernameChangeForm(request.POST, user=request.user)
+            if username_form.is_valid():
+                request.user.username = username_form.cleaned_data['username']
+                request.user.save(update_fields=['username'])
+                messages.success(request, 'Username updated successfully.')
+                return redirect('users:profile')
+
+        elif action == 'change_password':
+            password_form = CustomPasswordChangeForm(user=request.user, data=request.POST)
+            if password_form.is_valid():
+                password_form.save()
+                update_session_auth_hash(request, password_form.user)
+                messages.success(request, 'Password updated successfully.')
+                return redirect('users:profile')
+
+    return render(request, 'users/profile.html', {
+        'username_form': username_form,
+        'password_form': password_form,
+    })
 
 
 @login_required

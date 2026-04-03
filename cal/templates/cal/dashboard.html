@@ -67,7 +67,7 @@
             <h2 class="track-name"></h2>
             <div class="track-actions">
               <button class="btn btn-xxs active-toggle-btn" title="Toggle track active state">Inactive</button>
-              <button class="icon-btn add-event-btn" title="Add event">&#xff0b;</button>
+              <button class="track-add-btn add-event-btn" title="Add impromptu event">+</button>
             </div>
           </header>
 
@@ -109,7 +109,7 @@
             <option value="16">Ch 16</option>
           </select>
           <span class="subtrack-name"></span>
-          <button class="icon-btn icon-btn--sm subtrack-add-btn" title="Add event to this subtrack">&#xff0b;</button>
+          <button class="track-add-btn subtrack-add-btn" title="Add impromptu event">+</button>
         </div>
         <ol class="events-list subtrack-events-list"></ol>
       </div>
@@ -142,28 +142,31 @@
 
     <input type="hidden" id="currentUserName" value="{{ request.user.username }}" />
 
-    <!-- Event add / edit popup -->
+    <!-- Quick Add Event Modal -->
     <div id="eventPopup" class="event-popup-overlay" hidden>
       <div class="event-popup-box" id="eventPopupBox">
         <div class="event-popup__header">
           <div>
-            <h2 class="event-popup__title" id="eventModalTitle">Add Event</h2>
+            <h2 class="event-popup__title">New Impromptu Event</h2>
             <div class="event-popup__track" id="eventModalTrackName"></div>
           </div>
           <button type="button" class="event-popup__close" aria-label="Close">&times;</button>
         </div>
         <form id="eventModalForm" autocomplete="off">
+          <input type="hidden" id="modalTrackId" value="" />
           <div class="modal-field">
-            <label for="modalTime">Time</label>
-            <input id="modalTime" name="time" type="text" placeholder="e.g., 9:01-~11:30 or 10:21" required />
+            <label for="modalTitle">Title</label>
+            <input id="modalTitle" name="title" type="text" placeholder="Event title" required />
           </div>
           <div class="modal-field">
             <label for="modalDesc">Description</label>
-            <input id="modalDesc" name="desc" type="text" placeholder="What is happening?" required />
+            <textarea id="modalDesc" name="description" rows="3" placeholder="Optional details"></textarea>
           </div>
+          <div id="modalError" class="modal-error" hidden></div>
           <div class="modal-actions">
+            <a id="modalFullFormLink" href="#" class="modal-full-form-link">Open full form &rarr;</a>
             <button type="button" class="btn btn-outline" id="eventModalCancel">Cancel</button>
-            <button type="submit" class="btn">Save Event</button>
+            <button type="submit" class="btn" id="eventModalSubmit">Create</button>
           </div>
         </form>
       </div>

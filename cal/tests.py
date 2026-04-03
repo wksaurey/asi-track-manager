@@ -3193,8 +3193,8 @@ class DeleteRedirectTest(TestCase):
 
 # ── Task 14: Impromptu Event Creation ────────────────────────────────────────
 
-class ImpromptyEventCreationAPITest(TestCase):
-    """Task 14: POST /cal/api/event/impromptu/ creates impromptu events."""
+class QuickEventCreateAPITest(TestCase):
+    """POST /cal/api/event/create/ — impromptu and scheduled event creation."""
 
     def setUp(self):
         self.admin = User.objects.create_user(
@@ -3202,7 +3202,7 @@ class ImpromptyEventCreationAPITest(TestCase):
         )
         self.regular = User.objects.create_user(username='impro_reg', password='Testpass123!')
         self.track = Asset.objects.create(name='Impro Track', asset_type=Asset.AssetType.TRACK)
-        self.url = reverse('cal:event_impromptu')
+        self.url = reverse('cal:api_event_create')
         self.client.login(username='impro_admin', password='Testpass123!')
 
     def _post(self, data):
@@ -3210,38 +3210,54 @@ class ImpromptyEventCreationAPITest(TestCase):
             self.url, data=json.dumps(data), content_type='application/json'
         )
 
-    def _valid_payload(self, confirmed=False):
-        now = timezone.now()
+    def _impromptu_payload(self):
         return {
             'title': 'Quick Test Run',
-            'track_id': self.track.pk,
-            'start_time': now.isoformat(),
-            'end_time': (now + timedelta(hours=2)).isoformat(),
-            'confirmed': confirmed,
+            'asset_ids': [self.track.pk],
+            'is_impromptu': True,
         }
 
-    def test_create_impromptu_no_conflicts_returns_201(self):
-        """Creating an impromptu event with no conflicts returns 201."""
-        resp = self._post(self._valid_payload(confirmed=True))
+    def _scheduled_payload(self):
+        now = timezone.now()
+        return {
+            'title': 'Scheduled Test Run',
+            'asset_ids': [self.track.pk],
+            'start_time': now.isoformat(),
+            'end_time': (now + timedelta(hours=2)).isoformat(),
+        }
+
+    def test_create_impromptu_returns_201(self):
+        """Creating an impromptu event returns 201."""
+        resp = self._post(self._impromptu_payload())
         self.assertEqual(resp.status_code, 201)
 
-    def test_created_event_is_impromptu_and_approved(self):
-        """Created impromptu event has is_impromptu=True and is_approved=True."""
-        resp = self._post(self._valid_payload(confirmed=True))
+    def test_impromptu_event_is_impromptu_and_approved(self):
+        """Impromptu event has is_impromptu=True and is_approved=True."""
+        resp = self._post(self._impromptu_payload())
         self.assertEqual(resp.status_code, 201)
         ev = Event.objects.get(title='Quick Test Run')
         self.assertTrue(ev.is_impromptu)
         self.assertTrue(ev.is_approved)
 
+    def test_impromptu_event_opens_segment(self):
+        """Impromptu event auto-opens an ActualTimeSegment."""
+        from cal.models import ActualTimeSegment
+        resp = self._post(self._impromptu_payload())
+        self.assertEqual(resp.status_code, 201)
+        ev = Event.objects.get(title='Quick Test Run')
+        segs = ActualTimeSegment.objects.filter(event=ev)
+        self.assertEqual(segs.count(), 1)
+        self.assertIsNone(segs.first().end)
+
     def test_created_event_has_correct_track(self):
-        """Created impromptu event is linked to the specified track."""
-        resp = self._post(self._valid_payload(confirmed=True))
+        """Created event is linked to the specified track."""
+        resp = self._post(self._impromptu_payload())
         self.assertEqual(resp.status_code, 201)
         ev = Event.objects.get(title='Quick Test Run')
         self.assertIn(self.track, ev.assets.all())
 
-    def test_with_conflicts_unconfirmed_returns_200_with_conflict_list(self):
-        """Conflicts + confirmed=false returns 200 with conflict list, does NOT create event."""
+    def test_scheduled_event_with_conflicts_returns_400(self):
+        """Scheduled event with conflicts returns 400 with error."""
         now = timezone.now()
         blocking = Event.objects.create(
             title='Blocking Event', description='',
@@ -3250,62 +3266,61 @@ class ImpromptyEventCreationAPITest(TestCase):
             is_approved=True, created_by=self.admin,
         )
         blocking.assets.add(self.track)
-        payload = self._valid_payload(confirmed=False)
-        resp = self._post(payload)
-        self.assertEqual(resp.status_code, 200)
+        resp = self._post(self._scheduled_payload())
+        self.assertEqual(resp.status_code, 400)
         data = resp.json()
-        self.assertIn('conflicts', data)
-        self.assertFalse(Event.objects.filter(title='Quick Test Run').exists())
+        self.assertIn('error', data)
+        self.assertFalse(Event.objects.filter(title='Scheduled Test Run').exists())
 
-    def test_with_conflicts_confirmed_true_creates_event(self):
-        """Conflicts + confirmed=true creates the event anyway (201)."""
-        now = timezone.now()
-        blocking = Event.objects.create(
-            title='Blocking Conflict', description='',
-            start_time=now,
-            end_time=now + timedelta(hours=2),
-            is_approved=True, created_by=self.admin,
-        )
-        blocking.assets.add(self.track)
-        payload = self._valid_payload(confirmed=True)
-        resp = self._post(payload)
+    def test_scheduled_event_no_conflicts_returns_201(self):
+        """Scheduled event with no conflicts returns 201."""
+        resp = self._post(self._scheduled_payload())
         self.assertEqual(resp.status_code, 201)
-        self.assertTrue(Event.objects.filter(title='Quick Test Run').exists())
+        self.assertTrue(Event.objects.filter(title='Scheduled Test Run').exists())
 
     def test_non_admin_gets_403(self):
-        """Non-admin POST to impromptu endpoint returns 403."""
+        """Non-admin POST returns 403."""
         self.client.logout()
         self.client.login(username='impro_reg', password='Testpass123!')
-        resp = self._post(self._valid_payload(confirmed=True))
+        resp = self._post(self._impromptu_payload())
         self.assertEqual(resp.status_code, 403)
 
-    def test_missing_required_fields_returns_400(self):
-        """Missing required fields returns 400."""
-        resp = self._post({'title': 'No Times'})
+    def test_missing_title_returns_400(self):
+        """Missing title returns 400."""
+        resp = self._post({'asset_ids': [self.track.pk], 'is_impromptu': True})
+        self.assertEqual(resp.status_code, 400)
+
+    def test_missing_assets_returns_400(self):
+        """Missing asset_ids returns 400."""
+        resp = self._post({'title': 'No Assets', 'is_impromptu': True})
+        self.assertEqual(resp.status_code, 400)
+
+    def test_invalid_asset_id_returns_400(self):
+        """Invalid asset ID returns 400."""
+        resp = self._post({
+            'title': 'Bad Asset',
+            'asset_ids': [99999],
+            'is_impromptu': True,
+        })
+        self.assertEqual(resp.status_code, 400)
+
+    def test_scheduled_missing_times_returns_400(self):
+        """Scheduled event without start/end times returns 400."""
+        resp = self._post({
+            'title': 'No Times',
+            'asset_ids': [self.track.pk],
+        })
         self.assertEqual(resp.status_code, 400)
 
     def test_invalid_datetime_returns_400(self):
         """Invalid datetime string returns 400."""
         resp = self._post({
             'title': 'Bad Time',
-            'track_id': self.track.pk,
+            'asset_ids': [self.track.pk],
             'start_time': 'not-a-datetime',
             'end_time': 'also-not-a-datetime',
-            'confirmed': True,
         })
         self.assertEqual(resp.status_code, 400)
-
-    def test_invalid_track_id_returns_404(self):
-        """Nonexistent track ID returns 404."""
-        now = timezone.now()
-        resp = self._post({
-            'title': 'Bad Track',
-            'track_id': 99999,
-            'start_time': now.isoformat(),
-            'end_time': (now + timedelta(hours=1)).isoformat(),
-            'confirmed': True,
-        })
-        self.assertEqual(resp.status_code, 404)
 
 
 # ── Task 15: Event View Segment Display ─────────────────────────────────────
@@ -3744,8 +3759,8 @@ class GanttLegendContextTest(TestCase):
     def test_view_passes_has_completed_true_when_past_event_has_segments(self):
         """Day view context must include has_completed=True for past events with segments."""
         from cal.models import ActualTimeSegment
-        start = datetime(2026, 4, 2, 9, 0, tzinfo=_local_tz)
-        end   = datetime(2026, 4, 2, 11, 0, tzinfo=_local_tz)
+        start = datetime(2026, 4, 2, 2, 0, tzinfo=_local_tz)
+        end   = datetime(2026, 4, 2, 4, 0, tzinfo=_local_tz)
         ev = Event.objects.create(
             title='Completed', description='', start_time=start, end_time=end,
             created_by=self.user, is_approved=True,
@@ -3764,8 +3779,8 @@ class GanttLegendContextTest(TestCase):
 
     def test_view_passes_has_noshow_true_when_past_event_has_no_segments(self):
         """Day view context must include has_noshow=True for past events with no segments."""
-        start = datetime(2026, 4, 2, 9, 0, tzinfo=_local_tz)
-        end   = datetime(2026, 4, 2, 11, 0, tzinfo=_local_tz)
+        start = datetime(2026, 4, 2, 2, 0, tzinfo=_local_tz)
+        end   = datetime(2026, 4, 2, 4, 0, tzinfo=_local_tz)
         ev = Event.objects.create(
             title='No Show', description='', start_time=start, end_time=end,
             created_by=self.user, is_approved=True,

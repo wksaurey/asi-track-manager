@@ -649,61 +649,61 @@ const noteItemTpl  = document.getElementById("noteItemTemplate");
 
 
 // ============================================================
-// Event popup
+// Quick Add Event Modal
 // ============================================================
-
-let modalTrackName = null;
-let modalEditEntry = null;
 
 const eventPopup        = document.getElementById("eventPopup");
 const eventPopupBox     = document.getElementById("eventPopupBox");
 const eventModalForm    = document.getElementById("eventModalForm");
-const eventModalTitle   = document.getElementById("eventModalTitle");
 const eventModalTrackEl = document.getElementById("eventModalTrackName");
-const modalTimeInput    = document.getElementById("modalTime");
+const modalTrackIdInput = document.getElementById("modalTrackId");
+const modalTitleInput   = document.getElementById("modalTitle");
 const modalDescInput    = document.getElementById("modalDesc");
+const modalError        = document.getElementById("modalError");
+const modalSubmitBtn    = document.getElementById("eventModalSubmit");
+const modalFullFormLink = document.getElementById("modalFullFormLink");
+let modalTrackName      = null;
 
-function openEventModal(trackName, entry, anchorEl) {
+function openEventModal(trackName, trackId, anchorEl) {
   modalTrackName = trackName;
-  modalEditEntry = entry || null;
-  eventModalTitle.textContent   = entry ? "Edit Event" : "Add Event";
   eventModalTrackEl.textContent = trackName;
-  modalTimeInput.value = entry ? (entry.time || "") : nowHHMM();
-  modalDescInput.value = entry ? (entry.desc || "") : "";
+  modalTrackIdInput.value = trackId || "";
+  modalTitleInput.value = "";
+  modalDescInput.value = "";
+  modalError.hidden = true;
+  modalError.textContent = "";
+  modalSubmitBtn.disabled = false;
+  modalSubmitBtn.textContent = "Create";
 
-  // Show so the box is measurable
+  const dateStr = toISODateStr(currentDate);
+  let fullFormUrl = `/cal/event/new/?next=/cal/dashboard/&date=${dateStr}`;
+  if (trackId) fullFormUrl += `&track=${trackId}`;
+  modalFullFormLink.href = fullFormUrl;
+
   eventPopup.hidden = false;
 
-  // Position near the triggering track card
-  const card   = anchorEl ? anchorEl.closest(".track-card") : null;
+  const card = anchorEl ? anchorEl.closest(".track-card") : null;
   const anchor = (card || anchorEl) ? (card || anchorEl).getBoundingClientRect() : null;
   if (anchor) {
-    const gap  = 12;
-    const vw   = window.innerWidth;
-    const vh   = window.innerHeight;
+    const gap = 12;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
     const boxW = eventPopupBox.offsetWidth;
     const boxH = eventPopupBox.offsetHeight;
-
-    // Prefer right of card, flip left if it would overflow
     let left = anchor.right + gap;
     if (left + boxW > vw - gap) left = anchor.left - boxW - gap;
     left = Math.max(gap, left);
-
-    // Align top with card top, clamp to stay on screen
     let top = anchor.top;
     top = Math.max(gap, Math.min(top, vh - boxH - gap));
-
-    eventPopupBox.style.top  = top  + "px";
+    eventPopupBox.style.top = top + "px";
     eventPopupBox.style.left = left + "px";
   }
-
-  modalDescInput.focus();
+  modalTitleInput.focus();
 }
 
 function closeEventModal() {
   eventPopup.hidden = true;
   modalTrackName = null;
-  modalEditEntry = null;
 }
 
 eventPopup.querySelector(".event-popup__close").addEventListener("click", closeEventModal);
@@ -711,19 +711,74 @@ document.getElementById("eventModalCancel").addEventListener("click", closeEvent
 eventPopup.addEventListener("click", (e) => { if (e.target === eventPopup) closeEventModal(); });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !eventPopup.hidden) closeEventModal(); });
 
+async function submitCreateEvent(confirmed) {
+  const title = modalTitleInput.value.trim();
+  if (!title) return;
+
+  const trackId = parseInt(modalTrackIdInput.value, 10);
+  if (!trackId) {
+    modalError.textContent = "No track selected.";
+    modalError.hidden = false;
+    return;
+  }
+
+  modalSubmitBtn.disabled = true;
+  modalSubmitBtn.textContent = confirmed ? "Pausing & Creating..." : "Creating...";
+  modalError.hidden = true;
+
+  try {
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
+    const payload = {
+      title: title,
+      description: modalDescInput.value.trim(),
+      asset_ids: [trackId],
+      is_impromptu: true,
+    };
+    if (confirmed) payload.confirmed = true;
+
+    const resp = await fetch("/cal/api/event/create/", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRFToken": csrfToken,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await resp.json().catch(() => ({}));
+
+    if (data.requires_confirmation) {
+      // Show confirmation with active event warning
+      showConfirmModal(data.message, async () => {
+        await submitCreateEvent(true);
+      });
+      modalSubmitBtn.disabled = false;
+      modalSubmitBtn.textContent = "Create";
+      return;
+    }
+
+    if (resp.ok) {
+      closeEventModal();
+      showStampToast("Impromptu event created");
+      await fetchAndLoadData();
+      render();
+    } else {
+      modalError.textContent = data.error || "Failed to create event.";
+      modalError.hidden = false;
+      modalSubmitBtn.disabled = false;
+      modalSubmitBtn.textContent = "Create";
+    }
+  } catch (err) {
+    modalError.textContent = "Network error — could not reach server.";
+    modalError.hidden = false;
+    modalSubmitBtn.disabled = false;
+    modalSubmitBtn.textContent = "Create";
+  }
+}
+
 eventModalForm.addEventListener("submit", (e) => {
   e.preventDefault();
-  const time = modalTimeInput.value.trim();
-  const desc = modalDescInput.value.trim();
-  if (!time || !desc) return;
-  if (modalEditEntry) {
-    modalEditEntry.time = time;
-    modalEditEntry.desc = desc;
-  } else {
-    data[modalTrackName].push({ time, desc, notes: [] });
-  }
-  closeEventModal();
-  render();
+  submitCreateEvent(false);
 });
 
 
@@ -1144,12 +1199,8 @@ function render() {
     const eventsListEl   = card.querySelector(".events-list");
     const notesListEl    = card.querySelector(".notes-list");
 
-    on(quickAddBtn,   "click", () => {
-      const dateStr = toISODateStr(currentDate);
-      const tid = trackIds[trackName];
-      let url = `/cal/event/new/?next=/cal/dashboard/&date=${dateStr}`;
-      if (tid) url += `&track=${tid}`;
-      window.location.href = url;
+    on(quickAddBtn, "click", (e) => {
+      openEventModal(trackName, trackIds[trackName], e.target);
     });
     on(cancelNoteBtn, "click", () => noteForm?.classList.add("hidden"));
 
@@ -1262,13 +1313,12 @@ function render() {
           }
         });
 
-        // Subtrack "+" button — navigate to new event with subtrack pre-selected
+        // Subtrack "+" button — open quick-add modal for this subtrack
         const subAddBtn = subSection.querySelector(".subtrack-add-btn");
         if (subAddBtn) {
           const subTrackId = trackIds[subChKey] || subInfo.id;
-          subAddBtn.addEventListener("click", () => {
-            const dateStr = toISODateStr(currentDate);
-            window.location.href = `/cal/event/new/?next=/cal/dashboard/&date=${dateStr}&track=${subTrackId}`;
+          subAddBtn.addEventListener("click", (e) => {
+            openEventModal(subName, subTrackId, e.target);
           });
         }
 

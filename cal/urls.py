@@ -24,6 +24,7 @@ urlpatterns = [
     path('event/approve/<int:event_id>/',    views.event_approve,    name='event_approve'),
     path('event/unapprove/<int:event_id>/', views.event_unapprove,  name='event_unapprove'),
     path('events/pending/',                views.pending_events, name='pending_events'),
+    path('events/mass-approve/',           views.mass_approve_events, name='mass_approve_events'),
 
     # ── Asset management ───────────────────────────────────────────────────
     path('assets/',                        views.asset_list,   name='asset_list'),
@@ -43,7 +44,7 @@ urlpatterns = [
     path('api/event/<int:event_id>/approve/',     views.api_event_approve,       name='api_event_approve'),
     path('analytics/',                              views.analytics,              name='analytics'),
     path('api/analytics/',                          views.analytics_api,          name='analytics_api'),
-    path('api/event/impromptu/',                     views.event_impromptu,        name='event_impromptu'),
+    path('api/event/create/',                         views.api_create_event,       name='api_event_create'),
     path('api/feedback/',                           views.submit_feedback,        name='submit_feedback'),
     path('feedback/',                               views.feedback_list,          name='feedback_list'),
     path('feedback/<int:feedback_id>/resolve/',     views.feedback_resolve,       name='feedback_resolve'),

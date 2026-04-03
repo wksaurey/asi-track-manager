@@ -75,6 +75,33 @@ Django MTV with two apps (`cal`, `users`). SQLite DB, Bootstrap 4, Docker/Caddy/
 
 Fixture at `cal/fixtures/seed.json` contains 31 assets (7 parent tracks + 11 subtracks + 13 vehicles) and 2 users (admin, kolter). `setup_testdb` command loads this fixture and generates realistic events.
 
+## Git Workflow
+
+Trunk-based flow. Two contributors: Kolter and Hollis.
+
+**Branching:**
+- `main` is always deployable — merge to it frequently (weekly minimum)
+- Feature branches are short-lived: branch off `main`, PR back to `main`, delete after merge
+- No `dev` or integration branches — features merge directly to `main`
+- Never work on parallel long-lived branches — separate features from the same base
+- `git pull --rebase origin main` before starting work and before opening PRs
+
+**Commits:**
+- One logical change per commit. Kitchen-sink messages (commas listing multiple features) = split it
+- Conventional prefixes: `feat:`, `fix:`, `docs:`, `test:`, `chore:`, `refactor:`
+- Run `python3 manage.py test` before committing
+- Never mix formatting/whitespace changes with feature changes
+
+**PRs:**
+- Small: under ~400 lines changed, reviewable in 15 minutes
+- Description says WHY, not just what
+- Kolter and Hollis review each other before merging
+
+**AI guardrails:**
+- If staging a changeset that spans multiple features, proactively suggest splitting into separate commits
+- Before `/ship`, check diff size and warn if over ~400 lines
+- A kitchen-sink commit message is a signal to split, not a feature
+
 ## gstack
 
 Use `/browse` for all web browsing. Never use `mcp__claude-in-chrome__*` tools.

@@ -10,6 +10,7 @@ import json
 from datetime import datetime, timedelta, date as date_type
 from calendar import HTMLCalendar
 
+from django.db.models import Q
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import escape
@@ -71,7 +72,7 @@ class Calendar(HTMLCalendar):
             classes += ' event-pending'
         else:
             now = timezone.now()
-            is_past = event.end_time <= now
+            is_past = event.end_time and event.end_time <= now
             if is_past:
                 has_segments = len(event.segments.all()) > 0
                 if has_segments:
@@ -103,7 +104,7 @@ class Calendar(HTMLCalendar):
         dur = self._fmt_duration
 
         # Determine event state
-        is_past = ev.end_time <= now
+        is_past = ev.end_time and ev.end_time <= now
         has_segs = len(segs) > 0
         if not ev.is_approved:
             status = 'Pending'
@@ -118,12 +119,16 @@ class Calendar(HTMLCalendar):
         else:
             status = 'Scheduled'
 
-        sched_secs = (ev.end_time - ev.start_time).total_seconds()
+        if ev.start_time and ev.end_time:
+            sched_secs = (ev.end_time - ev.start_time).total_seconds()
+            sched_str = f'{fmt(ev.start_time)} – {fmt(ev.end_time)} ({dur(sched_secs)})'
+        else:
+            sched_str = 'Impromptu'
         info = {
             'title': ev.title,
             'creator': ev.created_by.username if ev.created_by else None,
             'status': status,
-            'scheduled': f'{fmt(ev.start_time)} – {fmt(ev.end_time)} ({dur(sched_secs)})',
+            'scheduled': sched_str,
             'description': ev.description or None,
         }
 
@@ -165,8 +170,8 @@ class Calendar(HTMLCalendar):
     def _visual_extent(ev):
         """Return (visual_start, visual_end) covering both scheduled and actual time."""
         now = timezone.now()
-        v_start = ev.start_time
-        v_end = ev.end_time
+        v_start = ev.start_time or now
+        v_end = ev.end_time or now
         for seg in ev.segments.all():  # prefetched
             if seg.start < v_start:
                 v_start = seg.start
@@ -314,7 +319,7 @@ class Calendar(HTMLCalendar):
         if width_m <= 0:
             return []
         has_segments = len(segs) > 0
-        end_iso = ev.end_time.isoformat()
+        end_iso = ev.end_time.isoformat() if ev.end_time else ''
         creator_name = escape(ev.created_by.username) if ev.created_by else ''
         creator_attr = f' data-creator="{creator_name}"' if creator_name else ''
         sched_cls = ' gantt-block--scheduled' if has_segments else ''
@@ -520,12 +525,15 @@ class Calendar(HTMLCalendar):
             )
 
         # Single query for all track events on this day (both parent + subtrack assets).
+        # Include impromptu events (null start_time) that have segments starting today.
         all_events = list(
             Event.objects.filter(
                 assets__asset_type=Asset.AssetType.TRACK,
-                start_time__year=day_date.year,
-                start_time__month=day_date.month,
-                start_time__day=day_date.day,
+            ).filter(
+                Q(start_time__year=day_date.year,
+                  start_time__month=day_date.month,
+                  start_time__day=day_date.day) |
+                Q(start_time__isnull=True, segments__start__date=day_date)
             ).select_related('created_by').prefetch_related('assets', 'segments').distinct()
         )
 
@@ -535,9 +543,10 @@ class Calendar(HTMLCalendar):
             for ev in all_events
         }
 
-        if all_events:
-            earliest_dt = localtime(min(ev.start_time for ev in all_events))
-            latest_dt = localtime(max(ev.end_time for ev in all_events))
+        timed_events = [ev for ev in all_events if ev.start_time and ev.end_time]
+        if timed_events:
+            earliest_dt = localtime(min(ev.start_time for ev in timed_events))
+            latest_dt = localtime(max(ev.end_time for ev in timed_events))
             data_earliest = earliest_dt.hour * 60 + earliest_dt.minute
             data_latest = latest_dt.hour * 60 + latest_dt.minute
         else:
@@ -569,12 +578,20 @@ class Calendar(HTMLCalendar):
             scheduled bar, segment bars, pause gaps, trailing pause,
             connectors, edge markers, and text overlay.
             """
-            local_start = localtime(ev.start_time)
-            local_end   = localtime(ev.end_time)
-            origin    = local_start.replace(hour=GANTT_START, minute=0, second=0, microsecond=0)
-
             segs = list(ev.segments.all())  # prefetched
             has_segments = len(segs) > 0
+
+            # For impromptu events (no scheduled time), derive bar from segments
+            if ev.start_time and ev.end_time:
+                local_start = localtime(ev.start_time)
+                local_end   = localtime(ev.end_time)
+            elif has_segments:
+                local_start = localtime(segs[0].start)
+                seg_end = segs[-1].end or timezone.now()
+                local_end = localtime(seg_end)
+            else:
+                return ''
+            origin = local_start.replace(hour=GANTT_START, minute=0, second=0, microsecond=0)
 
             start_off = max(0, int((local_start - origin).total_seconds()) // 60)
             end_off   = min(GANTT_MINS, int((local_end - origin).total_seconds()) // 60)
@@ -596,8 +613,8 @@ class Calendar(HTMLCalendar):
             tooltip_json = escape(json.dumps(self._gantt_tooltip_data(ev, segs)))
             left_pct     = round(start_off / GANTT_MINS * 100, 4) if width_m > 0 else 0
             width_pct    = round(width_m   / GANTT_MINS * 100, 4) if width_m > 0 else 0
-            t_start      = self._fmt_time(ev.start_time)
-            t_end        = self._fmt_time(ev.end_time)
+            t_start      = self._fmt_time(ev.start_time) if ev.start_time else self._fmt_time(segs[0].start) if has_segments else ''
+            t_end        = self._fmt_time(ev.end_time) if ev.end_time else ''
 
             parts = []
             parts += self._render_scheduled_bar(
@@ -750,7 +767,7 @@ class Calendar(HTMLCalendar):
             any(seg.end is None for seg in ev.segments.all())
             for ev in all_events
         )
-        past_approved = [ev for ev in all_events if ev.end_time <= cutoff and ev.is_approved]
+        past_approved = [ev for ev in all_events if ev.end_time and ev.end_time <= cutoff and ev.is_approved]
         self.gantt_has_completed = any(len(ev.segments.all()) > 0 for ev in past_approved)
         self.gantt_has_noshow = any(len(ev.segments.all()) == 0 for ev in past_approved)
 

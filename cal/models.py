@@ -175,8 +175,8 @@ class Event(models.Model):
 
     title       = models.CharField(max_length=200)
     description = models.TextField(blank=True)
-    start_time   = models.DateTimeField()
-    end_time     = models.DateTimeField()
+    start_time   = models.DateTimeField(null=True, blank=True)
+    end_time     = models.DateTimeField(null=True, blank=True)
     is_stopped  = models.BooleanField(default=False)
     assets      = models.ManyToManyField(
         Asset,
@@ -227,6 +227,18 @@ class Event(models.Model):
             if seg.end:
                 total += (seg.end - seg.start).total_seconds()
         return total
+
+    @property
+    def total_actual_display(self):
+        """Human-readable total actual time (e.g. '1h 30m')."""
+        secs = self.total_actual_seconds
+        if secs < 60:
+            return '<1m'
+        m = int(secs) // 60
+        h, m = divmod(m, 60)
+        if h and m:
+            return f'{h}h {m}m'
+        return f'{h}h' if h else f'{m}m'
 
     @property
     def actual_start(self):
@@ -293,6 +305,8 @@ class Event(models.Model):
         same period, e.g. '8:30-10:00 AM' instead of '8:30 AM-10:00 AM'.
         Uses an en-dash and non-breaking spaces for clean rendering.
         """
+        if not self.start_time or not self.end_time:
+            return 'Impromptu'
         local_s = localtime(self.start_time)
         local_e = localtime(self.end_time)
         t_s = local_s.strftime('%I:%M').lstrip('0') or '12:00'
@@ -343,6 +357,20 @@ class ActualTimeSegment(models.Model):
     def __str__(self):
         end_str = localtime(self.end).isoformat() if self.end else 'open'
         return f'Segment {self.pk}: {localtime(self.start).isoformat()} — {end_str}'
+
+    @property
+    def duration_display(self):
+        """Human-readable segment duration (e.g. '45m')."""
+        if not self.end:
+            return None
+        secs = (self.end - self.start).total_seconds()
+        if secs < 60:
+            return '<1m'
+        m = int(secs) // 60
+        h, m = divmod(m, 60)
+        if h and m:
+            return f'{h}h {m}m'
+        return f'{h}h' if h else f'{m}m'
 
 
 class Feedback(models.Model):

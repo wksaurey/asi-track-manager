@@ -293,8 +293,22 @@ def event_unapprove(request, event_id):
 
 @staff_required
 def pending_events(request):
-    """Admin only — list all events awaiting approval."""
+    """Admin only — list all events awaiting approval, with conflict status."""
     events = Event.objects.filter(is_approved=False).order_by('start_time').prefetch_related('assets')
+
+    for ev in events:
+        has_conflict = False
+        if ev.start_time and ev.end_time:
+            for asset in ev.assets.all():
+                conflicts = get_asset_conflicts(
+                    asset, ev.start_time, ev.end_time,
+                    exclude_event_id=ev.pk, approved_only=True,
+                )
+                if conflicts.exists():
+                    has_conflict = True
+                    break
+        ev.has_conflict = has_conflict
+
     return render(request, 'cal/pending_events.html', {'events': events})
 
 
@@ -450,8 +464,9 @@ def dashboard_events_api(request):
         target_date = today
 
     track_events_qs = Event.objects.filter(
-        start_time__date=target_date
-    ).prefetch_related('segments').order_by('start_time')
+        Q(start_time__date=target_date) |
+        Q(start_time__isnull=True, segments__start__date=target_date)
+    ).prefetch_related('segments').distinct().order_by('start_time')
 
     all_tracks = Asset.objects.filter(
         asset_type=Asset.AssetType.TRACK
@@ -465,8 +480,8 @@ def dashboard_events_api(request):
             'id': ev.pk,
             'title': ev.title,
             'description': ev.description,
-            'start_time': localtime(ev.start_time).isoformat(),
-            'end_time': localtime(ev.end_time).isoformat(),
+            'start_time': localtime(ev.start_time).isoformat() if ev.start_time else None,
+            'end_time': localtime(ev.end_time).isoformat() if ev.end_time else None,
             'is_approved': ev.is_approved,
             'is_impromptu': ev.is_impromptu,
             'actual_start': localtime(ev.actual_start).isoformat() if ev.actual_start else None,
@@ -578,6 +593,52 @@ def api_event_approve(request, event_id):
     event_obj.is_approved = True
     event_obj.save(update_fields=['is_approved'])
     return JsonResponse({'approved': True, 'id': event_obj.pk})
+
+
+@staff_required_api
+@require_POST
+def mass_approve_events(request):
+    """Admin only — approve multiple pending events that have no conflicts."""
+    try:
+        data = json.loads(request.body)
+        event_ids = data.get('event_ids', [])
+    except (json.JSONDecodeError, AttributeError):
+        return JsonResponse({'error': 'Invalid request body'}, status=400)
+
+    if not event_ids:
+        return JsonResponse({'error': 'No events specified'}, status=400)
+
+    pending = Event.objects.filter(
+        pk__in=event_ids, is_approved=False,
+    ).prefetch_related('assets')
+    approved_count = 0
+    skipped = []
+
+    for ev in pending:
+        has_conflict = False
+        if ev.start_time and ev.end_time:
+            for asset in ev.assets.all():
+                conflicts = get_asset_conflicts(
+                    asset, ev.start_time, ev.end_time,
+                    exclude_event_id=ev.pk, approved_only=True,
+                )
+                if conflicts.exists():
+                    has_conflict = True
+                    break
+        if has_conflict:
+            skipped.append({
+                'id': ev.pk, 'title': ev.title, 'reason': 'Booking conflict',
+            })
+        else:
+            ev.is_approved = True
+            ev.save(update_fields=['is_approved'])
+            approved_count += 1
+
+    return JsonResponse({
+        'approved': approved_count,
+        'skipped': len(skipped),
+        'skipped_details': skipped,
+    })
 
 
 # ── Analytics ─────────────────────────────────────────────────────────────────
@@ -800,61 +861,154 @@ def analytics_api(request):
 
 @staff_required_api
 @require_POST
-def event_impromptu(request):
-    """Admin only — create an impromptu event from the dashboard."""
+def api_create_event(request):
+    """
+    JSON API — staff only.
+    Create a new event. Two modes:
+    - Scheduled: requires start_time, end_time. Runs conflict detection.
+    - Impromptu: is_impromptu=true. No times required, auto-approved, opens a segment immediately.
+    """
     try:
         body = json.loads(request.body)
     except (json.JSONDecodeError, ValueError):
         return JsonResponse({'error': 'Invalid JSON'}, status=400)
 
-    track_id = body.get('track_id')
-    title = body.get('title', '').strip()
-    start_time = body.get('start_time')
-    end_time = body.get('end_time')
-    confirmed = body.get('confirmed', False)
+    title = (body.get('title') or '').strip()
+    if not title:
+        return JsonResponse({'error': 'Title is required.'}, status=400)
 
-    if not all([track_id, title, start_time, end_time]):
-        return JsonResponse({'error': 'Missing required fields: track_id, title, start_time, end_time'}, status=400)
+    description = (body.get('description') or '').strip()
+    asset_ids = body.get('asset_ids', [])
+    is_impromptu = bool(body.get('is_impromptu', False))
 
-    track = get_object_or_404(Asset, pk=track_id, asset_type=Asset.AssetType.TRACK)
+    # Validate assets
+    if not asset_ids:
+        return JsonResponse({'error': 'At least one asset is required.'}, status=400)
+    assets = list(Asset.objects.filter(pk__in=asset_ids))
+    if len(assets) != len(asset_ids):
+        return JsonResponse({'error': 'One or more asset IDs are invalid.'}, status=400)
 
-    start_dt = parse_api_datetime(start_time)
-    end_dt = parse_api_datetime(end_time)
-    if not start_dt or not end_dt:
-        return JsonResponse({'error': 'Invalid datetime format.'}, status=400)
+    # Single track group rule
+    track_assets = [a for a in assets if a.asset_type == Asset.AssetType.TRACK]
+    if len(track_assets) > 1:
+        parents = set()
+        for t in track_assets:
+            parents.add(t.parent_id if t.parent_id else t.pk)
+        if len(parents) > 1:
+            return JsonResponse({'error': 'Only one track group per reservation.'}, status=400)
 
-    if start_dt >= end_dt:
-        return JsonResponse({'error': 'End time must be after start time.'}, status=400)
+    # Parse times for scheduled events
+    start_time = None
+    end_time = None
+    if not is_impromptu:
+        start_time = parse_api_datetime(body.get('start_time'))
+        end_time = parse_api_datetime(body.get('end_time'))
+        if not start_time or not end_time:
+            return JsonResponse({'error': 'start_time and end_time are required for scheduled events.'}, status=400)
+        if start_time >= end_time:
+            return JsonResponse({'error': 'End time must be after start time.'}, status=400)
 
-    conflicts = get_asset_conflicts(track, start_dt, end_dt, approved_only=True)
-    if conflicts.exists() and not confirmed:
-        return JsonResponse({
-            'requires_confirmation': True,
-            'conflicts': [
-                {
-                    'id': c.pk,
-                    'title': c.title,
-                    'start_time': localtime(c.start_time).isoformat(),
-                    'end_time': localtime(c.end_time).isoformat(),
-                }
-                for c in conflicts[:5]
-            ]
-        })
+        # Conflict detection using shared helper
+        for asset in assets:
+            conflicts = get_asset_conflicts(asset, start_time, end_time, approved_only=True)
+            if conflicts.exists():
+                conflict = conflicts.first()
+                return JsonResponse({
+                    'error': f'Scheduling conflict: "{conflict.title}" already has a conflicting booking.'
+                }, status=400)
 
-    ev = Event.objects.create(
+    # For impromptu events, check for active events on the same track(s).
+    # First, auto-close any stale open segments from previous days.
+    now = timezone.now()
+    today = localtime(now).date()
+    confirmed = bool(body.get('confirmed', False))
+
+    if is_impromptu:
+        conflict_ids = set()
+        for asset in assets:
+            conflict_ids.update(asset.conflicting_asset_ids())
+
+        # Auto-stop stale segments from previous days
+        stale_segments = ActualTimeSegment.objects.filter(
+            event__assets__in=conflict_ids,
+            end__isnull=True,
+        ).exclude(start__date=today)
+        for seg in stale_segments:
+            # Close at end of the day the segment started
+            seg.end = seg.start.replace(hour=23, minute=59, second=59)
+            seg.save(update_fields=['end'])
+
+        # Now check for today's active events only
+        if not confirmed:
+            active_events = list(
+                Event.objects.filter(
+                    assets__in=conflict_ids,
+                    is_approved=True,
+                    segments__end__isnull=True,
+                    segments__start__date=today,
+                ).distinct()[:5]
+            )
+            if active_events:
+                return JsonResponse({
+                    'requires_confirmation': True,
+                    'active_events': [
+                        {'id': ae.pk, 'title': ae.title}
+                        for ae in active_events
+                    ],
+                    'message': (
+                        f'"{active_events[0].title}" is currently active on this track '
+                        f'and will be paused if you continue.'
+                        if len(active_events) == 1 else
+                        f'{len(active_events)} events are currently active on this track '
+                        f'and will be paused if you continue.'
+                    ),
+                }, status=409)
+
+        # If confirmed, pause today's active events first
+        if confirmed:
+            active_events = Event.objects.filter(
+                assets__in=conflict_ids,
+                is_approved=True,
+                segments__end__isnull=True,
+                segments__start__date=today,
+            ).distinct()
+            for ae in active_events:
+                open_seg = ae.segments.filter(end__isnull=True).first()
+                if open_seg:
+                    open_seg.end = now
+                    open_seg.save(update_fields=['end'])
+
+    ev = Event(
         title=title,
-        start_time=start_dt,
-        end_time=end_dt,
-        is_impromptu=True,
-        is_approved=True,
+        description=description,
+        is_impromptu=is_impromptu,
+        start_time=start_time,      # None for impromptu
+        end_time=end_time,          # None for impromptu
         created_by=request.user,
+        is_approved=True,
     )
-    ev.assets.add(track)
+    ev.save()
+    ev.assets.set(assets)
+
+    # For impromptu events, open a segment immediately (v1.1 segment model)
+    if is_impromptu:
+        ActualTimeSegment.objects.create(event=ev, start=now)
+
+    # Inherit radio channel from track
+    if ev.radio_channel is None and track_assets:
+        track = track_assets[0]
+        channel = track.radio_channel
+        if channel is None and track.parent_id:
+            channel = track.parent.radio_channel
+        if channel is not None:
+            ev.radio_channel = channel
+            ev.save(update_fields=['radio_channel'])
 
     return JsonResponse({
         'id': ev.pk,
-        'is_impromptu': True,
-        'is_approved': True,
+        'title': ev.title,
+        'is_impromptu': ev.is_impromptu,
+        'is_approved': ev.is_approved,
     }, status=201)
 
 
@@ -893,7 +1047,7 @@ def dashboard_stamp_actual(request, event_id):
     if action == 'start':
         # Validation
         if custom_time:
-            event_date = event.start_time.date()
+            event_date = event.start_time.date() if event.start_time else localtime(timezone.now()).date()
             event_midnight = timezone.make_aware(datetime.combine(event_date, datetime.min.time()))
             if custom_time < event_midnight - timedelta(hours=24) or custom_time > event_midnight + timedelta(hours=48):
                 return JsonResponse(

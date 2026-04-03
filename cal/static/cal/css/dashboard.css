@@ -946,7 +946,7 @@ html.dark-theme .date-input:hover {
 
 
 /* ============================================================
-   Event Popup
+   Quick Add Event Modal
    ============================================================ */
 .event-popup-overlay {
   position: fixed;
@@ -959,14 +959,14 @@ html.dark-theme .event-popup-overlay { background: rgba(0,0,0,0.45); }
   position: fixed;
   width: 300px;
   max-width: calc(100vw - 24px);
-  background: var(--card);
-  border: 1px solid var(--border);
+  background: var(--card, #fff);
+  border: 2px solid #34d399;
   border-radius: 12px;
-  padding: 18px;
-  box-shadow: 0 8px 28px rgba(46,168,229,0.12);
+  box-shadow: 0 8px 28px rgba(0,0,0,0.12);
+  padding: 20px;
   z-index: 1001;
 }
-html.dark-theme .event-popup-box { box-shadow: 0 8px 28px rgba(0,0,0,0.55); }
+html.dark-theme .event-popup-box { border-color: #34d399; box-shadow: 0 8px 28px rgba(52,211,153,0.15); }
 .event-popup__header {
   display: flex;
   justify-content: space-between;
@@ -976,12 +976,13 @@ html.dark-theme .event-popup-box { box-shadow: 0 8px 28px rgba(0,0,0,0.55); }
 .event-popup__title {
   font-size: 15px;
   font-weight: 700;
-  color: var(--text);
+  color: #059669;
   margin: 0 0 2px 0;
 }
+html.dark-theme .event-popup__title { color: #34d399; }
 .event-popup__track {
   font-size: 11px;
-  color: var(--primary);
+  color: var(--primary, #2563eb);
   font-weight: 600;
   letter-spacing: 0.3px;
 }
@@ -991,45 +992,89 @@ html.dark-theme .event-popup-box { box-shadow: 0 8px 28px rgba(0,0,0,0.55); }
   border: none;
   font-size: 18px;
   line-height: 1;
-  color: var(--muted);
+  color: var(--muted, #6b7280);
   cursor: pointer;
-  padding: 2px 5px;
-  border-radius: 6px;
-  transition: background 0.12s, color 0.12s;
+  padding: 2px 6px;
+  border-radius: 4px;
 }
-.event-popup__close:hover { background: var(--border); color: var(--text); }
+.event-popup__close:hover { background: var(--border, #e5e7eb); color: var(--text, #111827); }
 .modal-field { margin-bottom: 14px; }
 .modal-field label {
   display: block;
   font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.5px;
   text-transform: uppercase;
-  color: var(--muted);
-  margin-bottom: 5px;
+  letter-spacing: 0.5px;
+  color: var(--muted, #6b7280);
+  margin-bottom: 4px;
 }
-.modal-field input {
+.modal-field input,
+.modal-field textarea {
   width: 100%;
   padding: 8px 10px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--bg);
-  color: var(--text);
+  border: 1px solid var(--border, #d1d5db);
+  border-radius: 6px;
   font-size: 13px;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  background: var(--card, #fff);
+  color: var(--text, #111827);
 }
-.modal-field input:focus {
+.modal-field input:focus,
+.modal-field textarea:focus {
   outline: none;
-  border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(46,168,229,0.12);
+  border-color: #34d399;
+  box-shadow: 0 0 0 2px rgba(52,211,153,0.15);
 }
-html.dark-theme .modal-field input { background: var(--bg); border-color: var(--border); }
-html.dark-theme .modal-field input:focus { box-shadow: 0 0 0 3px rgba(96,165,250,0.1); }
+.modal-error {
+  color: #dc2626;
+  font-size: 12px;
+  margin-bottom: 10px;
+  padding: 6px 10px;
+  background: #fef2f2;
+  border-radius: 6px;
+}
+html.dark-theme .modal-error { background: rgba(220,38,38,0.1); }
 .modal-actions {
   display: flex;
+  align-items: center;
   gap: 8px;
-  justify-content: flex-end;
-  margin-top: 20px;
+  margin-top: 16px;
+}
+.modal-full-form-link {
+  font-size: 11px;
+  color: var(--muted, #6b7280);
+  margin-right: auto;
+}
+.modal-full-form-link:hover { color: var(--primary, #2563eb); }
+
+/* ── Track "+" (quick add) button ────────────────────────────── */
+.track-add-btn {
+  appearance: none;
+  background: none;
+  border: 1.5px solid #34d399;
+  color: #059669;
+  font-size: 16px;
+  font-weight: 700;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 6px;
+  transition: all 0.15s;
+}
+.track-add-btn:hover {
+  background: #059669;
+  color: #fff;
+}
+html.dark-theme .track-add-btn {
+  border-color: #34d399;
+  color: #34d399;
+}
+html.dark-theme .track-add-btn:hover {
+  background: #34d399;
+  color: #111;
 }
 
 /* ── Stamp clear (undo) button ────────────────────────────── */

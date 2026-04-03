@@ -3,6 +3,25 @@
 
 {% block extra_css %}
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+  <style>
+    .actual-segments-section { margin-top: 24px; padding: 16px; background: var(--card, #f9fafb); border: 1px solid var(--border, #e5e7eb); border-radius: 8px; }
+    .actual-segments-section h4 { margin: 0 0 12px 0; font-size: 15px; color: var(--text, #111827); }
+    .segments-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .segments-table th { text-align: left; padding: 6px 10px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted, #6b7280); border-bottom: 2px solid var(--border, #e5e7eb); }
+    .segments-table td { padding: 8px 10px; border-bottom: 1px solid var(--border, #e5e7eb); }
+    .seg-num { color: var(--muted, #6b7280); font-weight: 600; width: 30px; }
+    .seg-duration { color: var(--muted, #6b7280); white-space: nowrap; }
+    .segment-active td { background: rgba(16, 185, 129, 0.06); }
+    .seg-in-progress { color: #10b981; font-weight: 600; font-size: 12px; }
+    .seg-time-input { border: 1px solid var(--border, #d1d5db); border-radius: 4px; padding: 4px 8px; font-size: 13px; width: 150px; background: var(--card, #fff); color: var(--text, #111827); cursor: pointer; }
+    .seg-time-input:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59,130,246,0.15); }
+    .seg-save-status { font-size: 11px; margin-left: 6px; }
+    .seg-save-status.success { color: #10b981; }
+    .seg-save-status.error { color: #dc2626; }
+    .segments-total { margin-top: 10px; font-size: 13px; color: var(--muted, #6b7280); text-align: right; }
+    html.dark-theme .actual-segments-section { background: var(--card); border-color: var(--border); }
+    html.dark-theme .seg-time-input { background: var(--bg); border-color: var(--border); color: var(--text); }
+  </style>
 {% endblock %}
 
 {% block title %}{% if event %}Edit Event{% else %}New Event{% endif %}{% endblock %}
@@ -14,6 +33,9 @@
     <h2 class="page-heading">
       {% if event %}
         Edit Event
+        {% if event.is_impromptu %}
+          <span class="status-pill" style="font-size:13px;vertical-align:middle;background:linear-gradient(180deg,#f59e0b,#d97706);color:#fff;">IMPROMPTU</span>
+        {% endif %}
         {% if not event.is_approved %}
           <span class="status-pill status-inactive" style="font-size:13px;vertical-align:middle;">PENDING</span>
         {% endif %}
@@ -78,6 +100,9 @@
         </td>
       </tr>
       {% else %}
+      {% if event.is_impromptu and field.html_name == 'start_time' or event.is_impromptu and field.html_name == 'end_time' %}
+        {# Hide scheduled time fields for impromptu events #}
+      {% else %}
       <tr>
         <td><label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="required-mark">*</span>{% endif %}</label></td>
         <td>
@@ -112,6 +137,7 @@
         </td>
       </tr>
       {% endif %}
+      {% endif %}{# end impromptu time hide #}
       {% endif %}
       {% endfor %}
     </table>
@@ -122,14 +148,59 @@
 
   {% if segments %}
   <div class="actual-segments-section">
-    <h4>Actual Time Segments</h4>
-    {% for seg in segments %}
-    <div class="actual-segment">
-      <span class="segment-start">{{ seg.start }}</span>
-      &mdash;
-      <span class="segment-end">{% if seg.end %}{{ seg.end }}{% else %}In progress{% endif %}</span>
+    <h4><i class="fas fa-clock"></i> Actual Time Segments</h4>
+    {% if event.is_stopped %}
+      <span class="status-pill" style="font-size:11px;background:#dc2626;color:#fff;margin-bottom:8px;display:inline-block;">STOPPED</span>
+    {% endif %}
+    <table class="segments-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Start</th>
+          <th>End</th>
+          <th>Duration</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for seg in segments %}
+        <tr class="segment-row{% if not seg.end %} segment-active{% endif %}" data-segment-id="{{ seg.pk }}">
+          <td class="seg-num">{{ forloop.counter }}</td>
+          <td class="seg-start">
+            {% if is_admin %}
+              <input type="text" class="seg-time-input" data-field="start"
+                     value="{{ seg.start|date:'Y-m-d H:i' }}" readonly>
+            {% else %}
+              {{ seg.start|date:"N j, g:i A" }}
+            {% endif %}
+          </td>
+          <td class="seg-end">
+            {% if seg.end %}
+              {% if is_admin %}
+                <input type="text" class="seg-time-input" data-field="end"
+                       value="{{ seg.end|date:'Y-m-d H:i' }}" readonly>
+              {% else %}
+                {{ seg.end|date:"N j, g:i A" }}
+              {% endif %}
+            {% else %}
+              <span class="seg-in-progress"><i class="fas fa-circle" style="color:#10b981;font-size:8px;"></i> In progress</span>
+            {% endif %}
+          </td>
+          <td class="seg-duration">
+            {% if seg.end %}
+              {{ seg.duration_display }}
+            {% else %}
+              &mdash;
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% if event.total_actual_seconds > 0 %}
+    <div class="segments-total">
+      Total actual time: <strong>{{ event.total_actual_display }}</strong>
     </div>
-    {% endfor %}
+    {% endif %}
   </div>
   {% endif %}
 
@@ -520,6 +591,78 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Set initial highlight
     updateActiveDuration();
+  }
+
+  // ── Segment inline editing (admin only) ────────────────────────────────
+  document.querySelectorAll('.seg-time-input').forEach(function(input) {
+    const row = input.closest('.segment-row');
+    const segId = row ? row.dataset.segmentId : null;
+    const field = input.dataset.field;
+    if (!segId) return;
+
+    const fp = flatpickr(input, {
+      enableTime: true,
+      noCalendar: false,
+      dateFormat: 'Y-m-d H:i',
+      time_24hr: true,
+      allowInput: true,
+      onClose: function(selectedDates) {
+        if (!selectedDates.length) return;
+        const iso = selectedDates[0].toISOString();
+        saveSegmentTime(segId, field, iso, input);
+      }
+    });
+  });
+
+  async function saveSegmentTime(segId, field, isoTime, inputEl) {
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '{{ csrf_token }}';
+    const row = inputEl.closest('.segment-row');
+    // Remove any previous status
+    const oldStatus = row.querySelector('.seg-save-status');
+    if (oldStatus) oldStatus.remove();
+
+    try {
+      const body = {};
+      body[field] = isoTime;
+      const resp = await fetch('/cal/api/segment/' + segId + '/edit/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrfToken,
+        },
+        body: JSON.stringify(body),
+      });
+      const data = await resp.json();
+      const status = document.createElement('span');
+      status.className = 'seg-save-status';
+      if (resp.ok) {
+        status.className += ' success';
+        status.textContent = 'Saved';
+        // Update duration cell
+        const durCell = row.querySelector('.seg-duration');
+        if (durCell && data.segments) {
+          const seg = data.segments.find(s => s.id === parseInt(segId));
+          if (seg && seg.end) {
+            const ms = new Date(seg.end) - new Date(seg.start);
+            const mins = Math.round(ms / 60000);
+            const h = Math.floor(mins / 60);
+            const m = mins % 60;
+            durCell.textContent = h ? (m ? h + 'h ' + m + 'm' : h + 'h') : m + 'm';
+          }
+        }
+      } else {
+        status.className += ' error';
+        status.textContent = data.error || 'Error';
+      }
+      inputEl.parentNode.appendChild(status);
+      setTimeout(() => status.remove(), 3000);
+    } catch (err) {
+      const status = document.createElement('span');
+      status.className = 'seg-save-status error';
+      status.textContent = 'Network error';
+      inputEl.parentNode.appendChild(status);
+      setTimeout(() => status.remove(), 3000);
+    }
   }
 });
 </script>

@@ -35,7 +35,12 @@ def parse_api_datetime(val, reference_event=None):
             parts = val.strip().split(':')
             if len(parts) == 2:
                 h, m = int(parts[0]), int(parts[1])
-                event_date = reference_event.start_time.date()
+                if reference_event.start_time:
+                    event_date = reference_event.start_time.date()
+                else:
+                    # Impromptu events: use first segment's date or today
+                    first_seg = reference_event.segments.order_by('start').first()
+                    event_date = first_seg.start.date() if first_seg else timezone.now().date()
                 naive = datetime.combine(
                     event_date,
                     datetime.min.time().replace(hour=h, minute=m),
@@ -64,10 +69,10 @@ def validate_radio_channel(request_body):
             ch = int(ch)
         except (ValueError, TypeError):
             return None, JsonResponse(
-                {'error': 'Channel must be an integer (11\u201316) or null.'},
+                {'error': 'Channel must be an integer (1\u201316) or null.'},
                 status=400,
             )
-        if ch < 11 or ch > 16:
+        if ch < 1 or ch > 16:
             return None, JsonResponse(
                 {'error': 'Channel must be between 11 and 16.'},
                 status=400,

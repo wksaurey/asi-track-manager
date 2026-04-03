@@ -20,7 +20,15 @@
     .seg-save-status.error { color: #dc2626; }
     .segments-total { margin-top: 10px; font-size: 13px; color: var(--muted, #6b7280); text-align: right; }
     html.dark-theme .actual-segments-section { background: var(--card); border-color: var(--border); }
-    html.dark-theme .seg-time-input { background: var(--bg); border-color: var(--border); color: var(--text); }
+    html.dark-theme .actual-segments-section h4 { color: #e5e7eb; }
+    html.dark-theme .segments-table th { color: #9ca3af; border-bottom-color: #4b5563; }
+    html.dark-theme .segments-table td { color: #d1d5db; border-bottom-color: #374151; }
+    html.dark-theme .seg-num { color: #9ca3af; }
+    html.dark-theme .seg-duration { color: #9ca3af; }
+    html.dark-theme .segments-total { color: #9ca3af; }
+    html.dark-theme .seg-time-input { background: var(--bg); border-color: #4b5563; color: #e5e7eb; }
+    html.dark-theme .seg-in-progress { color: #34d399; }
+    html.dark-theme .segment-active td { background: rgba(52, 211, 153, 0.08); }
   </style>
 {% endblock %}
 
@@ -100,28 +108,30 @@
         </td>
       </tr>
       {% else %}
-      {% if event.is_impromptu and field.html_name == 'start_time' or event.is_impromptu and field.html_name == 'end_time' %}
-        {# Hide scheduled time fields for impromptu events #}
-      {% else %}
+      {% if event.is_impromptu and field.html_name == 'start_time_only' or event.is_impromptu and field.html_name == 'end_time_only' %}
+        {# Hide scheduled start/end time fields for impromptu events #}
+      {% elif field.html_name == 'event_date' %}
       <tr>
-        <td><label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="required-mark">*</span>{% endif %}</label></td>
+        <td><label for="{{ field.id_for_label }}">Date</label></td>
+        <td>{{ field }}</td>
+      </tr>
+      {% elif field.html_name == 'start_time_only' %}
+      <tr>
+        <td><label for="{{ field.id_for_label }}">Start time</label></td>
         <td>
-          {% if field.html_name == 'start_time' %}
           <div class="start-time-row">
             {{ field }}
             <button type="button" class="btn btn-now" id="btn-now" title="Set to current time">
               <i class="fas fa-clock"></i> Now
             </button>
           </div>
-          {% else %}
-          {{ field }}
-          {% endif %}
-          {% if field.help_text %}
-            <small class="field-help">{{ field.help_text }}</small>
-          {% endif %}
         </td>
       </tr>
-      {% if field.html_name == 'end_time' %}
+      {% elif field.html_name == 'end_time_only' %}
+      <tr>
+        <td><label for="{{ field.id_for_label }}">End time</label></td>
+        <td>{{ field }}</td>
+      </tr>
       <tr>
         <td><label>Duration</label></td>
         <td>
@@ -136,9 +146,18 @@
           </div>
         </td>
       </tr>
-      {% endif %}
-      {% endif %}{# end impromptu time hide #}
-      {% endif %}
+      {% else %}{# other fields: title, description, radio_channel, etc. #}
+      <tr>
+        <td><label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="required-mark">*</span>{% endif %}</label></td>
+        <td>
+          {{ field }}
+          {% if field.help_text %}
+            <small class="field-help">{{ field.help_text }}</small>
+          {% endif %}
+        </td>
+      </tr>
+      {% endif %}{# end impromptu/start/end/other #}
+      {% endif %}{# end assets check #}
       {% endfor %}
     </table>
 
@@ -168,18 +187,18 @@
           <td class="seg-start">
             {% if is_admin %}
               <input type="text" class="seg-time-input" data-field="start"
-                     value="{{ seg.start|date:'Y-m-d H:i' }}" readonly>
+                     value="{{ seg.start|date:'H:i' }}" readonly>
             {% else %}
-              {{ seg.start|date:"N j, g:i A" }}
+              {{ seg.start|date:"g:i A" }}
             {% endif %}
           </td>
           <td class="seg-end">
             {% if seg.end %}
               {% if is_admin %}
                 <input type="text" class="seg-time-input" data-field="end"
-                       value="{{ seg.end|date:'Y-m-d H:i' }}" readonly>
+                       value="{{ seg.end|date:'H:i' }}" readonly>
               {% else %}
-                {{ seg.end|date:"N j, g:i A" }}
+                {{ seg.end|date:"g:i A" }}
               {% endif %}
             {% else %}
               <span class="seg-in-progress"><i class="fas fa-circle" style="color:#10b981;font-size:8px;"></i> In progress</span>
@@ -452,84 +471,76 @@ document.addEventListener('DOMContentLoaded', function () {
   }
   // ── End asset picker ───────────────────────────────────────────────────
 
-  // ── Flatpickr date/time pickers ────────────────────────────────────────
-  const fpOpts = {
-    enableTime:    true,
-    dateFormat:    'Y-m-d\\TH:i',      // value submitted to Django
-    altInput:      true,
-    altFormat:     'F j, Y  \\a\\t  h:i K',  // friendly display
-    altInputClass: 'form-control flatpickr-display',
-    minuteIncrement: 15,
-    time_24hr:     false,
-  };
-
-  // Helper: get current time in the app timezone as a Date usable by Flatpickr.
-  // Returns a Date whose local-time components represent the app timezone,
-  // so Flatpickr displays and submits the correct values.
+  // ── Flatpickr pickers (date + time are real Django fields, no sync needed) ──
   const APP_TZ = JSON.parse(document.getElementById('app-timezone').textContent);
   function easternNow() {
     return new Date(new Date().toLocaleString('en-US', { timeZone: APP_TZ }));
   }
 
-  // Compute default start/end times for new events only
-  const startInput = document.getElementById('id_start_time');
-  const endInput   = document.getElementById('id_end_time');
+  const dateInput = document.getElementById('event-date');
+  const startTimeInput = document.getElementById('event-start-time');
+  const endTimeInput = document.getElementById('event-end-time');
 
-  let endOpts;
-  if (!startInput.value) {
+  // Set defaults for new events (fields are empty)
+  if (dateInput && !dateInput.value) {
     const etNow = easternNow();
-    const mins  = etNow.getMinutes();
-    // Round UP strictly to next half-hour boundary
-    let nextMin;
-    if (mins < 30) {
-      nextMin = 30;
-    } else {
-      nextMin = 60;  // will roll over to next hour
-    }
-
-    // Use ?date=YYYY-MM-DD from the URL (set when clicking a calendar day)
     const dateParam = new URLSearchParams(window.location.search).get('date');
-    let baseYear, baseMonth, baseDay;
     if (dateParam) {
-      const parts = dateParam.split('-');
-      baseYear  = parseInt(parts[0], 10);
-      baseMonth = parseInt(parts[1], 10) - 1;  // 0-indexed
-      baseDay   = parseInt(parts[2], 10);
+      dateInput.value = dateParam;
     } else {
-      baseYear  = etNow.getFullYear();
-      baseMonth = etNow.getMonth();
-      baseDay   = etNow.getDate();
+      const y = etNow.getFullYear();
+      const m = String(etNow.getMonth() + 1).padStart(2, '0');
+      const d = String(etNow.getDate()).padStart(2, '0');
+      dateInput.value = `${y}-${m}-${d}`;
     }
-
-    const defStart = new Date(baseYear, baseMonth, baseDay, etNow.getHours(), nextMin, 0, 0);
-    const defEnd = new Date(defStart.getTime() + 60 * 60 * 1000);
-    fpOpts.defaultDate = defStart;
-    endOpts = Object.assign({}, fpOpts, { defaultDate: defEnd });
-  } else {
-    endOpts = Object.assign({}, fpOpts);
+    // Round start to next half-hour
+    const mins = etNow.getMinutes();
+    const nextMin = mins < 30 ? 30 : 0;
+    const nextHr = mins < 30 ? etNow.getHours() : etNow.getHours() + 1;
+    if (startTimeInput) startTimeInput.value = String(nextHr).padStart(2, '0') + ':' + String(nextMin).padStart(2, '0');
+    if (endTimeInput) endTimeInput.value = String(nextHr + 1).padStart(2, '0') + ':' + String(nextMin).padStart(2, '0');
   }
 
-  const fpStart = flatpickr('#id_start_time', fpOpts);
-  const fpEnd   = flatpickr('#id_end_time',   endOpts);
+  // Attach Flatpickr to each field — they write directly to the input Django reads
+  const fpDate = dateInput ? flatpickr(dateInput, {
+    dateFormat: 'Y-m-d',
+    altInput: true,
+    altFormat: 'F j, Y',
+    altInputClass: 'form-control flatpickr-display',
+  }) : null;
 
-  // Ensure defaultDate values are written to the hidden inputs
-  if (fpOpts.defaultDate) fpStart.setDate(fpOpts.defaultDate, true);
-  if (endOpts.defaultDate) fpEnd.setDate(endOpts.defaultDate, true);
+  const fpStartTime = startTimeInput ? flatpickr(startTimeInput, {
+    enableTime: true,
+    noCalendar: true,
+    dateFormat: 'H:i',
+    altInput: true,
+    altFormat: 'h:i K',
+    altInputClass: 'form-control flatpickr-display',
+    minuteIncrement: 15,
+    time_24hr: false,
+  }) : null;
 
-  // "Now" button — sets start time to current Eastern Time (rounded to nearest minute)
+  const fpEndTime = endTimeInput ? flatpickr(endTimeInput, {
+    enableTime: true,
+    noCalendar: true,
+    dateFormat: 'H:i',
+    altInput: true,
+    altFormat: 'h:i K',
+    altInputClass: 'form-control flatpickr-display',
+    minuteIncrement: 15,
+    time_24hr: false,
+  }) : null;
+
+  // "Now" button — sets start time to current time (rounded to minute)
   const btnNow = document.getElementById('btn-now');
-  if (btnNow) {
+  if (btnNow && fpStartTime) {
     btnNow.addEventListener('click', function() {
       const etNow = easternNow();
-      etNow.setSeconds(0, 0);
-      fpStart.setDate(etNow, true);
+      const h = String(etNow.getHours()).padStart(2, '0');
+      const m = String(etNow.getMinutes()).padStart(2, '0');
+      fpStartTime.setDate(h + ':' + m, true);
     });
   }
-
-  // Auto-set end minimum to match start so you can't pick an earlier end time
-  fpStart.config.onChange.push(function(dates) {
-    if (dates[0]) fpEnd.set('minDate', dates[0]);
-  });
 
   // ── Duration quick-select buttons ──────────────────────────────────────
   const durationRow = document.getElementById('duration-row');
@@ -547,13 +558,16 @@ document.addEventListener('DOMContentLoaded', function () {
       return h + 'h ' + m + 'm';
     }
 
+    function parseHHMM(str) {
+      if (!str) return null;
+      const p = str.split(':');
+      return parseInt(p[0], 10) * 60 + parseInt(p[1], 10);
+    }
+
     function updateActiveDuration() {
-      const startDates = fpStart.selectedDates;
-      const endDates   = fpEnd.selectedDates;
-      const diffMs     = (startDates.length && endDates.length)
-                       ? endDates[0].getTime() - startDates[0].getTime()
-                       : null;
-      const diffMins   = diffMs !== null ? Math.round(diffMs / 60000) : null;
+      const startMins = parseHHMM(fpStartTime.input.value);
+      const endMins   = parseHHMM(fpEndTime.input.value);
+      const diffMins  = (startMins !== null && endMins !== null) ? endMins - startMins : null;
 
       let presetMatch = false;
       durationBtns.forEach(btn => {
@@ -575,25 +589,27 @@ document.addEventListener('DOMContentLoaded', function () {
 
     durationBtns.forEach(btn => {
       btn.addEventListener('click', () => {
-        const minutes    = parseInt(btn.getAttribute('data-minutes'), 10);
-        const startDates = fpStart.selectedDates;
-        if (!startDates.length) return; // no start time set yet
+        const minutes  = parseInt(btn.getAttribute('data-minutes'), 10);
+        const startMins = parseHHMM(fpStartTime.input.value);
+        if (startMins === null) return;
 
-        const newEnd = new Date(startDates[0].getTime() + minutes * 60000);
-        fpEnd.setDate(newEnd, true);
+        const endMins = startMins + minutes;
+        const endH = String(Math.floor(endMins / 60) % 24).padStart(2, '0');
+        const endM = String(endMins % 60).padStart(2, '0');
+        fpEndTime.setDate(endH + ':' + endM, true);
         updateActiveDuration();
       });
     });
 
     // Update highlight whenever start or end changes
-    fpStart.config.onChange.push(updateActiveDuration);
-    fpEnd.config.onChange.push(updateActiveDuration);
+    fpStartTime.config.onChange.push(updateActiveDuration);
+    fpEndTime.config.onChange.push(updateActiveDuration);
 
     // Set initial highlight
     updateActiveDuration();
   }
 
-  // ── Segment inline editing (admin only) ────────────────────────────────
+  // ── Segment inline editing (admin only, time-only) ─────────────────────
   document.querySelectorAll('.seg-time-input').forEach(function(input) {
     const row = input.closest('.segment-row');
     const segId = row ? row.dataset.segmentId : null;
@@ -602,14 +618,18 @@ document.addEventListener('DOMContentLoaded', function () {
 
     const fp = flatpickr(input, {
       enableTime: true,
-      noCalendar: false,
-      dateFormat: 'Y-m-d H:i',
-      time_24hr: true,
-      allowInput: true,
+      noCalendar: true,
+      dateFormat: 'H:i',
+      altInput: true,
+      altFormat: 'h:i K',
+      altInputClass: 'form-control seg-time-input',
+      time_24hr: false,
       onClose: function(selectedDates) {
         if (!selectedDates.length) return;
-        const iso = selectedDates[0].toISOString();
-        saveSegmentTime(segId, field, iso, input);
+        // Send as HH:MM — the server's parse_api_datetime will combine with event date
+        const h = String(selectedDates[0].getHours()).padStart(2, '0');
+        const m = String(selectedDates[0].getMinutes()).padStart(2, '0');
+        saveSegmentTime(segId, field, h + ':' + m, input);
       }
     });
   });

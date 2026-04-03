@@ -38,7 +38,7 @@ TRACK_COLOR_PALETTE = [
 ]
 
 # Radio channel choices shared by Asset and Event models.
-RADIO_CHANNEL_CHOICES = [(ch, f'Ch {ch}') for ch in range(11, 17)]
+RADIO_CHANNEL_CHOICES = [(ch, f'Ch {ch}') for ch in range(1, 17)]
 
 
 class Asset(models.Model):

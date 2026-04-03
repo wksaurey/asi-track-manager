@@ -86,21 +86,13 @@ Trunk-based flow. Two contributors: Kolter and Hollis.
 - Never work on parallel long-lived branches — separate features from the same base
 - `git pull --rebase origin main` before starting work and before opening PRs
 
-**Commits:**
-- One logical change per commit. Kitchen-sink messages (commas listing multiple features) = split it
-- Conventional prefixes: `feat:`, `fix:`, `docs:`, `test:`, `chore:`, `refactor:`
-- Run `python3 manage.py test` before committing
-- Never mix formatting/whitespace changes with feature changes
+**Commits:** Use `/commit` skill — enforces atomic commits, conventional prefixes, test-before-commit, and split detection.
 
 **PRs:**
 - Small: under ~400 lines changed, reviewable in 15 minutes
 - Description says WHY, not just what
 - Kolter and Hollis review each other before merging
-
-**AI guardrails:**
-- If staging a changeset that spans multiple features, proactively suggest splitting into separate commits
 - Before `/ship`, check diff size and warn if over ~400 lines
-- A kitchen-sink commit message is a signal to split, not a feature
 
 ## gstack
 

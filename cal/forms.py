@@ -119,44 +119,55 @@ class EventForm(ModelForm):
     """
     Model form for creating / editing an Event.
 
-    Custom behaviour:
-    - start_time and end_time use plain TextInput widgets so the Flatpickr
-      JavaScript date-picker can attach to them in the template.
-    - The assets field renders as a grouped checkbox list.
-    - ``clean()`` enforces two rules:
-        1. End time must be strictly after start time.
-        2. No two events may book the same asset for overlapping time slots
-           (the current event is excluded when editing).
-        3. Subtrack conflict rules: booking a parent conflicts with its
-           subtracks and vice versa; siblings do NOT conflict.
+    Uses three explicit fields — event_date, start_time_only, end_time_only —
+    instead of the model's start_time/end_time DateTimeFields. The clean()
+    method combines date + time into start_time/end_time on the server side,
+    eliminating any JS sync bugs.
     """
+
+    # Explicit date and time fields (not on the model)
+    event_date      = forms.DateField(
+        required=False,
+        widget=TextInput(attrs={'autocomplete': 'off', 'placeholder': 'Pick a date...', 'id': 'event-date'}),
+        input_formats=['%Y-%m-%d'],
+    )
+    start_time_only = forms.TimeField(
+        required=False,
+        widget=TextInput(attrs={'autocomplete': 'off', 'placeholder': 'Start time', 'id': 'event-start-time'}),
+        input_formats=['%H:%M'],
+    )
+    end_time_only   = forms.TimeField(
+        required=False,
+        widget=TextInput(attrs={'autocomplete': 'off', 'placeholder': 'End time', 'id': 'event-end-time'}),
+        input_formats=['%H:%M'],
+    )
 
     class Meta:
         model = Event
         widgets = {
-            'start_time': TextInput(attrs={'autocomplete': 'off', 'placeholder': 'Pick date & time…'}),
-            'end_time':   TextInput(attrs={'autocomplete': 'off', 'placeholder': 'Pick date & time…'}),
-            'assets':     CheckboxSelectMultiple(attrs={'class': 'asset-checklist'}),
+            'assets': CheckboxSelectMultiple(attrs={'class': 'asset-checklist'}),
         }
-        fields = ['title', 'description', 'start_time', 'end_time', 'assets', 'radio_channel']
+        fields = ['title', 'description', 'assets', 'radio_channel']
+
+    field_order = ['title', 'description', 'event_date', 'start_time_only', 'end_time_only', 'assets', 'radio_channel']
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Flatpickr submits dates in ISO-like format (e.g. '2026-03-12T14:30')
-        self.fields['start_time'].input_formats = ('%Y-%m-%dT%H:%M',)
-        self.fields['end_time'].input_formats   = ('%Y-%m-%dT%H:%M',)
-        # Keep the full queryset so ModelMultipleChoiceField validation works.
-        # Override the field's choices to use the grouped structure for display.
-        # Django ModelMultipleChoiceField allows setting .choices directly;
-        # this is stored as _choices and returned by the choices property,
-        # bypassing the default ModelChoiceIterator while keeping queryset intact.
+        # Pre-populate date/time fields from existing instance
+        if self.instance and self.instance.pk:
+            if self.instance.start_time:
+                lt = localtime(self.instance.start_time)
+                self.fields['event_date'].initial = lt.date()
+                self.fields['start_time_only'].initial = lt.time()
+            if self.instance.end_time:
+                self.fields['end_time_only'].initial = localtime(self.instance.end_time).time()
+
         self.fields['assets'].queryset = Asset.objects.all()
         self.fields['assets'].choices = _build_grouped_asset_choices()
-        # Configure radio_channel dropdown with a "Use track default" empty label
         self.fields['radio_channel'].choices = [('', 'Use track default')] + RADIO_CHANNEL_CHOICES
         self.fields['radio_channel'].label = 'Radio Channel'
         self.fields['radio_channel'].required = False
-        # Add Bootstrap form-control to all fields except the checkbox group
+        # Bootstrap form-control on all fields except checkboxes
         for name, field in self.fields.items():
             if name == 'assets':
                 continue
@@ -164,18 +175,39 @@ class EventForm(ModelForm):
             field.widget.attrs['class'] = (existing + ' form-control').strip()
 
     def clean(self):
-        """Validate time ordering and check for asset scheduling conflicts."""
-        cleaned    = super().clean()
-        assets     = cleaned.get('assets')      # QuerySet of selected Asset objects
+        """Combine date + time fields, validate ordering and conflicts."""
+        cleaned = super().clean()
+        assets  = cleaned.get('assets')
+
+        event_date = cleaned.get('event_date')
+        start_time_only = cleaned.get('start_time_only')
+        end_time_only = cleaned.get('end_time_only')
+
+        # Combine date + time into model's start_time/end_time
+        if event_date and start_time_only:
+            from django.utils.timezone import make_aware
+            from datetime import datetime as dt
+            naive_start = dt.combine(event_date, start_time_only)
+            cleaned['start_time'] = make_aware(naive_start)
+        else:
+            cleaned['start_time'] = None
+
+        if event_date and end_time_only:
+            from django.utils.timezone import make_aware
+            from datetime import datetime as dt
+            naive_end = dt.combine(event_date, end_time_only)
+            cleaned['end_time'] = make_aware(naive_end)
+        else:
+            cleaned['end_time'] = None
+
         start_time = cleaned.get('start_time')
-        end_time   = cleaned.get('end_time')
+        end_time = cleaned.get('end_time')
 
         # At least one asset must be selected
         if 'assets' in cleaned and not assets:
             self.add_error('assets', 'At least one asset (track, vehicle, or operator) must be selected.')
 
-        # Only one track group per reservation: multiple subtracks of the same
-        # parent are OK, but mixing different parent tracks is not.
+        # Single track group rule
         if assets:
             track_assets = [a for a in assets if a.asset_type == Asset.AssetType.TRACK]
             if len(track_assets) > 1:
@@ -189,9 +221,7 @@ class EventForm(ModelForm):
         if start_time and end_time and start_time >= end_time:
             raise ValidationError('End time must be after start time.')
 
-
         # Conflict check — warn only, don't block saves.
-        # Hard-blocking moved to the approval step (event_approve view).
         if assets and start_time and end_time:
             from cal.utils import get_asset_conflicts
             exclude_id = self.instance.pk if self.instance and self.instance.pk else None
@@ -211,6 +241,16 @@ class EventForm(ModelForm):
                     break
 
         return cleaned
+
+    def save(self, commit=True):
+        """Write the combined start_time/end_time to the model before saving."""
+        instance = super().save(commit=False)
+        instance.start_time = self.cleaned_data.get('start_time')
+        instance.end_time = self.cleaned_data.get('end_time')
+        if commit:
+            instance.save()
+            self.save_m2m()
+        return instance
 
 
 class FeedbackForm(ModelForm):

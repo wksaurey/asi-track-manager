@@ -124,7 +124,8 @@ ul { list-style: none; padding: 0; margin: 0; }
 .site-nav-links a:last-child { border-right: none; }
 .site-nav-links a:hover { color: #fff; text-decoration: none; }
 .site-nav-user  { display: flex; align-items: center; gap: 12px; }
-.nav-user-name  { color: rgba(255,255,255,0.9); font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 6px; }
+.nav-user-name  { color: rgba(255,255,255,0.9); font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 6px; transition: background 150ms; }
+a.nav-user-name:hover { background: rgba(255,255,255,0.12); text-decoration: none; color: #fff; }
 .admin-chip     { background: rgba(245,158,11,0.25); color: #fff; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 999px; }
 .nav-logout     { color: rgba(255,255,255,0.6) !important; font-size: 13px; transition: color 120ms; display: flex; align-items: center; gap: 4px; }
 .nav-logout:hover { color: #fff !important; text-decoration: none; }

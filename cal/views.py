@@ -297,17 +297,19 @@ def pending_events(request):
     events = Event.objects.filter(is_approved=False).order_by('start_time').prefetch_related('assets')
 
     for ev in events:
-        has_conflict = False
+        conflict_events = []
+        seen_pks = set()
         if ev.start_time and ev.end_time:
             for asset in ev.assets.all():
-                conflicts = get_asset_conflicts(
+                for c in get_asset_conflicts(
                     asset, ev.start_time, ev.end_time,
                     exclude_event_id=ev.pk, approved_only=True,
-                )
-                if conflicts.exists():
-                    has_conflict = True
-                    break
-        ev.has_conflict = has_conflict
+                ):
+                    if c.pk not in seen_pks:
+                        seen_pks.add(c.pk)
+                        conflict_events.append(c)
+        ev.has_conflict = len(conflict_events) > 0
+        ev.conflict_events = conflict_events
 
     return render(request, 'cal/pending_events.html', {'events': events})
 
@@ -608,24 +610,43 @@ def mass_approve_events(request):
     if not event_ids:
         return JsonResponse({'error': 'No events specified'}, status=400)
 
-    pending = Event.objects.filter(
+    pending = list(Event.objects.filter(
         pk__in=event_ids, is_approved=False,
-    ).prefetch_related('assets')
+    ).prefetch_related('assets'))
+
+    # First pass: identify ALL events with conflicts (approved or within batch)
+    conflict_pks = set()
+    for ev in pending:
+        if not ev.start_time or not ev.end_time:
+            continue
+        for asset in ev.assets.all():
+            # Check against already-approved events
+            approved_conflicts = get_asset_conflicts(
+                asset, ev.start_time, ev.end_time,
+                exclude_event_id=ev.pk, approved_only=True,
+            )
+            if approved_conflicts.exists():
+                conflict_pks.add(ev.pk)
+                break
+            # Check against other pending events in this batch
+            for other in pending:
+                if other.pk == ev.pk or not other.start_time or not other.end_time:
+                    continue
+                other_asset_ids = {a.pk for a in other.assets.all()}
+                conflict_ids = asset.conflicting_asset_ids()
+                if (conflict_ids & other_asset_ids and
+                        ev.start_time < other.end_time and ev.end_time > other.start_time):
+                    conflict_pks.add(ev.pk)
+                    conflict_pks.add(other.pk)
+                    break
+            if ev.pk in conflict_pks:
+                break
+
+    # Second pass: approve clean events, skip conflicting ones
     approved_count = 0
     skipped = []
-
     for ev in pending:
-        has_conflict = False
-        if ev.start_time and ev.end_time:
-            for asset in ev.assets.all():
-                conflicts = get_asset_conflicts(
-                    asset, ev.start_time, ev.end_time,
-                    exclude_event_id=ev.pk, approved_only=True,
-                )
-                if conflicts.exists():
-                    has_conflict = True
-                    break
-        if has_conflict:
+        if ev.pk in conflict_pks:
             skipped.append({
                 'id': ev.pk, 'title': ev.title, 'reason': 'Booking conflict',
             })

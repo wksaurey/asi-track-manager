@@ -138,8 +138,9 @@ class EventFormDurationTest(TestCase):
         return {
             'title': 'Test',
             'description': 'desc',
-            'start_time': self.start.strftime('%Y-%m-%dT%H:%M'),
-            'end_time': end.strftime('%Y-%m-%dT%H:%M'),
+            'event_date': self.start.strftime('%Y-%m-%d'),
+            'start_time_only': self.start.strftime('%H:%M'),
+            'end_time_only': end.strftime('%H:%M'),
             'assets': [self.asset.pk],
         }
 
@@ -239,8 +240,9 @@ class EventEditOwnershipTest(TestCase):
         url = reverse('cal:event_edit', args=[self.event.pk])
         response = self.client.post(url, {
             'title': 'Hacked',
-            'start_time': self.start.strftime('%Y-%m-%dT%H:%M'),
-            'end_time': self.end.strftime('%Y-%m-%dT%H:%M'),
+            'event_date': self.start.strftime('%Y-%m-%d'),
+            'start_time_only': self.start.strftime('%H:%M'),
+            'end_time_only': self.end.strftime('%H:%M'),
         })
         self.assertEqual(response.status_code, 302)
         self.event.refresh_from_db()
@@ -291,8 +293,9 @@ class EventFormAssetRequiredTest(TestCase):
         form = EventForm(data={
             'title': 'Test Event',
             'description': 'desc',
-            'start_time': self.start.strftime('%Y-%m-%dT%H:%M'),
-            'end_time': self.end.strftime('%Y-%m-%dT%H:%M'),
+            'event_date': self.start.strftime('%Y-%m-%d'),
+            'start_time_only': self.start.strftime('%H:%M'),
+            'end_time_only': self.end.strftime('%H:%M'),
             'assets': [],
         })
         self.assertFalse(form.is_valid())
@@ -485,10 +488,10 @@ class EventFormDefaultDateTest(TestCase):
         self.assertEqual(response.status_code, 200)
 
     def test_event_new_contains_default_date_js(self):
-        """Response for GET /cal/event/new/ must include 'defaultDate' in the page source."""
+        """Response for GET /cal/event/new/ must include the date/time field IDs."""
         self.client.login(username='employee', password='Testpass123!')
         response = self.client.get(reverse('cal:event_new'))
-        self.assertContains(response, 'defaultDate')
+        self.assertContains(response, 'event-date')
 
 
 class DarkModeCSSTest(TestCase):
@@ -960,13 +963,14 @@ class SubtrackConflictDetectionTest(TestCase):
         return ev
 
     def _form_data(self, asset, start=None, end=None):
-        s = (start or self.start).strftime('%Y-%m-%dT%H:%M')
-        e = (end or self.end).strftime('%Y-%m-%dT%H:%M')
+        s = start or self.start
+        e = end or self.end
         return {
             'title': 'New Event',
             'description': 'Test event description',
-            'start_time': s,
-            'end_time': e,
+            'event_date': s.strftime('%Y-%m-%d'),
+            'start_time_only': s.strftime('%H:%M'),
+            'end_time_only': e.strftime('%H:%M'),
             'assets': [asset.pk],
         }
 
@@ -1514,8 +1518,9 @@ class EventDescriptionOptionalTest(TestCase):
         form = EventForm(data={
             'title': 'Test',
             'description': '',
-            'start_time': self.start.strftime('%Y-%m-%dT%H:%M'),
-            'end_time': self.end.strftime('%Y-%m-%dT%H:%M'),
+            'event_date': self.start.strftime('%Y-%m-%d'),
+            'start_time_only': self.start.strftime('%H:%M'),
+            'end_time_only': self.end.strftime('%H:%M'),
             'assets': [self.asset.pk],
         })
         self.assertTrue(form.is_valid(), form.errors)
@@ -1526,8 +1531,9 @@ class EventDescriptionOptionalTest(TestCase):
         response = self.client.post(reverse('cal:event_new'), {
             'title': 'Test Event',
             'description': '',
-            'start_time': self.start.strftime('%Y-%m-%dT%H:%M'),
-            'end_time': self.end.strftime('%Y-%m-%dT%H:%M'),
+            'event_date': self.start.strftime('%Y-%m-%d'),
+            'start_time_only': self.start.strftime('%H:%M'),
+            'end_time_only': self.end.strftime('%H:%M'),
             'assets': [self.asset.pk],
         })
         self.assertEqual(response.status_code, 302)
@@ -1671,8 +1677,9 @@ class EventAutoApprovalTest(TestCase):
         return {
             'title': 'Auto Approval Test',
             'description': 'desc',
-            'start_time': self.start.strftime('%Y-%m-%dT%H:%M'),
-            'end_time': self.end.strftime('%Y-%m-%dT%H:%M'),
+            'event_date': self.start.strftime('%Y-%m-%d'),
+            'start_time_only': self.start.strftime('%H:%M'),
+            'end_time_only': self.end.strftime('%H:%M'),
             'assets': [self.asset.pk],
         }
 
@@ -1720,8 +1727,9 @@ class EventTouchingTimesTest(TestCase):
         form = EventForm(data={
             'title': 'Touching Block',
             'description': '',
-            'start_time': self.ten_am.strftime('%Y-%m-%dT%H:%M'),
-            'end_time': self.eleven_am.strftime('%Y-%m-%dT%H:%M'),
+            'event_date': self.ten_am.strftime('%Y-%m-%d'),
+            'start_time_only': self.ten_am.strftime('%H:%M'),
+            'end_time_only': self.eleven_am.strftime('%H:%M'),
             'assets': [self.asset.pk],
         })
         self.assertTrue(form.is_valid(), f"Touching times should not conflict. Errors: {form.errors}")
@@ -1735,8 +1743,9 @@ class EventTouchingTimesTest(TestCase):
         form = EventForm(data={
             'title': 'Overlapping Block',
             'description': '',
-            'start_time': self.ten_am.strftime('%Y-%m-%dT%H:%M'),
-            'end_time': self.noon.strftime('%Y-%m-%dT%H:%M'),
+            'event_date': self.ten_am.strftime('%Y-%m-%d'),
+            'start_time_only': self.ten_am.strftime('%H:%M'),
+            'end_time_only': self.noon.strftime('%H:%M'),
             'assets': [self.asset.pk],
         })
         self.assertTrue(form.is_valid(), f"v1.1: overlapping events should save. Errors: {form.errors}")
@@ -2244,8 +2253,9 @@ class TimezoneConsistencyTest(TestCase):
         resp = self.client.post(url, {
             'title': 'TZ Form Test',
             'description': '',
-            'start_time': '2026-04-01T14:00',
-            'end_time': '2026-04-01T15:00',
+            'event_date': '2026-04-01',
+            'start_time_only': '14:00',
+            'end_time_only': '15:00',
             'assets': [self.track.pk],
         })
         self.assertEqual(resp.status_code, 302)  # redirect on success
@@ -2608,8 +2618,9 @@ class AdminEventNoLongerAutoApprovedTest(TestCase):
         return {
             'title': title,
             'description': '',
-            'start_time': self.start.strftime('%Y-%m-%dT%H:%M'),
-            'end_time': self.end.strftime('%Y-%m-%dT%H:%M'),
+            'event_date': self.start.strftime('%Y-%m-%d'),
+            'start_time_only': self.start.strftime('%H:%M'),
+            'end_time_only': self.end.strftime('%H:%M'),
             'assets': [self.asset.pk],
         }
 
@@ -2704,8 +2715,9 @@ class ConflictDetectionOverhaulTest(TestCase):
         return {
             'title': title,
             'description': '',
-            'start_time': self.start.strftime('%Y-%m-%dT%H:%M'),
-            'end_time': self.end.strftime('%Y-%m-%dT%H:%M'),
+            'event_date': self.start.strftime('%Y-%m-%d'),
+            'start_time_only': self.start.strftime('%H:%M'),
+            'end_time_only': self.end.strftime('%H:%M'),
             'assets': [asset.pk],
         }
 
@@ -3376,12 +3388,12 @@ class EventViewSegmentDisplayTest(TestCase):
         self.assertIn('actual-segment', content)
 
     def test_event_detail_no_segments_shows_no_segment_markup(self):
-        """Event with no segments does not show segment markup."""
+        """Event with no segments does not show the segment data section."""
         url = reverse('cal:event_edit', args=[self.event.pk])
         resp = self.client.get(url)
         self.assertEqual(resp.status_code, 200)
         content = resp.content.decode()
-        self.assertNotIn('actual-segment', content)
+        self.assertNotIn('data-segment-id', content)
 
 
 # ════════════════════════════════════════════════════════════════════════════════
@@ -5072,10 +5084,10 @@ class ValidateRadioChannelTest(TestCase):
         import json as _json
         return _json.dumps({'channel': channel}).encode()
 
-    def test_valid_channel_11_returns_11(self):
-        """Channel 11 (lower bound) is accepted and returned as int."""
-        ch, err = self.validate(self._body(11))
-        self.assertEqual(ch, 11)
+    def test_valid_channel_1_returns_1(self):
+        """Channel 1 (lower bound) is accepted and returned as int."""
+        ch, err = self.validate(self._body(1))
+        self.assertEqual(ch, 1)
         self.assertIsNone(err)
 
     def test_valid_channel_16_returns_16(self):
@@ -5084,10 +5096,10 @@ class ValidateRadioChannelTest(TestCase):
         self.assertEqual(ch, 16)
         self.assertIsNone(err)
 
-    def test_valid_channel_14_returns_14(self):
-        """Channel 14 (mid-range) is accepted."""
-        ch, err = self.validate(self._body(14))
-        self.assertEqual(ch, 14)
+    def test_valid_channel_10_returns_10(self):
+        """Channel 10 (mid-range) is accepted."""
+        ch, err = self.validate(self._body(10))
+        self.assertEqual(ch, 10)
         self.assertIsNone(err)
 
     def test_null_channel_accepted(self):
@@ -5096,9 +5108,9 @@ class ValidateRadioChannelTest(TestCase):
         self.assertIsNone(ch)
         self.assertIsNone(err)
 
-    def test_channel_10_out_of_range(self):
-        """Channel 10 (below minimum) is rejected with 400 error response."""
-        ch, err = self.validate(self._body(10))
+    def test_channel_0_out_of_range(self):
+        """Channel 0 (below minimum) is rejected with 400 error response."""
+        ch, err = self.validate(self._body(0))
         self.assertIsNone(ch)
         self.assertIsNotNone(err)
         self.assertEqual(err.status_code, 400)
@@ -5288,16 +5300,16 @@ class RadioChannelChoicesTest(TestCase):
         from cal.models import RADIO_CHANNEL_CHOICES
         self.assertIsNotNone(RADIO_CHANNEL_CHOICES)
 
-    def test_radio_channel_choices_covers_11_to_16(self):
-        """RADIO_CHANNEL_CHOICES contains exactly channels 11 through 16."""
+    def test_radio_channel_choices_covers_1_to_16(self):
+        """RADIO_CHANNEL_CHOICES contains exactly channels 1 through 16."""
         from cal.models import RADIO_CHANNEL_CHOICES
         values = [ch for ch, _ in RADIO_CHANNEL_CHOICES]
-        self.assertEqual(values, list(range(11, 17)))
+        self.assertEqual(values, list(range(1, 17)))
 
-    def test_radio_channel_choices_has_six_entries(self):
-        """RADIO_CHANNEL_CHOICES has exactly 6 entries (channels 11-16)."""
+    def test_radio_channel_choices_has_sixteen_entries(self):
+        """RADIO_CHANNEL_CHOICES has exactly 16 entries (channels 1-16)."""
         from cal.models import RADIO_CHANNEL_CHOICES
-        self.assertEqual(len(RADIO_CHANNEL_CHOICES), 6)
+        self.assertEqual(len(RADIO_CHANNEL_CHOICES), 16)
 
     def test_asset_uses_radio_channel_choices(self):
         """Asset.radio_channel field uses the module-level RADIO_CHANNEL_CHOICES."""
@@ -5310,3 +5322,108 @@ class RadioChannelChoicesTest(TestCase):
         from cal.models import RADIO_CHANNEL_CHOICES
         field = Event._meta.get_field('radio_channel')
         self.assertEqual(list(field.choices), list(RADIO_CHANNEL_CHOICES))
+
+
+class PendingEventsConflictBadgeTest(TestCase):
+    """Pending events page must show conflict badges for events that overlap approved events."""
+
+    def setUp(self):
+        self.admin = User.objects.create_user(username='badge_admin', password='Testpass123!', is_staff=True)
+        self.client.force_login(self.admin)
+        self.track = Asset.objects.create(name='Badge Track', asset_type=Asset.AssetType.TRACK, color='#dc2626')
+        self.start = timezone.now() + timedelta(hours=1)
+        self.end = self.start + timedelta(hours=2)
+
+    def test_conflict_badge_shown_for_conflicting_pending_event(self):
+        """A pending event that overlaps an approved event should render a conflict badge."""
+        approved = Event.objects.create(
+            title='Approved One', start_time=self.start, end_time=self.end,
+            created_by=self.admin, is_approved=True,
+        )
+        approved.assets.add(self.track)
+        pending = Event.objects.create(
+            title='Pending Conflict', start_time=self.start, end_time=self.end,
+            created_by=self.admin, is_approved=False,
+        )
+        pending.assets.add(self.track)
+        resp = self.client.get(reverse('cal:pending_events'))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, 'conflict-detail')
+
+    def test_no_conflict_badge_when_no_overlap(self):
+        """A pending event with no conflicts should not render a conflict badge element."""
+        pending = Event.objects.create(
+            title='Clean Pending', start_time=self.start, end_time=self.end,
+            created_by=self.admin, is_approved=False,
+        )
+        pending.assets.add(self.track)
+        resp = self.client.get(reverse('cal:pending_events'))
+        self.assertEqual(resp.status_code, 200)
+        # The CSS class definition exists in the <style> block, but no actual badge element should render
+        self.assertNotContains(resp, '<span class="conflict-detail">')
+
+    def test_mass_approve_skips_conflicting_events(self):
+        """Mass approve endpoint should skip events with conflicts and approve clean ones."""
+        approved = Event.objects.create(
+            title='Blocker', start_time=self.start, end_time=self.end,
+            created_by=self.admin, is_approved=True,
+        )
+        approved.assets.add(self.track)
+        conflicting = Event.objects.create(
+            title='Conflicted', start_time=self.start, end_time=self.end,
+            created_by=self.admin, is_approved=False,
+        )
+        conflicting.assets.add(self.track)
+        clean = Event.objects.create(
+            title='Clean', start_time=self.end + timedelta(hours=1),
+            end_time=self.end + timedelta(hours=2),
+            created_by=self.admin, is_approved=False,
+        )
+        clean.assets.add(self.track)
+        import json
+        resp = self.client.post(
+            reverse('cal:mass_approve_events'),
+            data=json.dumps({'event_ids': [conflicting.pk, clean.pk]}),
+            content_type='application/json',
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data['approved'], 1)
+        self.assertEqual(data['skipped'], 1)
+        clean.refresh_from_db()
+        conflicting.refresh_from_db()
+        self.assertTrue(clean.is_approved)
+        self.assertFalse(conflicting.is_approved)
+
+
+class TemplateRenderSmokeTest(TestCase):
+    """Smoke tests that key pages render without template errors."""
+
+    def setUp(self):
+        self.admin = User.objects.create_user(username='smoke_admin', password='Testpass123!', is_staff=True)
+        self.client.force_login(self.admin)
+
+    def test_dashboard_renders_200(self):
+        """GET /cal/dashboard/ renders without TemplateSyntaxError."""
+        resp = self.client.get(reverse('cal:dashboard'))
+        self.assertEqual(resp.status_code, 200)
+
+    def test_calendar_day_view_renders_200(self):
+        """GET /cal/calendar/?view=day renders without error."""
+        resp = self.client.get(reverse('cal:calendar') + '?view=day')
+        self.assertEqual(resp.status_code, 200)
+
+    def test_pending_events_renders_200(self):
+        """GET /cal/events/pending/ renders without error."""
+        resp = self.client.get(reverse('cal:pending_events'))
+        self.assertEqual(resp.status_code, 200)
+
+    def test_event_new_renders_200(self):
+        """GET /cal/event/new/ renders without error."""
+        resp = self.client.get(reverse('cal:event_new'))
+        self.assertEqual(resp.status_code, 200)
+
+    def test_analytics_renders_200(self):
+        """GET /cal/analytics/ renders without error."""
+        resp = self.client.get(reverse('cal:analytics'))
+        self.assertEqual(resp.status_code, 200)

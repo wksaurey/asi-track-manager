@@ -3,6 +3,10 @@
 
 {% block title %}Pending Events{% endblock %}
 
+{% block extra_head %}
+  <meta name="csrf-token" content="{{ csrf_token }}" />
+{% endblock %}
+
 {% block content %}
 <div class="page-container">
 
@@ -22,9 +26,17 @@
   {% endif %}
 
   {% if events %}
+  <div style="margin-bottom:8px;display:flex;align-items:center;gap:8px;">
+    <button type="button" id="select-all-btn" class="btn btn-outline-secondary btn-sm">Select All</button>
+    <button type="button" id="deselect-all-btn" class="btn btn-outline-secondary btn-sm">Deselect All</button>
+  </div>
   <div class="schedule-list">
     {% for ev in events %}
-    <div class="schedule-row {{ ev.asset_css_class }}">
+    <div class="schedule-row {{ ev.asset_css_class }}{% if ev.has_conflict %} schedule-row--conflict{% endif %}">
+      <div style="display:flex;align-items:center;padding-right:10px;flex-shrink:0;">
+        <input type="checkbox" class="mass-approve-cb" data-event-id="{{ ev.id }}"
+               style="width:18px;height:18px;cursor:pointer;accent-color:#10b981;">
+      </div>
       <div class="schedule-date">
         <span class="sched-day">{{ ev.start_time|date:"D" }}</span>
         <span class="sched-num">{{ ev.start_time|date:"d" }}</span>
@@ -32,6 +44,12 @@
       </div>
       <div class="schedule-info" style="flex:1;">
         <span class="schedule-title">{{ ev.title }}</span>
+        {% if ev.has_conflict %}
+        <div class="conflict-detail">
+          <i class="fas fa-exclamation-triangle"></i> Conflicts with
+          {% for c in ev.conflict_events %}{% if not forloop.first %}, {% endif %}<a href="{% url 'cal:event_edit' c.pk %}?next={% url 'cal:pending_events' %}">{{ c.title }}</a>{% endfor %}
+        </div>
+        {% endif %}
         <span class="schedule-time">
           <i class="fas fa-clock"></i>
           {{ ev.start_time|date:"g:i A" }} – {{ ev.end_time|date:"g:i A" }}
@@ -70,6 +88,7 @@
     </div>
     {% endfor %}
   </div>
+
   {% else %}
   <div class="empty-state">
     <i class="fas fa-check-circle" style="font-size:48px;color:#10b981;display:block;margin-bottom:12px;"></i>
@@ -78,4 +97,141 @@
   {% endif %}
 
 </div>
+
+{# Floating action bar #}
+<div id="mass-approve-bar" class="mass-approve-bar" style="display:none;">
+  <span id="mass-approve-count" style="font-size:14px;font-weight:600;color:#fff;"></span>
+  <button id="mass-approve-btn" class="btn"
+          style="background:linear-gradient(180deg,#10b981,#059669);padding:8px 20px;font-size:14px;font-weight:600;">
+    <i class="fas fa-check-double"></i> Approve Selected
+  </button>
+</div>
+
+<style>
+  .mass-approve-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 1050;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    padding: 12px 24px;
+    background: rgba(30, 30, 40, 0.95);
+    border-top: 1px solid rgba(255,255,255,0.1);
+    box-shadow: 0 -4px 20px rgba(0,0,0,0.4);
+  }
+  .conflict-detail {
+    font-size: 12px;
+    color: #d97706;
+    margin-top: 3px;
+  }
+  .conflict-detail i {
+    font-size: 11px;
+    margin-right: 2px;
+  }
+  .conflict-detail a {
+    color: #b45309;
+    font-weight: 600;
+    text-decoration: underline;
+  }
+  .conflict-detail a:hover {
+    color: #92400e;
+  }
+  .schedule-row--conflict {
+    border-left: 3px solid #d97706;
+    background: rgba(217, 119, 6, 0.04);
+  }
+</style>
+
+<script>
+(function() {
+  const checkboxes = document.querySelectorAll('.mass-approve-cb');
+  const selectAllBtn = document.getElementById('select-all-btn');
+  const deselectAllBtn = document.getElementById('deselect-all-btn');
+  const bar = document.getElementById('mass-approve-bar');
+  const countEl = document.getElementById('mass-approve-count');
+  const approveBtn = document.getElementById('mass-approve-btn');
+
+  if (!checkboxes.length) return;
+
+  function updateBar() {
+    const checked = document.querySelectorAll('.mass-approve-cb:checked');
+    const n = checked.length;
+    if (n > 0) {
+      bar.style.display = '';
+      countEl.textContent = n + ' event' + (n === 1 ? '' : 's') + ' selected';
+    } else {
+      bar.style.display = 'none';
+    }
+  }
+
+  checkboxes.forEach(function(cb) {
+    cb.addEventListener('change', updateBar);
+  });
+
+  selectAllBtn.addEventListener('click', function() {
+    checkboxes.forEach(function(cb) { cb.checked = true; });
+    updateBar();
+  });
+
+  deselectAllBtn.addEventListener('click', function() {
+    checkboxes.forEach(function(cb) { cb.checked = false; });
+    updateBar();
+  });
+
+  approveBtn.addEventListener('click', function() {
+    var checked = document.querySelectorAll('.mass-approve-cb:checked');
+    var ids = Array.from(checked).map(function(cb) {
+      return parseInt(cb.dataset.eventId, 10);
+    });
+    if (!ids.length) return;
+
+    var conflictCount = 0;
+    checked.forEach(function(cb) {
+      var row = cb.closest('.schedule-row');
+      if (row && row.querySelector('.conflict-detail')) conflictCount++;
+    });
+    var cleanCount = ids.length - conflictCount;
+    var msg = '';
+    if (conflictCount > 0) {
+      msg = 'Approve ' + cleanCount + ' of ' + ids.length + ' selected event' + (ids.length === 1 ? '' : 's') + '?\n\n' +
+            conflictCount + ' event' + (conflictCount === 1 ? '' : 's') +
+            ' with conflicts will be skipped (not approved). ' +
+            'Resolve conflicts manually before approving those.';
+    } else {
+      msg = 'Approve ' + ids.length + ' event' + (ids.length === 1 ? '' : 's') + '?';
+    }
+
+    showConfirmModal(msg, {
+      confirmLabel: 'Approve',
+      confirmClass: 'btn-success',
+      onConfirm: function() {
+        var csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
+        fetch('{% url "cal:mass_approve_events" %}', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken,
+          },
+          body: JSON.stringify({ event_ids: ids }),
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+          if (data.error) {
+            alert('Error: ' + data.error);
+            return;
+          }
+          window.location.reload();
+        })
+        .catch(function(err) {
+          alert('Request failed: ' + err.message);
+        });
+      }
+    });
+  });
+})();
+</script>
 {% endblock %}

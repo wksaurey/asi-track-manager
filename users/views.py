@@ -3,6 +3,7 @@ from django.contrib.auth import login, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
+from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
@@ -28,10 +29,12 @@ def register(request):
 @login_required
 def profile(request):
     """Allow users to change their username and/or password."""
+    next_url = request.GET.get('next', '')
     username_form = UsernameChangeForm(user=request.user)
     password_form = CustomPasswordChangeForm(user=request.user)
 
     if request.method == 'POST':
+        next_url = request.POST.get('next', next_url)
         action = request.POST.get('action')
 
         if action == 'change_username':
@@ -40,7 +43,10 @@ def profile(request):
                 request.user.username = username_form.cleaned_data['username']
                 request.user.save(update_fields=['username'])
                 messages.success(request, 'Username updated successfully.')
-                return redirect('users:profile')
+                redirect_url = reverse('users:profile')
+                if next_url:
+                    redirect_url += f'?next={next_url}'
+                return redirect(redirect_url)
 
         elif action == 'change_password':
             password_form = CustomPasswordChangeForm(user=request.user, data=request.POST)
@@ -48,11 +54,15 @@ def profile(request):
                 password_form.save()
                 update_session_auth_hash(request, password_form.user)
                 messages.success(request, 'Password updated successfully.')
-                return redirect('users:profile')
+                redirect_url = reverse('users:profile')
+                if next_url:
+                    redirect_url += f'?next={next_url}'
+                return redirect(redirect_url)
 
     return render(request, 'users/profile.html', {
         'username_form': username_form,
         'password_form': password_form,
+        'next_url': next_url,
     })
 
 

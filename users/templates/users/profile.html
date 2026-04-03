@@ -16,7 +16,6 @@
         </div>
       {% endfor %}
 
-      <!-- Change Username -->
       <div class="card shadow-sm mb-4">
         <div class="card-body p-4">
           <h3 class="card-title text-center mb-4">Change Username</h3>
@@ -26,28 +25,31 @@
           <form method="post" style="align-items: flex-start;">
             {% csrf_token %}
             <input type="hidden" name="action" value="change_username">
+            {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
             {{ username_form.as_p }}
-            <button type="submit" class="btn btn-primary btn-block mt-3">Update Username</button>
+            <button type="submit" class="btn btn-primary btn-block mt-3">Save Username</button>
           </form>
         </div>
       </div>
 
-      <!-- Change Password -->
       <div class="card shadow-sm mb-4">
         <div class="card-body p-4">
           <h3 class="card-title text-center mb-4">Change Password</h3>
           <form method="post" style="align-items: flex-start;">
             {% csrf_token %}
             <input type="hidden" name="action" value="change_password">
+            {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
             {{ password_form.as_p }}
-            <button type="submit" class="btn btn-primary btn-block mt-3">Update Password</button>
+            <button type="submit" class="btn btn-primary btn-block mt-3">Save Password</button>
           </form>
         </div>
       </div>
 
-      <p class="text-center">
-        <a href="{% url 'cal:calendar' %}">&larr; Back to Calendar</a>
-      </p>
+      <div class="text-center">
+        <a href="{{ next_url|default:'/cal/calendar/' }}" class="btn btn-muted">
+          <i class="fas fa-arrow-left"></i> Cancel
+        </a>
+      </div>
 
     </div>
   </div>

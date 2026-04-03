@@ -3,6 +3,10 @@
 
 {% block title %}Pending Events{% endblock %}
 
+{% block extra_head %}
+  <meta name="csrf-token" content="{{ csrf_token }}" />
+{% endblock %}
+
 {% block content %}
 <div class="page-container">
 
@@ -15,90 +19,74 @@
     </a>
   </div>
 
-  {% if events %}
-  <div class="schedule-list">
-    {# Select-all header row #}
-    <div style="display:flex;align-items:center;padding:6px 14px 2px;gap:10px;">
-      <input type="checkbox" id="select-all" title="Select all approvable events"
-             style="width:18px;height:18px;cursor:pointer;accent-color:var(--primary,#6366f1);">
-      <label for="select-all" style="margin:0;font-size:13px;color:var(--muted,#94a3b8);cursor:pointer;">
-        Select all without conflicts
-      </label>
-    </div>
+  {% if messages %}
+  {% for message in messages %}
+  <div class="alert alert-{{ message.tags }}" style="margin-bottom:16px;">{{ message }}</div>
+  {% endfor %}
+  {% endif %}
 
+  {% if events %}
+  <div style="margin-bottom:8px;display:flex;align-items:center;gap:8px;">
+    <button type="button" id="select-all-btn" class="btn btn-outline-secondary btn-sm">Select All</button>
+    <button type="button" id="deselect-all-btn" class="btn btn-outline-secondary btn-sm">Deselect All</button>
+  </div>
+  <div class="schedule-list">
     {% for ev in events %}
-    <div class="schedule-row {{ ev.asset_css_class }}">
-      <div style="display:flex;align-items:center;padding-right:8px;flex-shrink:0;">
-        {% if ev.has_conflict %}
-        <span title="Has booking conflict" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;color:#f59e0b;">
-          <i class="fas fa-exclamation-triangle"></i>
-        </span>
-        {% else %}
-        <input type="checkbox" class="mass-approve-cb" value="{{ ev.id }}" style="width:18px;height:18px;cursor:pointer;accent-color:var(--primary,#6366f1);">
-        {% endif %}
+    <div class="schedule-row {{ ev.asset_css_class }}{% if ev.has_conflict %} schedule-row--conflict{% endif %}">
+      <div style="display:flex;align-items:center;padding-right:10px;flex-shrink:0;">
+        <input type="checkbox" class="mass-approve-cb" data-event-id="{{ ev.id }}"
+               style="width:18px;height:18px;cursor:pointer;accent-color:#10b981;">
       </div>
       <div class="schedule-date">
-        {% if ev.start_time %}
         <span class="sched-day">{{ ev.start_time|date:"D" }}</span>
         <span class="sched-num">{{ ev.start_time|date:"d" }}</span>
         <span class="sched-mon">{{ ev.start_time|date:"M Y" }}</span>
-        {% else %}
-        <span class="sched-day">Impromptu</span>
-        {% endif %}
       </div>
       <div class="schedule-info" style="flex:1;">
         <span class="schedule-title">{{ ev.title }}</span>
-        {% if ev.start_time %}
+        {% if ev.has_conflict %}
+        <div class="conflict-detail">
+          <i class="fas fa-exclamation-triangle"></i> Conflicts with
+          {% for c in ev.conflict_events %}{% if not forloop.first %}, {% endif %}<a href="{% url 'cal:event_edit' c.pk %}?next={% url 'cal:pending_events' %}">{{ c.title }}</a>{% endfor %}
+        </div>
+        {% endif %}
         <span class="schedule-time">
           <i class="fas fa-clock"></i>
           {{ ev.start_time|date:"g:i A" }} – {{ ev.end_time|date:"g:i A" }}
         </span>
-        {% else %}
-        <span class="schedule-time">
-          <i class="fas fa-clock"></i> Impromptu
-        </span>
-        {% endif %}
         <div style="margin-top:3px;">{{ ev.asset_badge_html|safe }}</div>
         <span class="schedule-time" style="margin-top:2px;">
           <i class="fas fa-user"></i> {{ ev.created_by|default:"Unknown" }}
         </span>
-        {% if ev.has_conflict %}
-        <span style="display:inline-block;margin-top:4px;font-size:11px;color:#f59e0b;font-weight:600;">
-          <i class="fas fa-exclamation-triangle"></i> Conflicts with an approved event
-        </span>
-        {% endif %}
       </div>
       <div style="display:flex;gap:8px;align-items:center;flex-shrink:0;">
         <form method="post" action="{% url 'cal:event_approve' ev.id %}">
           {% csrf_token %}
           <input type="hidden" name="next" value="{% url 'cal:pending_events' %}">
-          <button type="submit" class="btn" style="background:linear-gradient(180deg,#10b981,#059669);padding:6px 12px;font-size:13px;">
+          <button type="submit"
+                  class="btn"
+                  style="background:linear-gradient(180deg,#10b981,#059669);padding:6px 12px;font-size:13px;">
             <i class="fas fa-check"></i> Approve
           </button>
         </form>
-        <a href="{% url 'cal:event_edit' ev.id %}?next={% url 'cal:pending_events' %}" class="btn btn-muted" style="font-size:13px;padding:6px 12px;">
+        <a href="{% url 'cal:event_edit' ev.id %}?next={% url 'cal:pending_events' %}"
+           class="btn btn-muted"
+           style="font-size:13px;padding:6px 12px;">
           <i class="fas fa-edit"></i> Edit
         </a>
         <form method="post" action="{% url 'cal:event_delete' ev.id %}"
               onsubmit="return confirmDelete(this, 'Delete &quot;{{ ev.title|escapejs }}&quot;? This cannot be undone.')">
           {% csrf_token %}
           <input type="hidden" name="next" value="{% url 'cal:pending_events' %}">
-          <button type="submit" class="btn btn-danger" style="padding:6px 12px;font-size:13px;">
+          <button type="submit"
+                  class="btn btn-danger"
+                  style="padding:6px 12px;font-size:13px;">
             <i class="fas fa-trash"></i> Delete
           </button>
         </form>
       </div>
     </div>
     {% endfor %}
-  </div>
-
-  {# Floating action bar -- appears when checkboxes are selected #}
-  <div id="mass-action-bar"
-       style="display:none;position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--card,#1e293b);border:1px solid var(--border,#334155);border-radius:12px;padding:10px 20px;box-shadow:0 8px 32px rgba(0,0,0,.4);z-index:1000;align-items:center;gap:14px;">
-    <span id="mass-action-count" style="font-size:14px;font-weight:600;color:var(--text,#e2e8f0);">0 selected</span>
-    <button id="mass-approve-btn" class="btn" style="background:linear-gradient(180deg,#10b981,#059669);padding:8px 16px;font-size:13px;font-weight:600;">
-      <i class="fas fa-check-double"></i> Approve Selected
-    </button>
   </div>
 
   {% else %}
@@ -109,67 +97,141 @@
   {% endif %}
 
 </div>
-{% endblock %}
 
-{% block extra_js %}
+{# Floating action bar #}
+<div id="mass-approve-bar" class="mass-approve-bar" style="display:none;">
+  <span id="mass-approve-count" style="font-size:14px;font-weight:600;color:#fff;"></span>
+  <button id="mass-approve-btn" class="btn"
+          style="background:linear-gradient(180deg,#10b981,#059669);padding:8px 20px;font-size:14px;font-weight:600;">
+    <i class="fas fa-check-double"></i> Approve Selected
+  </button>
+</div>
+
+<style>
+  .mass-approve-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 1050;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    padding: 12px 24px;
+    background: rgba(30, 30, 40, 0.95);
+    border-top: 1px solid rgba(255,255,255,0.1);
+    box-shadow: 0 -4px 20px rgba(0,0,0,0.4);
+  }
+  .conflict-detail {
+    font-size: 12px;
+    color: #d97706;
+    margin-top: 3px;
+  }
+  .conflict-detail i {
+    font-size: 11px;
+    margin-right: 2px;
+  }
+  .conflict-detail a {
+    color: #b45309;
+    font-weight: 600;
+    text-decoration: underline;
+  }
+  .conflict-detail a:hover {
+    color: #92400e;
+  }
+  .schedule-row--conflict {
+    border-left: 3px solid #d97706;
+    background: rgba(217, 119, 6, 0.04);
+  }
+</style>
+
 <script>
 (function() {
-  var selectAll = document.getElementById('select-all');
-  var bar = document.getElementById('mass-action-bar');
-  var countEl = document.getElementById('mass-action-count');
-  var approveBtn = document.getElementById('mass-approve-btn');
-  if (!selectAll) return;
-  function getCheckboxes() { return document.querySelectorAll('.mass-approve-cb'); }
+  const checkboxes = document.querySelectorAll('.mass-approve-cb');
+  const selectAllBtn = document.getElementById('select-all-btn');
+  const deselectAllBtn = document.getElementById('deselect-all-btn');
+  const bar = document.getElementById('mass-approve-bar');
+  const countEl = document.getElementById('mass-approve-count');
+  const approveBtn = document.getElementById('mass-approve-btn');
+
+  if (!checkboxes.length) return;
+
   function updateBar() {
-    var checked = document.querySelectorAll('.mass-approve-cb:checked');
-    var n = checked.length;
-    bar.style.display = n > 0 ? 'flex' : 'none';
-    countEl.textContent = n + ' selected';
-    var all = getCheckboxes();
-    selectAll.checked = all.length > 0 && checked.length === all.length;
-    selectAll.indeterminate = checked.length > 0 && checked.length < all.length;
+    const checked = document.querySelectorAll('.mass-approve-cb:checked');
+    const n = checked.length;
+    if (n > 0) {
+      bar.style.display = '';
+      countEl.textContent = n + ' event' + (n === 1 ? '' : 's') + ' selected';
+    } else {
+      bar.style.display = 'none';
+    }
   }
-  selectAll.addEventListener('change', function() {
-    getCheckboxes().forEach(function(cb) { cb.checked = selectAll.checked; });
+
+  checkboxes.forEach(function(cb) {
+    cb.addEventListener('change', updateBar);
+  });
+
+  selectAllBtn.addEventListener('click', function() {
+    checkboxes.forEach(function(cb) { cb.checked = true; });
     updateBar();
   });
-  document.addEventListener('change', function(e) {
-    if (e.target.classList.contains('mass-approve-cb')) updateBar();
+
+  deselectAllBtn.addEventListener('click', function() {
+    checkboxes.forEach(function(cb) { cb.checked = false; });
+    updateBar();
   });
+
   approveBtn.addEventListener('click', function() {
     var checked = document.querySelectorAll('.mass-approve-cb:checked');
-    var ids = Array.from(checked).map(function(cb) { return parseInt(cb.value, 10); });
-    if (ids.length === 0) return;
-    var msg = 'Approve ' + ids.length + ' selected event' + (ids.length > 1 ? 's' : '') + '?';
-    showConfirmModal(msg, function() {
-      approveBtn.disabled = true;
-      approveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Approving...';
-      fetch("{% url 'cal:mass_approve_events' %}", {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
-        body: JSON.stringify({ event_ids: ids }),
-      })
-      .then(function(r) { return r.json(); })
-      .then(function(data) {
-        if (data.error) { showResultMessage('Error: ' + data.error, 'danger'); approveBtn.disabled = false; approveBtn.innerHTML = '<i class="fas fa-check-double"></i> Approve Selected'; return; }
-        var parts = [];
-        if (data.approved > 0) parts.push(data.approved + ' approved');
-        if (data.skipped > 0) parts.push(data.skipped + ' skipped (conflicts)');
-        showResultMessage(parts.join(', ') || 'No changes', data.skipped > 0 ? 'warning' : 'success');
-        setTimeout(function() { location.reload(); }, 1200);
-      })
-      .catch(function() { showResultMessage('Network error, please try again.', 'danger'); approveBtn.disabled = false; approveBtn.innerHTML = '<i class="fas fa-check-double"></i> Approve Selected'; });
+    var ids = Array.from(checked).map(function(cb) {
+      return parseInt(cb.dataset.eventId, 10);
+    });
+    if (!ids.length) return;
+
+    var conflictCount = 0;
+    checked.forEach(function(cb) {
+      var row = cb.closest('.schedule-row');
+      if (row && row.querySelector('.conflict-detail')) conflictCount++;
+    });
+    var cleanCount = ids.length - conflictCount;
+    var msg = '';
+    if (conflictCount > 0) {
+      msg = 'Approve ' + cleanCount + ' of ' + ids.length + ' selected event' + (ids.length === 1 ? '' : 's') + '?\n\n' +
+            conflictCount + ' event' + (conflictCount === 1 ? '' : 's') +
+            ' with conflicts will be skipped (not approved). ' +
+            'Resolve conflicts manually before approving those.';
+    } else {
+      msg = 'Approve ' + ids.length + ' event' + (ids.length === 1 ? '' : 's') + '?';
+    }
+
+    showConfirmModal(msg, {
+      confirmLabel: 'Approve',
+      confirmClass: 'btn-success',
+      onConfirm: function() {
+        var csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
+        fetch('{% url "cal:mass_approve_events" %}', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken,
+          },
+          body: JSON.stringify({ event_ids: ids }),
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+          if (data.error) {
+            alert('Error: ' + data.error);
+            return;
+          }
+          window.location.reload();
+        })
+        .catch(function(err) {
+          alert('Request failed: ' + err.message);
+        });
+      }
     });
   });
-  function showResultMessage(text, type) {
-    var old = document.getElementById('mass-result-msg'); if (old) old.remove();
-    var colors = { success: { bg: '#059669', border: '#10b981' }, warning: { bg: '#d97706', border: '#f59e0b' }, danger: { bg: '#dc2626', border: '#ef4444' } };
-    var c = colors[type] || colors.success;
-    var el = document.createElement('div'); el.id = 'mass-result-msg';
-    el.style.cssText = 'position:fixed;top:24px;left:50%;transform:translateX(-50%);background:' + c.bg + ';border:1px solid ' + c.border + ';color:#fff;padding:10px 20px;border-radius:8px;font-size:14px;font-weight:600;z-index:1100;box-shadow:0 4px 16px rgba(0,0,0,.3);';
-    el.textContent = text; document.body.appendChild(el);
-    setTimeout(function() { el.remove(); }, 4000);
-  }
 })();
 </script>
 {% endblock %}

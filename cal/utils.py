@@ -6,6 +6,7 @@ views populated with Event data.  Each view supports optional asset filtering
 and highlights today's date and weekends with CSS classes.
 """
 
+import json
 from datetime import datetime, timedelta, date as date_type
 from calendar import HTMLCalendar
 
@@ -16,6 +17,25 @@ from django.utils.html import escape
 from django.utils.timezone import localtime
 
 from cal.models import Asset, Event
+
+
+def get_asset_conflicts(asset, start_time, end_time, exclude_event_id=None, approved_only=False):
+    """
+    Return a QuerySet of Events that conflict with the given asset/time range.
+    Expands to parent/subtrack conflict IDs via Asset.conflicting_asset_ids().
+    If approved_only=True, only checks approved events.
+    """
+    qs = Event.objects.filter(
+        start_time__lt=end_time,
+        end_time__gt=start_time,
+    )
+    if approved_only:
+        qs = qs.filter(is_approved=True)
+    if exclude_event_id:
+        qs = qs.exclude(pk=exclude_event_id)
+
+    conflict_ids = asset.conflicting_asset_ids()
+    return qs.filter(assets__in=conflict_ids).distinct()
 
 
 class Calendar(HTMLCalendar):
@@ -40,16 +60,25 @@ class Calendar(HTMLCalendar):
 
     def _base_queryset(self):
         """Return the Event queryset, optionally filtered by asset_id."""
-        qs = Event.objects.select_related('created_by').prefetch_related('assets')
+        qs = Event.objects.select_related('created_by').prefetch_related('assets', 'segments')
         if self.asset_id:
             qs = qs.filter(assets__id=self.asset_id)
         return qs
 
     def _event_classes(self, event):
-        """Build a CSS class string for an event (type colour + pending state)."""
+        """Build a CSS class string for an event (type colour + pending/operational state)."""
         classes = f'event {event.asset_css_class}'
         if not event.is_approved:
             classes += ' event-pending'
+        else:
+            now = timezone.now()
+            is_past = event.end_time and event.end_time <= now
+            if is_past:
+                has_segments = len(event.segments.all()) > 0
+                if has_segments:
+                    classes += ' event-completed'
+                else:
+                    classes += ' event-noshow'
         return classes
 
     @staticmethod
@@ -58,34 +87,123 @@ class Calendar(HTMLCalendar):
         return localtime(dt).strftime('%I:%M %p').lstrip('0') or '12:00 AM'
 
     @staticmethod
-    def _assign_rows(events):
+    def _fmt_duration(seconds):
+        """Format seconds as a human-readable duration like '1h 30m' or '45m'."""
+        if seconds < 60:
+            return '<1m'
+        m = int(seconds) // 60
+        h, m = divmod(m, 60)
+        if h and m:
+            return f'{h}h {m}m'
+        return f'{h}h' if h else f'{m}m'
+
+    def _gantt_tooltip_data(self, ev, segs):
+        """Build JSON-safe dict for Gantt block hover tooltip."""
+        now = timezone.now()
+        fmt = self._fmt_time
+        dur = self._fmt_duration
+
+        # Determine event state
+        is_past = ev.end_time and ev.end_time <= now
+        has_segs = len(segs) > 0
+        if not ev.is_approved:
+            status = 'Pending'
+        elif has_segs and ev.is_currently_active:
+            status = 'Active'
+        elif has_segs and not ev.is_stopped and all(s.end for s in segs):
+            status = 'Paused'
+        elif has_segs and (ev.is_stopped or is_past):
+            status = 'Completed'
+        elif is_past and not has_segs:
+            status = 'No-show'
+        else:
+            status = 'Scheduled'
+
+        if ev.start_time and ev.end_time:
+            sched_secs = (ev.end_time - ev.start_time).total_seconds()
+            sched_str = f'{fmt(ev.start_time)} – {fmt(ev.end_time)} ({dur(sched_secs)})'
+        else:
+            sched_str = 'Impromptu'
+        info = {
+            'title': ev.title,
+            'creator': ev.created_by.username if ev.created_by else None,
+            'status': status,
+            'scheduled': sched_str,
+            'description': ev.description or None,
+        }
+
+        if has_segs:
+            seg_list = []
+            for i, s in enumerate(segs):
+                if s.end:
+                    seg_secs = (s.end - s.start).total_seconds()
+                    seg_list.append(f'{fmt(s.start)} – {fmt(s.end)} ({dur(seg_secs)})')
+                else:
+                    elapsed = (now - s.start).total_seconds()
+                    seg_list.append(f'{fmt(s.start)} – now ({dur(elapsed)})')
+            info['segments'] = seg_list
+            info['totalActual'] = dur(ev.total_actual_seconds)
+
+            # Pause time = gaps between consecutive segments
+            pause_secs = 0
+            for i in range(len(segs) - 1):
+                if segs[i].end and segs[i + 1].start:
+                    pause_secs += (segs[i + 1].start - segs[i].end).total_seconds()
+            # Trailing pause (paused now)
+            if status == 'Paused':
+                pause_secs += (now - segs[-1].end).total_seconds()
+            if pause_secs > 0:
+                info['pauseTime'] = dur(pause_secs)
+
+        # Assets
+        assets = list(ev.assets.all())
+        tracks = [a.name for a in assets if a.asset_type == 'track']
+        vehicles = [a.name for a in assets if a.asset_type == 'vehicle']
+        if tracks:
+            info['tracks'] = ', '.join(tracks)
+        if vehicles:
+            info['vehicles'] = ', '.join(vehicles)
+
+        return info
+
+    @staticmethod
+    def _visual_extent(ev):
+        """Return (visual_start, visual_end) covering both scheduled and actual time."""
+        now = timezone.now()
+        v_start = ev.start_time or now
+        v_end = ev.end_time or now
+        for seg in ev.segments.all():  # prefetched
+            if seg.start < v_start:
+                v_start = seg.start
+            seg_end = seg.end or now
+            if seg_end > v_end:
+                v_end = seg_end
+        return v_start, v_end
+
+    @classmethod
+    def _assign_rows(cls, events):
         """
         Assign each event to a sub-row index (0-based) such that no two events
-        in the same sub-row overlap. O(N²), acceptable at this scale.
+        in the same sub-row overlap. Uses visual extent (scheduled + actual).
+        O(N²), acceptable at this scale.
         Returns (assignments, n_rows) where assignments is a list of (event, row_idx).
         """
-        def _ev_start(ev):
-            """Return effective start time: start_time or actual_start."""
-            return ev.start_time or ev.actual_start
-        def _ev_end(ev):
-            """Return effective end time: end_time or actual_end or now."""
-            return ev.end_time or ev.actual_end or timezone.now()
-        events = [ev for ev in events if _ev_start(ev) and _ev_end(ev)]
+        # Precompute visual extents
+        extents = {ev.pk: cls._visual_extent(ev) for ev in events}
         assignments = []
         row_end_times = []
-        for ev in sorted(events, key=lambda e: _ev_start(e)):
+        for ev in sorted(events, key=lambda e: extents[e.pk][0]):
+            v_start, v_end = extents[ev.pk]
             placed = False
-            ev_s = _ev_start(ev)
-            ev_e = _ev_end(ev)
             for i, row_end in enumerate(row_end_times):
-                if ev_s >= row_end:
+                if v_start >= row_end:
                     assignments.append((ev, i))
-                    row_end_times[i] = ev_e
+                    row_end_times[i] = v_end
                     placed = True
                     break
             if not placed:
                 assignments.append((ev, len(row_end_times)))
-                row_end_times.append(ev_e)
+                row_end_times.append(v_end)
         return assignments, len(row_end_times)
 
     # ── Month view ─────────────────────────────────────────────────────────
@@ -105,11 +223,7 @@ class Calendar(HTMLCalendar):
         a "+N more" button is rendered; clicking it opens a modal (driven by JS
         in calendar.html) that lists all events for the day with times.
         """
-        events_list = list(
-            events.filter(
-                Q(start_time__day=day) | Q(is_impromptu=True, actual_start__day=day)
-            ).order_by('start_time', 'actual_start')
-        )
+        events_list = list(events.filter(start_time__day=day).order_by('start_time'))
 
         if day != 0:
             is_today = (
@@ -143,7 +257,7 @@ class Calendar(HTMLCalendar):
             more_html = ''
             n_extra = len(events_list) - self.MONTH_VISIBLE_LIMIT
             if n_extra > 0:
-                day_label = f"{day_date.strftime('%A, %B')} {day_date.day}, {day_date.year}"
+                day_label = day_date.strftime('%A, %B %d, %Y').replace(' 0', ' ')
                 all_items = ''.join(
                     f'<li class="{self._event_classes(ev)} event-modal-item">'
                     f'{ev.get_html_url}'
@@ -184,11 +298,9 @@ class Calendar(HTMLCalendar):
         Queries events once for the entire month, then passes the queryset
         into each day cell to avoid N+1 queries.
         """
-        # Combine scheduled + impromptu events for the month.
-        # Use Q-based OR so formatday can still call .filter() on the queryset.
         events = self._base_queryset().filter(
-            Q(start_time__year=self.year, start_time__month=self.month)
-            | Q(is_impromptu=True, actual_start__year=self.year, actual_start__month=self.month)
+            start_time__year=self.year,
+            start_time__month=self.month,
         )
         cal  = '<table class="calendar month-table">\n'
         cal += f'{self.formatmonthname(self.year, self.month, withyear=withyear)}\n'
@@ -197,6 +309,173 @@ class Calendar(HTMLCalendar):
             cal += f'{self.formatweek(week, events)}\n'
         cal += '</table>'
         return cal
+
+    # ── Gantt block rendering helpers ─────────────────────────────────────
+
+    def _render_scheduled_bar(self, ev, segs, edit_url, base_css, color_style,
+                               bg_style, tooltip_json, left_pct, width_pct,
+                               t_start, t_end, width_m):
+        """Render the scheduled-time background bar for a Gantt event."""
+        if width_m <= 0:
+            return []
+        has_segments = len(segs) > 0
+        end_iso = ev.end_time.isoformat() if ev.end_time else ''
+        creator_name = escape(ev.created_by.username) if ev.created_by else ''
+        creator_attr = f' data-creator="{creator_name}"' if creator_name else ''
+        sched_cls = ' gantt-block--scheduled' if has_segments else ''
+        text_html = (
+            f'<span class="gantt-block-title">{escape(ev.title)}</span>'
+            f'<span class="gantt-block-time">{t_start}&ndash;{t_end}</span>'
+        ) if not has_segments else ''
+        return [
+            f'<a class="gantt-block {base_css}{sched_cls}" href="{edit_url}"'
+            f' style="left:{left_pct}%;width:{width_pct}%;{color_style}{bg_style}"'
+            f' data-gantt-info="{tooltip_json}"'
+            f' data-event-id="{ev.pk}"'
+            f' data-is-approved="{str(ev.is_approved).lower()}"'
+            f' data-end="{end_iso}"{creator_attr}>'
+            f'{text_html}'
+            f'</a>'
+        ]
+
+    def _render_segments(self, ev, segs, origin, gantt_mins, local_start,
+                          local_end, tooltip_json, color_style):
+        """Render actual segment bars and inter-segment pause gaps."""
+        parts = []
+        for i, seg in enumerate(segs):
+            seg_start = localtime(seg.start)
+            is_open = seg.end is None
+            seg_end = localtime(seg.end) if seg.end else localtime(timezone.now())
+
+            seg_start_off = max(0, int((seg_start - origin).total_seconds()) // 60)
+            seg_end_off   = min(gantt_mins, int((seg_end - origin).total_seconds()) // 60)
+            seg_width     = max(0, seg_end_off - seg_start_off)
+
+            if seg_width > 0:
+                seg_left      = round(seg_start_off / gantt_mins * 100, 4)
+                seg_width_pct = round(seg_width / gantt_mins * 100, 4)
+
+                overflow_start = seg_start < local_start
+                overflow_end = (seg.end and localtime(seg.end) > local_end) or (is_open and localtime(timezone.now()) > local_end)
+                overflow_cls = ''
+                if overflow_start:
+                    overflow_cls += ' gantt-block--overflow-start'
+                if overflow_end:
+                    overflow_cls += ' gantt-block--overflow-end'
+
+                active_cls = ' gantt-block--active-segment' if is_open else ' gantt-block--actual-segment'
+                data_attrs = f' data-segment-start="{seg.start.isoformat()}"' if is_open else ''
+
+                parts.append(
+                    f'<div class="gantt-block-segment{active_cls}{overflow_cls}"'
+                    f' data-gantt-info="{tooltip_json}" data-event-id="{ev.pk}"'
+                    f' style="left:{seg_left}%;width:{seg_width_pct}%;{color_style}"'
+                    f'{data_attrs}>'
+                    f'</div>'
+                )
+
+            # Pause gap between this segment and the next
+            if i + 1 < len(segs) and seg.end:
+                next_seg = segs[i + 1]
+                gap_start = localtime(seg.end)
+                gap_end   = localtime(next_seg.start)
+                gap_start_off = max(0, int((gap_start - origin).total_seconds()) // 60)
+                gap_end_off   = min(gantt_mins, int((gap_end - origin).total_seconds()) // 60)
+                gap_width     = max(0, gap_end_off - gap_start_off)
+                if gap_width > 0:
+                    gap_left      = round(gap_start_off / gantt_mins * 100, 4)
+                    gap_width_pct = round(gap_width / gantt_mins * 100, 4)
+                    parts.append(
+                        f'<div class="gantt-block-segment gantt-block--pause-gap"'
+                        f' data-gantt-info="{tooltip_json}" data-event-id="{ev.pk}"'
+                        f' style="left:{gap_left}%;width:{gap_width_pct}%;{color_style}">'
+                        f'</div>'
+                    )
+        return parts
+
+    def _render_trailing_pause(self, ev, segs, origin, gantt_mins, tooltip_json,
+                                color_style):
+        """Render the trailing pause gap from last segment end to now."""
+        if not segs or not all(s.end is not None for s in segs) or ev.is_stopped:
+            return []
+        now = timezone.now()
+        pause_start = localtime(segs[-1].end)
+        pause_end = localtime(now)
+        is_today = localtime(now).date() == origin.date()
+        ps_off = max(0, int((pause_start - origin).total_seconds()) // 60)
+        pe_off = min(gantt_mins, int((pause_end - origin).total_seconds()) // 60)
+        pw = max(0, pe_off - ps_off)
+        if pw <= 0:
+            return []
+        pl = round(ps_off / gantt_mins * 100, 4)
+        pw_pct = round(pw / gantt_mins * 100, 4)
+        live_cls = ' gantt-block--active-pause' if is_today else ''
+        live_attr = f' data-pause-start="{segs[-1].end.isoformat()}"' if is_today else ''
+        return [
+            f'<div class="gantt-block-segment gantt-block--pause-gap{live_cls}"'
+            f' data-gantt-info="{tooltip_json}" data-event-id="{ev.pk}"'
+            f'{live_attr}'
+            f' style="left:{pl}%;width:{pw_pct}%;{color_style}">'
+            f'</div>'
+        ]
+
+    def _render_connectors(self, ev, segs, origin, gantt_mins, start_off, end_off,
+                            left_pct, width_pct, tooltip_json, color_style, width_m):
+        """Render connector lines and edge markers between scheduled bar and segments."""
+        if not segs or width_m <= 0:
+            return []
+        parts = []
+        now_ts = timezone.now()
+        actual_min = min(
+            max(0, int((localtime(s.start) - origin).total_seconds()) // 60)
+            for s in segs
+        )
+        actual_max = max(
+            min(gantt_mins, int(((localtime(s.end) if s.end else localtime(now_ts)) - origin).total_seconds()) // 60)
+            for s in segs
+        )
+        if actual_min > end_off:
+            conn_left = round(end_off / gantt_mins * 100, 4)
+            conn_width = round((actual_min - end_off) / gantt_mins * 100, 4)
+            parts.append(
+                f'<div class="gantt-connector gantt-connector--late"'
+                f' data-gantt-info="{tooltip_json}" data-event-id="{ev.pk}"'
+                f' style="left:{conn_left}%;width:{conn_width}%;{color_style}"></div>'
+            )
+        elif actual_max < start_off:
+            conn_left = round(actual_max / gantt_mins * 100, 4)
+            conn_width = round((start_off - actual_max) / gantt_mins * 100, 4)
+            parts.append(
+                f'<div class="gantt-connector gantt-connector--early"'
+                f' data-gantt-info="{tooltip_json}" data-event-id="{ev.pk}"'
+                f' style="left:{conn_left}%;width:{conn_width}%;{color_style}"></div>'
+            )
+        # Edge markers where segments straddle scheduled bar boundaries
+        if actual_min < start_off and actual_max > start_off:
+            parts.append(
+                f'<div class="gantt-sched-edge"'
+                f' style="left:{left_pct}%;{color_style}"></div>'
+            )
+        if actual_min < end_off and actual_max > end_off:
+            right_pct = round((left_pct + width_pct), 4)
+            parts.append(
+                f'<div class="gantt-sched-edge"'
+                f' style="left:{right_pct}%;{color_style}"></div>'
+            )
+        return parts
+
+    @staticmethod
+    def _render_text_overlay(ev, edit_url, left_pct, width_pct, tooltip_json,
+                              t_start, t_end):
+        """Render the text overlay that floats above segments (avoids opacity stacking)."""
+        return [
+            f'<a class="gantt-block-text" href="{edit_url}"'
+            f' style="left:{left_pct}%;width:{width_pct}%;"'
+            f' data-gantt-info="{tooltip_json}">'
+            f'<span class="gantt-block-title">{escape(ev.title)}</span>'
+            f'<span class="gantt-block-time">{t_start}&ndash;{t_end}</span>'
+            f'</a>'
+        ]
 
     # ── Day view ───────────────────────────────────────────────────────────
 
@@ -246,28 +525,17 @@ class Calendar(HTMLCalendar):
             )
 
         # Single query for all track events on this day (both parent + subtrack assets).
-        scheduled_events = Event.objects.filter(
-            assets__asset_type=Asset.AssetType.TRACK,
-            start_time__year=day_date.year,
-            start_time__month=day_date.month,
-            start_time__day=day_date.day,
-        ).select_related('created_by').prefetch_related('assets').distinct()
-
-        # Impromptu events (no start_time) — shown on the day they actually started.
-        impromptu_events = Event.objects.filter(
-            is_approved=True,
-            is_impromptu=True,
-            actual_start__date=day_date,
-            assets__asset_type=Asset.AssetType.TRACK,
-        ).select_related('created_by').prefetch_related('assets').distinct()
-
-        # Combine scheduled + impromptu, dedup by pk
-        seen_pks = set()
-        all_events = []
-        for ev in list(scheduled_events) + list(impromptu_events):
-            if ev.pk not in seen_pks:
-                seen_pks.add(ev.pk)
-                all_events.append(ev)
+        # Include impromptu events (null start_time) that have segments starting today.
+        all_events = list(
+            Event.objects.filter(
+                assets__asset_type=Asset.AssetType.TRACK,
+            ).filter(
+                Q(start_time__year=day_date.year,
+                  start_time__month=day_date.month,
+                  start_time__day=day_date.day) |
+                Q(start_time__isnull=True, segments__start__date=day_date)
+            ).select_related('created_by').prefetch_related('assets', 'segments').distinct()
+        )
 
         # Build a helper: event_asset_ids[ev.pk] = set of asset PKs for fast lookup
         event_asset_ids = {
@@ -275,10 +543,10 @@ class Calendar(HTMLCalendar):
             for ev in all_events
         }
 
-        timed_events = [ev for ev in all_events if (ev.start_time and ev.end_time) or ev.actual_start]
+        timed_events = [ev for ev in all_events if ev.start_time and ev.end_time]
         if timed_events:
-            earliest_dt = localtime(min(ev.start_time or ev.actual_start for ev in timed_events))
-            latest_dt = localtime(max(ev.end_time or ev.actual_end or timezone.now() for ev in timed_events))
+            earliest_dt = localtime(min(ev.start_time for ev in timed_events))
+            latest_dt = localtime(max(ev.end_time for ev in timed_events))
             data_earliest = earliest_dt.hour * 60 + earliest_dt.minute
             data_latest = latest_dt.hour * 60 + latest_dt.minute
         else:
@@ -306,90 +574,68 @@ class Calendar(HTMLCalendar):
         def _make_block(ev, extra_css='', track_color=None):
             """Build the HTML for a single Gantt event block.
 
-            When an event has actual_start/actual_end, two blocks are returned:
-            a ghost (scheduled) bar and a solid (actual) bar.  Otherwise a
-            single solid bar is returned for the scheduled time.
-
-            Impromptu events (no start_time/end_time) use actual_start for
-            positioning, and actual_end or now() for the end.
+            Delegates to _render_* methods on Calendar for each rendering concern:
+            scheduled bar, segment bars, pause gaps, trailing pause,
+            connectors, edge markers, and text overlay.
             """
-            # For impromptu events, use actual times for positioning
-            if ev.start_time is None:
-                if ev.actual_start is None:
-                    return ''  # Can't render without any time reference
-                effective_start = ev.actual_start
-                effective_end = ev.actual_end or timezone.now()
-                local_start = localtime(effective_start)
-                local_end   = localtime(effective_end)
-            elif ev.end_time is None:
-                return ''
-            else:
+            segs = list(ev.segments.all())  # prefetched
+            has_segments = len(segs) > 0
+
+            # For impromptu events (no scheduled time), derive bar from segments
+            if ev.start_time and ev.end_time:
                 local_start = localtime(ev.start_time)
                 local_end   = localtime(ev.end_time)
-            origin    = local_start.replace(hour=GANTT_START, minute=0, second=0, microsecond=0)
-            edit_url  = reverse('cal:event_edit', args=(ev.id,))
-            base_css  = self._event_classes(ev) + (f' {extra_css}' if extra_css else '')
-            if getattr(ev, 'is_impromptu', False):
-                base_css += ' event-impromptu'
-            color_style = f'background:{track_color};' if track_color else ''
-            end_iso   = (ev.end_time or ev.actual_end or timezone.now()).isoformat()
-            creator_name = escape(ev.created_by.username) if ev.created_by else ''
-            creator_attr = f' data-creator="{creator_name}"' if creator_name else ''
-            title_suffix = f' — {creator_name}' if creator_name else ''
+            elif has_segments:
+                local_start = localtime(segs[0].start)
+                seg_end = segs[-1].end or timezone.now()
+                local_end = localtime(seg_end)
+            else:
+                return ''
+            origin = local_start.replace(hour=GANTT_START, minute=0, second=0, microsecond=0)
 
-            has_actual = ev.actual_start or ev.actual_end
-
-            # --- scheduled bar (ghost when actuals exist) ---
             start_off = max(0, int((local_start - origin).total_seconds()) // 60)
             end_off   = min(GANTT_MINS, int((local_end - origin).total_seconds()) // 60)
             width_m   = max(0, end_off - start_off)
-            if width_m == 0 and not has_actual:
+            if width_m == 0 and not has_segments:
                 return ''
 
+            # Shared computed values
+            edit_url  = reverse('cal:event_edit', args=(ev.id,))
+            base_css  = self._event_classes(ev)
+            for cls in ('event-track', 'event-vehicle', 'event-operator', 'event-multi'):
+                base_css = base_css.replace(cls, '')
+            base_css = ' '.join(base_css.split())
+            if extra_css:
+                base_css += f' {extra_css}'
+            is_pending   = not ev.is_approved
+            color_style  = f'--track-color:{track_color};' if track_color else ''
+            bg_style     = f'background:{track_color};' if track_color and not is_pending else ''
+            tooltip_json = escape(json.dumps(self._gantt_tooltip_data(ev, segs)))
+            left_pct     = round(start_off / GANTT_MINS * 100, 4) if width_m > 0 else 0
+            width_pct    = round(width_m   / GANTT_MINS * 100, 4) if width_m > 0 else 0
+            t_start      = self._fmt_time(ev.start_time) if ev.start_time else self._fmt_time(segs[0].start) if has_segments else ''
+            t_end        = self._fmt_time(ev.end_time) if ev.end_time else ''
+
             parts = []
-
-            is_impromptu = getattr(ev, 'is_impromptu', False)
-
-            if width_m > 0:
-                left_pct  = round(start_off / GANTT_MINS * 100, 4)
-                width_pct = round(width_m   / GANTT_MINS * 100, 4)
-                t_start   = self._fmt_time(ev.start_time or ev.actual_start)
-                t_end     = self._fmt_time(ev.end_time or ev.actual_end or timezone.now())
-                ghost_cls = ' gantt-block--ghost' if (has_actual and not is_impromptu) else ''
-                parts.append(
-                    f'<a class="gantt-block {base_css}{ghost_cls}" href="{edit_url}"'
-                    f' style="left:{left_pct}%;width:{width_pct}%;{color_style}"'
-                    f' title="{escape(ev.title)}{title_suffix}"'
-                    f' data-end="{end_iso}"{creator_attr}>'
-                    f'<span class="gantt-block-title">{escape(ev.title)}</span>'
-                    f'<span class="gantt-block-time">{t_start}&ndash;{t_end}</span>'
-                    f'</a>'
+            parts += self._render_scheduled_bar(
+                ev, segs, edit_url, base_css, color_style, bg_style,
+                tooltip_json, left_pct, width_pct, t_start, t_end, width_m,
+            )
+            parts += self._render_segments(
+                ev, segs, origin, GANTT_MINS, local_start, local_end,
+                tooltip_json, color_style,
+            )
+            parts += self._render_trailing_pause(
+                ev, segs, origin, GANTT_MINS, tooltip_json, color_style,
+            )
+            parts += self._render_connectors(
+                ev, segs, origin, GANTT_MINS, start_off, end_off,
+                left_pct, width_pct, tooltip_json, color_style, width_m,
+            )
+            if has_segments and width_m > 0:
+                parts += self._render_text_overlay(
+                    ev, edit_url, left_pct, width_pct, tooltip_json, t_start, t_end,
                 )
-
-            # --- actual bar (solid) ---
-            if has_actual and not is_impromptu:
-                act_start = localtime(ev.actual_start) if ev.actual_start else (localtime(ev.start_time) if ev.start_time else None)
-                act_end   = localtime(ev.actual_end) if ev.actual_end else (localtime(ev.end_time) if ev.end_time else localtime(timezone.now()))
-                if act_start is None or act_end is None:
-                    return ''.join(parts)
-                a_start_off = max(0, int((act_start - origin).total_seconds()) // 60)
-                a_end_off   = min(GANTT_MINS, int((act_end - origin).total_seconds()) // 60)
-                a_width_m   = max(0, a_end_off - a_start_off)
-                if a_width_m > 0:
-                    a_left_pct  = round(a_start_off / GANTT_MINS * 100, 4)
-                    a_width_pct = round(a_width_m   / GANTT_MINS * 100, 4)
-                    a_t_start   = self._fmt_time(act_start)
-                    a_t_end     = self._fmt_time(act_end)
-                    parts.append(
-                        f'<a class="gantt-block gantt-block--actual {base_css}" href="{edit_url}"'
-                        f' style="left:{a_left_pct}%;width:{a_width_pct}%;{color_style}"'
-                        f' title="{escape(ev.title)} (actual){title_suffix}"'
-                        f' data-end="{end_iso}"{creator_attr}>'
-                        f'<span class="gantt-block-title">{escape(ev.title)}</span>'
-                        f'<span class="gantt-block-time">{a_t_start}&ndash;{a_t_end}</span>'
-                        f'</a>'
-                    )
-
             return ''.join(parts)
 
         # ── Track rows ───────────────────────────────────────────────
@@ -404,9 +650,23 @@ class Calendar(HTMLCalendar):
 
                 # Events booked directly on the parent (full-track)
                 parent_events = sorted(
-                    [ev for ev in all_events if track.pk in event_asset_ids[ev.pk] and (ev.start_time or ev.actual_start)],
-                    key=lambda ev: ev.start_time or ev.actual_start,
+                    [ev for ev in all_events if track.pk in event_asset_ids[ev.pk]],
+                    key=lambda ev: ev.start_time,
                 )
+
+                # Events booked on ≥2 subtracks of this parent → promote to full-track
+                subtrack_pks = {sub.pk for sub in subtracks}
+                multi_sub_pks = {
+                    ev.pk for ev in all_events
+                    if len(event_asset_ids[ev.pk] & subtrack_pks) >= 2
+                    and ev.pk not in {e.pk for e in parent_events}
+                }
+                if multi_sub_pks:
+                    parent_events = sorted(
+                        parent_events + [ev for ev in all_events if ev.pk in multi_sub_pks],
+                        key=lambda ev: ev.start_time,
+                    )
+
                 n_sub = len(subtracks)
 
                 # Build one sub-row per subtrack (label lives in the track-label column)
@@ -414,8 +674,10 @@ class Calendar(HTMLCalendar):
                 subtrack_names_html = ''
                 for sub in subtracks:
                     sub_events = sorted(
-                        [ev for ev in all_events if sub.pk in event_asset_ids[ev.pk] and (ev.start_time or ev.actual_start)],
-                        key=lambda ev: ev.start_time or ev.actual_start,
+                        [ev for ev in all_events
+                         if sub.pk in event_asset_ids[ev.pk]
+                         and ev.pk not in multi_sub_pks],
+                        key=lambda ev: ev.start_time,
                     )
                     assigned, n_rows = self._assign_rows(sub_events)
                     row_buckets = [[] for _ in range(max(n_rows, 1))]
@@ -427,18 +689,34 @@ class Calendar(HTMLCalendar):
                         blocks = ''.join(_make_block(ev, track_color=track.color) for ev in bucket)
                         inner_rows += f'<div class="gantt-sub-row">{blocks}</div>'
 
-                    sub_rows_html += f'<div class="gantt-subtrack-row">{inner_rows}</div>'
+                    sub_style = f' style="--lane-rows:{n_rows}"' if n_rows > 1 else ''
+                    sub_rows_html += f'<div class="gantt-subtrack-row"{sub_style}>{inner_rows}</div>'
+                    name_style = f' style="height:calc(var(--lane-rows,1)*58px);--lane-rows:{n_rows}"' if n_rows > 1 else ''
                     subtrack_names_html += (
-                        f'<span class="gantt-subtrack-name">{escape(sub.name)}</span>'
+                        f'<span class="gantt-subtrack-name"{name_style}>{escape(sub.name)}</span>'
                     )
 
-                # Full-track (parent) events rendered as an overlay spanning all sub-rows.
-                parent_blocks = ''.join(_make_block(ev, 'gantt-fulltrack-block', track_color=track.color) for ev in parent_events)
-                parent_overlay = (
-                    f'<div class="gantt-fulltrack-overlay" style="--subtrack-count:{n_sub}">'
-                    f'{parent_blocks}'
-                    f'</div>'
-                ) if parent_blocks else ''
+                # Full-track (parent) events get their own lane above subtracks
+                parent_lane_html = ''
+                if parent_events:
+                    assigned, p_n_rows = self._assign_rows(parent_events)
+                    p_buckets = [[] for _ in range(max(p_n_rows, 1))]
+                    for ev, row_idx in assigned:
+                        p_buckets[row_idx].append(ev)
+                    parent_rows = ''
+                    for bucket in p_buckets:
+                        blocks = ''.join(_make_block(ev, track_color=track.color) for ev in bucket)
+                        parent_rows += f'<div class="gantt-sub-row">{blocks}</div>'
+                    parent_lane_html = (
+                        f'<div class="gantt-subtrack-row gantt-parent-lane"'
+                        f' style="--lane-rows:{p_n_rows}">'
+                        f'{parent_rows}'
+                        f'</div>'
+                    )
+                    subtrack_names_html = (
+                        f'<span class="gantt-subtrack-name gantt-parent-lane-label">All</span>'
+                        + subtrack_names_html
+                    )
 
                 label_style = f'border-left:3px solid {track.color};' if track.color else ''
                 rows_html += (
@@ -446,7 +724,7 @@ class Calendar(HTMLCalendar):
                     f'<div class="gantt-track-label" style="{label_style}">{escape(track.name)}</div>'
                     f'<div class="gantt-sublabel-col">{subtrack_names_html}</div>'
                     f'<div class="gantt-lane gantt-lane-subtracks">'
-                    f'{parent_overlay}'
+                    f'{parent_lane_html}'
                     f'{sub_rows_html}'
                     f'</div>'
                     f'</div>'
@@ -454,8 +732,8 @@ class Calendar(HTMLCalendar):
             else:
                 # ── Track without subtracks (original behaviour) ──────
                 track_events = sorted(
-                    [ev for ev in all_events if track.pk in event_asset_ids[ev.pk] and (ev.start_time or ev.actual_start)],
-                    key=lambda ev: ev.start_time or ev.actual_start,
+                    [ev for ev in all_events if track.pk in event_asset_ids[ev.pk]],
+                    key=lambda ev: ev.start_time,
                 )
                 assigned, n_rows = self._assign_rows(track_events)
 
@@ -476,6 +754,22 @@ class Calendar(HTMLCalendar):
                     f'<div class="gantt-lane">{sub_rows_html}</div>'
                     f'</div>'
                 )
+
+        # Set legend context flags on the Calendar instance for the view to read.
+        # Use current time-of-day projected onto the viewed date so that past
+        # events on any viewed day are classified correctly.
+        now_local = localtime(timezone.now())
+        cutoff = now_local.replace(
+            year=day_date.year, month=day_date.month, day=day_date.day,
+        )
+        self.gantt_has_pending = any(not ev.is_approved for ev in all_events)
+        self.gantt_has_active = any(
+            any(seg.end is None for seg in ev.segments.all())
+            for ev in all_events
+        )
+        past_approved = [ev for ev in all_events if ev.end_time and ev.end_time <= cutoff and ev.is_approved]
+        self.gantt_has_completed = any(len(ev.segments.all()) > 0 for ev in past_approved)
+        self.gantt_has_noshow = any(len(ev.segments.all()) == 0 for ev in past_approved)
 
         data_attrs = f' data-gantt-start="{GANTT_START}" data-gantt-mins="{GANTT_MINS}"'
         if data_earliest is not None:
@@ -524,28 +818,13 @@ class Calendar(HTMLCalendar):
         )
 
         # Single query for all track-related events this week.
-        scheduled_wk = Event.objects.filter(
-            assets__asset_type=Asset.AssetType.TRACK,
-            start_time__date__gte=start,
-            start_time__date__lte=end,
-        ).select_related('created_by').prefetch_related('assets').distinct()
-
-        # Impromptu events this week (no start_time, use actual_start).
-        impromptu_wk = Event.objects.filter(
-            is_approved=True,
-            is_impromptu=True,
-            actual_start__date__gte=start,
-            actual_start__date__lte=end,
-            assets__asset_type=Asset.AssetType.TRACK,
-        ).select_related('created_by').prefetch_related('assets').distinct()
-
-        # Combine scheduled + impromptu, dedup by pk
-        _seen_wk = set()
-        events = []
-        for _ev in list(scheduled_wk) + list(impromptu_wk):
-            if _ev.pk not in _seen_wk:
-                _seen_wk.add(_ev.pk)
-                events.append(_ev)
+        events = list(
+            Event.objects.filter(
+                assets__asset_type=Asset.AssetType.TRACK,
+                start_time__date__gte=start,
+                start_time__date__lte=end,
+            ).select_related('created_by').prefetch_related('assets', 'segments').distinct()
+        )
 
         # Build a lookup: event_asset_ids[ev.pk] = set of asset PKs
         event_asset_ids = {
@@ -582,13 +861,10 @@ class Calendar(HTMLCalendar):
             return sorted(
                 [
                     ev for ev in events
-                    if (
-                        (ev.start_time and localtime(ev.start_time).date() == day)
-                        or (ev.is_impromptu and ev.actual_start and localtime(ev.actual_start).date() == day)
-                    )
+                    if localtime(ev.start_time).date() == day
                     and asset_pk in event_asset_ids[ev.pk]
                 ],
-                key=lambda ev: ev.start_time or ev.actual_start,
+                key=lambda ev: ev.start_time,
             )
 
         def _cell_html(day_evs, td_cls):
@@ -625,7 +901,7 @@ class Calendar(HTMLCalendar):
                 all_pks = [track.pk] + [s.pk for s in subtracks]
                 day_evs = sorted(
                     {ev for pk in all_pks for ev in _day_events_for_asset(pk, day)},
-                    key=lambda ev: ev.start_time or ev.actual_start or datetime.max,
+                    key=lambda ev: ev.start_time,
                 )
                 row += _cell_html(day_evs, td_cls)
             body_rows += f'<tr>{row}</tr>'

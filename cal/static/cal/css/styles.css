@@ -124,7 +124,8 @@ ul { list-style: none; padding: 0; margin: 0; }
 .site-nav-links a:last-child { border-right: none; }
 .site-nav-links a:hover { color: #fff; text-decoration: none; }
 .site-nav-user  { display: flex; align-items: center; gap: 12px; }
-.nav-user-name  { color: rgba(255,255,255,0.9); font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 6px; }
+.nav-user-name  { color: rgba(255,255,255,0.9); font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 6px; transition: background 150ms; }
+a.nav-user-name:hover { background: rgba(255,255,255,0.12); text-decoration: none; color: #fff; }
 .admin-chip     { background: rgba(245,158,11,0.25); color: #fff; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 999px; }
 .nav-logout     { color: rgba(255,255,255,0.6) !important; font-size: 13px; transition: color 120ms; display: flex; align-items: center; gap: 4px; }
 .nav-logout:hover { color: #fff !important; text-decoration: none; }
@@ -162,21 +163,6 @@ form input:focus, form select:focus, form textarea:focus {
   border-color: var(--primary);
   box-shadow: 0 0 0 3px rgba(46,168,229,0.12);
 }
-/* Radio channel dropdown in event form — matches dashboard green style */
-select#id_radio_channel,
-select#id_radio_channel.form-control {
-  background: #064e3b !important; color: #6ee7b7 !important;
-  border: 2px solid #10b981 !important;
-  font-weight: 700;
-  color-scheme: dark;
-  box-shadow: 0 0 5px rgba(16,185,129,0.25);
-}
-select#id_radio_channel:focus,
-select#id_radio_channel.form-control:focus {
-  border-color: #34d399 !important;
-  box-shadow: 0 0 8px rgba(16,185,129,0.4) !important;
-}
-select#id_radio_channel option { background: #064e3b; color: #6ee7b7; }
 .form-errors  { background: #fff3cd; border: 1px solid #ffc107; border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; }
 .error-msg    { color: #856404; margin: 4px 0; font-size: 14px; }
 .asset-form   { width: 100%; }
@@ -609,8 +595,7 @@ html.dark-theme table.calendar td:hover {
 
 /* Hide pending events when filter is active */
 .cal-hide-pending .event-pending { display: none !important; }
-.cal-hide-pending .gantt-block.event-pending { display: none !important; }
-.cal-hide-pending .gantt-fulltrack-overlay.event-pending { display: none !important; }
+.cal-hide-pending .event-pending.gantt-block { display: none !important; }
 
 .pending-badge {
   display: inline-block;
@@ -786,13 +771,67 @@ html.dark-theme table.calendar td:hover {
 }
 
 
-/* ── Legend ─────────────────────────────────────────────────── */
+/* ── Legend (sticky, collapsible) ──────────────────────────── */
+.cal-legend-wrapper {
+  position: fixed;
+  bottom: 12px;
+  left: 0;
+  z-index: 100;
+}
 .cal-legend {
   display: flex;
-  gap: 20px;
   align-items: center;
-  padding: 10px 18px 16px;
-  flex-wrap: wrap;
+  padding: 6px 14px 6px 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-left: none;
+  border-radius: 0 8px 8px 0;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  white-space: nowrap;
+}
+.cal-legend-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px 2px 6px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--muted);
+  flex-shrink: 0;
+  border-radius: 4px;
+}
+.cal-legend-toggle:hover { color: var(--text); background: rgba(0,0,0,0.04); }
+.cal-legend-arrow {
+  display: inline-block;
+  font-size: 18px;
+  transform: rotate(180deg);
+  transition: transform 200ms ease;
+}
+.cal-legend-collapsed .cal-legend-arrow {
+  transform: rotate(0deg);
+}
+.cal-legend-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+.cal-legend-divider {
+  width: 1px;
+  height: 16px;
+  background: var(--border);
+  flex-shrink: 0;
+  margin-right: 14px;
+}
+/* Collapsed: hide items + divider */
+.cal-legend-collapsed .legend-item,
+.cal-legend-collapsed .cal-legend-divider {
+  display: none;
+}
+/* Expanded: gap between legend items */
+.cal-legend .legend-item {
+  margin-left: 14px;
 }
 .legend-item  { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
 .legend-dot   { display: inline-block; width: 12px; height: 12px; border-radius: 3px; }
@@ -803,6 +842,12 @@ html.dark-theme table.calendar td:hover {
 
 /* Day-view legend extras */
 .legend-separator  { width: 1px; height: 14px; background: var(--border); margin: 0 2px; }
+.legend-swatch-pending {
+  display: inline-block; width: 14px; height: 10px; border-radius: 3px;
+  background: transparent;
+  border: 2px solid var(--primary);
+  opacity: 0.85;
+}
 .legend-dot-pending {
   display: inline-block; width: 12px; height: 12px; border-radius: 3px;
   background: var(--primary); opacity: 0.7;
@@ -1469,7 +1514,10 @@ html.dark-theme .card a            { color: var(--primary); }
 
 /* Cal-body dark bg fill */
 html.dark-theme .cal-body { background: var(--bg); }
-html.dark-theme .cal-legend { background: var(--bg); }
+html.dark-theme .cal-legend { background: var(--bg); border-color: rgba(46,168,229,0.18); box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
+html.dark-theme .cal-legend-toggle { color: #7090a0; }
+html.dark-theme .cal-legend-toggle:hover { color: #c0d8e4; background: rgba(255,255,255,0.05); }
+html.dark-theme .cal-legend-divider { background: rgba(46,168,229,0.18); }
 html.dark-theme .legend-item { color: #7090a0; }
 html.dark-theme .legend-separator { background: rgba(46,168,229,0.18); }
 
@@ -1647,7 +1695,7 @@ html.dark-theme .wk-today-head    { background: rgba(46,168,229,0.08); }
 html.dark-theme .wk-weekend-head  { background: rgba(99,102,241,0.05); }
 html.dark-theme .wk-today-num    { background: var(--primary); color: #fff; }
 
-/* ── Hamburger toggle — hidden on desktop ──────────────────── */
+/* ── Hamburger toggle (hidden on desktop, shown in 768px media query) ── */
 .nav-toggle-checkbox { display: none; }
 .nav-hamburger       { display: none; }
 
@@ -1665,477 +1713,12 @@ html.dark-theme .wk-today-num    { background: var(--primary); color: #fff; }
   .login-panels    { flex-direction: column; }
   .login-divider   { flex-direction: row; width: auto; padding: 12px 24px; height: 40px; border: none; border-top: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0; }
   .login-panel-admin { border-left: none; }
+  .site-nav-user   { display: none; }
 }
 
-/* ── Gantt day view ─────────────────────────────────────────── */
-
-.calendar.gantt-view {
-  overflow: hidden;
-}
-
-.gantt-scroll-container {
-  overflow-x: auto;
-  overflow-y: hidden;
-  -webkit-overflow-scrolling: touch;
-}
-
-.gantt-axis-row {
-  display: flex;
-  align-items: stretch;
-  min-width: 5040px; /* 240px labels + 4800px timeline (200px/hour × 24h) */
-}
-.gantt-axis-row .gantt-axis {
-  padding: 8px 0 4px;
-}
-.gantt-track-label-spacer {
-  width: 140px;
-  flex-shrink: 0;
-  position: sticky;
-  left: 0;
-  z-index: 10;
-  background: #f5fafd;
-  display: none; /* replaced by gantt-axis-label */
-}
-.gantt-axis-label {
-  border-bottom: 1px solid var(--border);
-  border-right: 1px solid var(--border);
-}
-.gantt-axis-sublabel {
-  border-bottom: 1px solid var(--border);
-}
-.gantt-axis {
-  flex: 1;
-  height: 24px;
-  min-width: 0;
-  position: relative;
-  z-index: 1;
-  border-bottom: 2px solid var(--border);
-}
-.gantt-hour-marker {
-  position: absolute;
-  bottom: 0;
-}
-.gantt-hour-label {
-  font-size: 10px;
-  font-weight: 700;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  white-space: nowrap;
-}
-
-.gantt-body {
-  display: flex;
-  flex-direction: column;
-  min-width: 5040px; /* 240px labels + 4800px timeline (200px/hour × 24h) */
-}
-
-.gantt-row {
-  display: flex;
-  align-items: stretch;
-  border-bottom: 1px solid var(--border);
-  min-height: 40px;
-}
-.gantt-track-label {
-  width: 140px;
-  flex-shrink: 0;
-  padding: 8px 12px;
-  font-size: 13px;
-  font-weight: 600;
-  color: #034259;
-  display: flex;
-  align-items: center;
-  border-right: 1px solid var(--border);
-  background: #f5fafd;
-  position: sticky;
-  left: 0;
-  z-index: 10;
-}
-.gantt-sublabel-spacer {
-  width: 100px;
-  flex-shrink: 0;
-  position: sticky;
-  left: 140px;
-  z-index: 10;
-  background: #f5fafd;
-  display: none; /* replaced by gantt-axis-sublabel */
-}
-.gantt-sublabel-col {
-  width: 100px;
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  border-right: 1px solid var(--border);
-  background: #f3f8fc;
-  position: sticky;
-  left: 140px;
-  z-index: 10;
-}
-.gantt-subtrack-name {
-  height: 58px;
-  display: flex;
-  align-items: center;
-  padding: 0 8px 0 10px;
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--muted);
-  font-style: italic;
-  border-bottom: 1px solid rgba(46,168,229,0.07);
-}
-.gantt-subtrack-name:last-child {
-  border-bottom: none;
-}
-
-.gantt-lane {
-  flex: 1;
-  position: relative;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  padding: 0;
-  overflow: hidden;
-  background-image: repeating-linear-gradient(
-    to right,
-    var(--border) 0,
-    var(--border) 1px,
-    transparent 1px,
-    transparent calc(100% / 24)
-  );
-}
-
-.gantt-sub-row {
-  position: relative;
-  height: 58px;
-  flex-shrink: 0;
-}
-
-/* ── Subtrack-specific Gantt rows ────────────────────────────── */
-
-/* Lane container for a track that has subtracks */
-.gantt-lane-subtracks {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-}
-
-/* Each subtrack within a track row — now just a lane, no inline label */
-.gantt-subtrack-row {
-  position: relative;
-  height: 58px;
-  flex-shrink: 0;
-  border-bottom: 1px solid rgba(46,168,229,0.07);
-}
-.gantt-subtrack-row:last-child {
-  border-bottom: none;
-}
-
-/* Overlay for full-track (parent) events — spans all subtrack rows */
-.gantt-fulltrack-overlay {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  z-index: 2;
-  pointer-events: none;   /* subtrack events behind it remain clickable */
-}
-.gantt-fulltrack-overlay .gantt-block {
-  pointer-events: auto;
-}
-
-/* Full-track blocks span the full height of the overlay (both subtrack rows) */
-.gantt-block.gantt-fulltrack-block {
-  top: 6px;
-  height: calc(100% - 12px);
-  opacity: 0.88;
-  border-top: 2px solid rgba(255,255,255,0.25);
-}
-
-html.dark-theme .gantt-sublabel-col  { background: #1a2838; border-color: rgba(46,168,229,0.12); }
-html.dark-theme .gantt-subtrack-name { color: #5a8090; border-color: rgba(46,168,229,0.08); }
-html.dark-theme .gantt-subtrack-row  { border-color: rgba(46,168,229,0.08); }
-
-.gantt-block {
-  position: absolute;
-  top: 4px;
-  height: 40px;
-  border-radius: 4px;
-  padding: 0 6px;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  overflow: hidden;
-  text-decoration: none;
-  font-size: 12px;
-  color: #fff;
-  background: var(--primary);
-  min-width: 20px;
-  box-sizing: border-box;
-  transition: filter 120ms ease;
-}
-.gantt-block:hover {
-  filter: brightness(1.12);
-  text-decoration: none;
-}
-.gantt-block.event-track    { background: #10b981; }
-.gantt-block.event-vehicle  { background: #f59e0b; }
-.gantt-block.event-operator { background: #6366f1; }
-.gantt-block.event-multi    { background: var(--primary); }
-.gantt-block.event-pending  {
-  opacity: 0.7;
-  border: 2px dashed rgba(255,255,255,0.85);
-}
-.gantt-block.event-past     { opacity: 0.45; filter: saturate(0.5); }
-
-/* Impromptu event — dashed border + subtle pulse when in-progress */
-.gantt-block.event-impromptu {
-  border: 2px dashed rgba(255,255,255,0.8);
-  box-shadow: 0 0 6px rgba(46,168,229,0.3);
-}
-.gantt-block.event-impromptu:not(.gantt-block--ghost) {
-  animation: impromptu-pulse 2s ease-in-out infinite;
-}
-@keyframes impromptu-pulse {
-  0%, 100% { box-shadow: 0 0 6px rgba(46,168,229,0.3); }
-  50%      { box-shadow: 0 0 14px rgba(46,168,229,0.6); }
-}
-.calendar li.event-impromptu {
-  border-left: 3px dashed var(--primary);
-  font-style: italic;
-}
-
-/* Ghost bar (scheduled time when actuals exist) — offset below actual */
-.gantt-block.gantt-block--ghost {
-  top: 32px;
-  height: 22px;
-  opacity: 0.7;
-  border: 2px dashed rgba(108,117,125,0.6);
-  background: rgba(108,117,125,0.12) !important;
-  font-size: 10px;
-  padding: 0 5px;
-}
-.gantt-block.gantt-block--ghost .gantt-block-title { display: none; }
-.gantt-block.gantt-block--ghost .gantt-block-time {
-  color: var(--muted); font-size: 10px; opacity: 0.85;
-}
-
-/* Actual bar (solid, occupies top portion of lane) */
-.gantt-block.gantt-block--actual {
-  top: 4px;
-  height: 26px;
-  border: 1.5px solid rgba(255,255,255,0.35);
-}
-
-/* Legend swatches for the day view */
-.legend-swatch-actual {
-  display: inline-block; width: 14px; height: 10px; border-radius: 3px;
-  background: var(--primary); border: 1.5px solid rgba(255,255,255,0.35);
-}
-.legend-swatch-dual {
-  display: inline-flex; flex-direction: column; gap: 1px; vertical-align: middle;
-}
-.legend-swatch-dual__actual {
-  width: 14px; height: 7px; border-radius: 2px;
-  background: var(--primary); border: 1px solid rgba(255,255,255,0.3);
-}
-.legend-swatch-dual__ghost {
-  width: 14px; height: 5px; border-radius: 2px;
-  border: 1.5px dashed rgba(108,117,125,0.6);
-  background: rgba(108,117,125,0.12); opacity: 0.7;
-}
-
-.gantt-block-title {
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  flex: 1 1 auto;
-  min-width: 0;
-}
-.gantt-block-time {
-  font-size: 10px;
-  opacity: 0.85;
-  white-space: nowrap;
-  flex: 0 999 auto;
-  min-width: 0;
-  overflow: hidden;
-}
-
-.gantt-empty {
-  padding: 40px 24px;
-  text-align: center;
-  color: var(--muted);
-  font-size: 14px;
-}
-
-/* Dark theme — Gantt */
-html.dark-theme .gantt-track-label {
-  color: #c0d8e4;
-  background: #1a2332;
-  border-color: rgba(46,168,229,0.15);
-}
-html.dark-theme .gantt-track-label-spacer,
-html.dark-theme .gantt-sublabel-spacer { background: #1a2332; }
-html.dark-theme .gantt-sublabel-col { background: #1a2838; }
-html.dark-theme .gantt-row    { border-color: rgba(46,168,229,0.12); }
-html.dark-theme .gantt-lane   {
-  background-image: repeating-linear-gradient(
-    to right,
-    rgba(46,168,229,0.15) 0,
-    rgba(46,168,229,0.15) 1px,
-    transparent 1px,
-    transparent calc(100% / 24)
-  );
-}
-html.dark-theme .gantt-axis-row { border-color: rgba(46,168,229,0.15); }
-
-/* ── Gantt now-line ────────────────────────────────────────── */
-.gantt-now-line {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 2px;
-  background: #ef4444;
-  z-index: 1;
-  pointer-events: none;
-}
-.gantt-now-axis {
-  /* In the axis row — show the "Now" label above the line */
-  bottom: -2px;
-  top: auto;
-  height: calc(100% + 4px);
-}
-.gantt-now-label {
-  position: absolute;
-  top: -1px;
-  left: 4px;
-  font-size: 9px;
-  font-weight: 700;
-  color: #ef4444;
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
-  white-space: nowrap;
-}
-.gantt-now-body {
-  /* In the body — spans full height of all track rows */
-  top: 0;
-  bottom: 0;
-}
-
-/* ── Feedback list page ───────────────────────────────────── */
-.feedback-category-badge {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 10px;
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-}
-.feedback-category-bug     { background: #fde8e8; color: #b91c1c; }
-.feedback-category-feature { background: #e0f2fe; color: #0369a1; }
-.feedback-category-other   { background: #f3f4f6; color: #4b5563; }
-html.dark-theme .feedback-category-bug     { background: rgba(185,28,28,0.2); color: #f87171; }
-html.dark-theme .feedback-category-feature { background: rgba(3,105,161,0.2); color: #7dd3fc; }
-html.dark-theme .feedback-category-other   { background: rgba(75,85,99,0.2); color: #9ca3af; }
-.feedback-message {
-  margin: 6px 0 0;
-  font-size: 13px;
-  color: var(--muted);
-  line-height: 1.4;
-  white-space: pre-wrap;
-}
-.feedback-page-link {
-  color: var(--primary);
-  font-size: 12px;
-  text-decoration: none;
-}
-.feedback-page-link:hover { text-decoration: underline; }
-
-/* ── Feedback FAB + modal ──────────────────────────────────── */
-.feedback-fab {
-  position: fixed;
-  bottom: 24px;
-  right: 24px;
-  z-index: 900;
-  height: 44px;
-  padding: 0 18px;
-  border-radius: 22px;
-  border: none;
-  background: linear-gradient(180deg, #023447, #034259);
-  color: #fff;
-  font-size: 15px;
-  cursor: pointer;
-  box-shadow: 0 4px 16px rgba(2,40,54,0.35);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  justify-content: center;
-  transition: transform 150ms ease, box-shadow 150ms ease;
-}
-.feedback-fab-label {
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-}
-.feedback-fab:hover {
-  transform: translateY(-2px) scale(1.05);
-  box-shadow: 0 8px 24px rgba(2,40,54,0.45);
-}
-
-.feedback-modal-overlay {
-  position: fixed; inset: 0; z-index: 9999;
-  background: rgba(0,0,0,0.45);
-  display: flex; align-items: center; justify-content: center;
-  animation: fadeIn .15s;
-}
-.feedback-modal {
-  background: var(--card, #fff);
-  border-radius: 12px;
-  padding: 24px 28px;
-  max-width: 440px;
-  width: 90%;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-}
-.feedback-modal h5 {
-  color: var(--text, #023447);
-}
-.feedback-modal .form-control {
-  background: var(--card, #fff);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  color: var(--text, #073242);
-  transition: border-color 150ms ease, box-shadow 150ms ease;
-}
-.feedback-modal .form-control:focus {
-  border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(46,168,229,0.12);
-  outline: none;
-}
-
-.feedback-toast {
-  position: fixed;
-  bottom: 84px;
-  right: 24px;
-  z-index: 10000;
-  background: linear-gradient(180deg, #023447, #034259);
-  color: #fff;
-  padding: 10px 18px;
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 500;
-  box-shadow: 0 4px 16px rgba(2,40,54,0.35);
-  animation: fadeIn .15s;
-}
-
-/* Dark theme overrides for feedback */
-html.dark-theme .feedback-modal { background: var(--card); }
-html.dark-theme .feedback-modal h5 { color: #e2e8f0; }
-html.dark-theme .feedback-modal .form-control { background: rgba(255,255,255,0.05); border-color: rgba(46,168,229,0.25); color: #e2e8f0; }
-html.dark-theme .feedback-modal label { color: #c0d8e4; }
-
-/* ══════════════════════════════════════════════════════════════
-   Mobile responsive — event creation / edit form
-   ══════════════════════════════════════════════════════════════ */
+/* ════════════════════════════════════════════════════════════════
+   RESPONSIVE — Mobile: 768px
+   ════════════════════════════════════════════════════════════════ */
 @media (max-width: 768px) {
 
   /* ── Page container: edge-to-edge ─────────────────────────── */
@@ -2419,15 +2002,19 @@ html.dark-theme .feedback-modal label { color: #c0d8e4; }
   }
   .schedule-info { width: 100%; }
 
-  /* Action buttons — full-width row with large touch targets */
+  /* Action buttons — stacked vertically with large touch targets */
   .schedule-row > div:last-child {
     display: flex;
+    flex-direction: column;
     width: 100%;
-    gap: 6px;
+    gap: 8px;
+  }
+  .schedule-row > div:last-child form {
+    width: 100%;
   }
   .schedule-row > div:last-child .btn,
   .schedule-row > div:last-child button.btn {
-    flex: 1;
+    width: 100%;
     min-height: 44px;
     font-size: 14px;
     padding: 10px 8px;
@@ -2443,17 +2030,42 @@ html.dark-theme .feedback-modal label { color: #c0d8e4; }
   /* ── Asset grid — single column ──────────────────────────── */
   .asset-grid { grid-template-columns: 1fr; }
 
+  /* ── Asset cards — stack name above buttons on mobile ────── */
+  .asset-card {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    padding: 12px 36px 12px 12px;
+  }
+  .asset-card-actions {
+    justify-content: flex-start;
+  }
+
+  /* ── Asset delete button — larger touch target on mobile ─── */
+  .asset-card-delete-btn {
+    width: 36px; height: 36px;
+    font-size: 20px;
+    top: 6px; right: 6px;
+  }
+
   /* ── Delete / feedback modals ────────────────────────────── */
   .delete-modal-box { padding: 20px 16px; }
   .feedback-modal   { width: 95%; padding: 20px 16px; }
 
-  /* ── Feedback FAB — compact on mobile ────────────────────── */
-  .feedback-fab { bottom: 12px; right: 12px; }
-  .feedback-fab-label { display: none; }
-  .feedback-toast { right: 12px; bottom: 68px; }
+  /* ── Calendar legend — wrap on mobile to prevent overflow ── */
+  .cal-legend {
+    white-space: normal;
+    flex-wrap: wrap;
+    max-width: calc(100vw - 20px);
+    gap: 2px 8px;
+    padding: 6px 10px;
+  }
+  .cal-legend-wrapper { max-width: 100vw; }
 
-  /* ── Gantt label — narrower on mobile ────────────────────── */
-  .gantt-track-row .gantt-track-label { min-width: 100px; font-size: 11px; }
+  /* ── Feedback FAB — compact on mobile, above legend bar ──── */
+  .feedback-fab { bottom: 56px; right: 12px; }
+  .feedback-fab-label { display: none; }
+  .feedback-toast { right: 12px; bottom: 112px; }
 
   /* ── Empty state ─────────────────────────────────────────── */
   .empty-state { padding: 32px 16px; }
@@ -2566,34 +2178,77 @@ html.dark-theme .feedback-modal label { color: #c0d8e4; }
   .trk-subname { font-size: 9px; }
   .trk-events li.event { font-size: 10px; padding: 3px 4px; }
 
-  /* ── Day view (Gantt) — horizontal scroll, sticky labels ────── */
-  .calendar.gantt-view { border-radius: 6px; }
-  .day-view-title { font-size: 16px; padding: 12px 12px 10px; }
-  .gantt-scroll-container { -webkit-overflow-scrolling: touch; }
-  .gantt-track-label { width: 100px; padding: 6px 6px; font-size: 11px; }
-  .gantt-sublabel-col { width: 70px; left: 100px; }
-  .gantt-subtrack-name { font-size: 9px; padding: 0 4px; height: 48px; }
-  .gantt-block { min-height: 36px; font-size: 11px; min-width: 24px; }
-  .gantt-sub-row { height: 48px; }
-  .gantt-subtrack-row { height: 48px; }
-  .gantt-axis-row { min-width: 4170px; }
-  .gantt-body { min-width: 4170px; }
-  .gantt-now-line { width: 3px; }
-  .gantt-now-label { font-size: 10px; }
+  /* ── Nav logout — 44px touch target ─────────────────────── */
+  .nav-logout {
+    min-height: 44px;
+    padding: 10px 10px;
+  }
 
-  /* Gantt hour labels — show fewer on mobile (every 2h visibility via spacing) */
-  .gantt-hour-label { font-size: 9px; }
-
-  /* ── Legend — centered wrap ──────────────────────────────────── */
-  .cal-legend { padding: 8px 10px 12px; gap: 10px; justify-content: center; }
-  .legend-item { font-size: 11px; gap: 4px; }
+  /* ── Menu backdrop when hamburger is open ────────────────── */
+  .nav-toggle-checkbox:checked ~ .site-nav-links::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.3);
+    z-index: -1;
+  }
 }
 
+/* ── Collapsible Gantt labels (toggled by JS class) ───────────── */
+.gantt-labels-collapsed .gantt-track-label {
+  width: 8px;
+  min-width: 8px;
+  padding: 0;
+  overflow: hidden;
+  font-size: 0;
+  border-right: none;
+}
+.gantt-labels-collapsed .gantt-track-label-spacer {
+  width: 8px;
+  min-width: 8px;
+}
+.gantt-labels-collapsed .gantt-sublabel-col {
+  width: 0;
+  min-width: 0;
+  padding: 0;
+  overflow: hidden;
+  border-right: none;
+}
+.gantt-labels-collapsed .gantt-sublabel-spacer {
+  width: 0;
+  min-width: 0;
+}
+.gantt-labels-collapsed .gantt-sublabel-col,
+.gantt-labels-collapsed .gantt-sublabel-spacer {
+  left: 8px;
+}
+.gantt-labels-collapsed .gantt-axis-label {
+  width: 8px;
+  min-width: 8px;
+}
+.gantt-labels-collapsed .gantt-axis-sublabel {
+  width: 0;
+  min-width: 0;
+}
+.gantt-label-toggle {
+  display: none;
+  background: none;
+  border: 1px solid var(--border, #d1d5db);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: var(--muted, #6b7280);
+  cursor: pointer;
+  margin-left: 8px;
+}
+.gantt-label-toggle:hover { background: var(--border, #e5e7eb); }
+@media (max-width: 768px) {
+  .gantt-label-toggle { display: inline-flex; align-items: center; gap: 4px; }
+}
 
 /* ════════════════════════════════════════════════════════════════
    RESPONSIVE — Very small phones (max-width: 480px)
    ════════════════════════════════════════════════════════════════ */
-
 @media (max-width: 480px) {
 
   /* ── Month view — ultra compact ─────────────────────────────── */
@@ -2612,20 +2267,748 @@ html.dark-theme .feedback-modal label { color: #c0d8e4; }
   .trk-name { font-size: 10px; }
   .trk-sublabel-cell { width: 40px; min-width: 35px; left: 60px; }
 
-  /* ── Gantt labels narrower ──────────────────────────────────── */
-  .gantt-track-label { width: 80px; font-size: 10px; padding: 4px 4px; }
-  .gantt-sublabel-col { width: 60px; left: 80px; }
-  .gantt-axis-row { min-width: 3640px; }
-  .gantt-body { min-width: 3640px; }
-
   /* ── Toolbar controls — slightly smaller ────────────────────── */
   .cal-nav-arrow { width: 40px; height: 40px; }
   .vsw { font-size: 13px; padding: 8px 6px; }
   .btn-new-event { font-size: 13px; }
 
-  /* ── Nav links — icon-only on very small screens ─────────────── */
+  /* ── Nav links — icon-only in the top bar, but show text when hamburger is open ── */
   .site-nav-links a { font-size: 0; }
   .site-nav-links a i { font-size: 14px; }
   .site-nav-links a .nav-badge { font-size: 9px; }
+  .nav-toggle-checkbox:checked ~ .site-nav-links a { font-size: 15px; }
+  .nav-toggle-checkbox:checked ~ .site-nav-links a i { font-size: 16px; }
+  .nav-toggle-checkbox:checked ~ .site-nav-user { display: block; }
   .site-nav-user { display: none; }
 }
+
+/* ── Gantt day view ─────────────────────────────────────────── */
+
+.calendar.gantt-view {
+  overflow: hidden;
+}
+
+.gantt-scroll-container {
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+.gantt-axis-row {
+  display: flex;
+  align-items: stretch;
+  min-width: 5040px; /* 240px labels + 4800px timeline (200px/hour × 24h) */
+}
+.gantt-axis-row .gantt-axis {
+  padding: 8px 0 4px;
+}
+.gantt-track-label-spacer {
+  width: 140px;
+  flex-shrink: 0;
+  position: sticky;
+  left: 0;
+  z-index: 10;
+  background: #f5fafd;
+  display: none; /* replaced by gantt-axis-label */
+}
+.gantt-axis-label {
+  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+}
+.gantt-axis-sublabel {
+  border-bottom: 1px solid var(--border);
+}
+.gantt-axis {
+  flex: 1;
+  height: 24px;
+  min-width: 0;
+  position: relative;
+  z-index: 1;
+  border-bottom: 2px solid var(--border);
+}
+.gantt-hour-marker {
+  position: absolute;
+  bottom: 0;
+}
+.gantt-hour-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.gantt-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 5040px; /* 240px labels + 4800px timeline (200px/hour × 24h) */
+}
+
+.gantt-row {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid var(--border);
+  min-height: 40px;
+}
+.gantt-track-label {
+  width: 140px;
+  flex-shrink: 0;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #034259;
+  display: flex;
+  align-items: center;
+  border-right: 1px solid var(--border);
+  background: #f5fafd;
+  position: sticky;
+  left: 0;
+  z-index: 10;
+}
+.gantt-sublabel-spacer {
+  width: 100px;
+  flex-shrink: 0;
+  position: sticky;
+  left: 140px;
+  z-index: 10;
+  background: #f5fafd;
+  display: none; /* replaced by gantt-axis-sublabel */
+}
+.gantt-sublabel-col {
+  width: 100px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border);
+  background: #f3f8fc;
+  position: sticky;
+  left: 140px;
+  z-index: 10;
+}
+.gantt-subtrack-name {
+  height: 58px;
+  display: flex;
+  align-items: center;
+  padding: 0 8px 0 10px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+  font-style: italic;
+  border-bottom: 1px solid rgba(46,168,229,0.07);
+}
+.gantt-subtrack-name:last-child {
+  border-bottom: none;
+}
+
+.gantt-lane {
+  flex: 1;
+  position: relative;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+  background-image: repeating-linear-gradient(
+    to right,
+    var(--border) 0,
+    var(--border) 1px,
+    transparent 1px,
+    transparent calc(100% / 24)
+  );
+}
+
+.gantt-sub-row {
+  position: relative;
+  height: 58px;
+  flex-shrink: 0;
+}
+
+/* ── Subtrack-specific Gantt rows ────────────────────────────── */
+
+/* Lane container for a track that has subtracks */
+.gantt-lane-subtracks {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Each subtrack within a track row — now just a lane, no inline label */
+.gantt-subtrack-row {
+  position: relative;
+  height: calc(var(--lane-rows, 1) * 58px);
+  flex-shrink: 0;
+  border-bottom: 1px solid rgba(46,168,229,0.07);
+}
+.gantt-subtrack-row:last-child {
+  border-bottom: none;
+}
+
+/* Overlay for full-track (parent) events — spans all subtrack rows */
+/* Parent track lane — dedicated row above subtracks for parent-booked events */
+.gantt-parent-lane {
+  height: calc(var(--lane-rows, 1) * 48px);
+  border-bottom: 2px solid rgba(14, 165, 233, 0.15);
+}
+.gantt-parent-lane .gantt-sub-row {
+  height: 48px;
+}
+.gantt-parent-lane-label {
+  font-weight: 600;
+  font-style: italic;
+  opacity: 0.7;
+}
+
+/* Subtrack blocks fill their row height consistently */
+.gantt-subtrack-row .gantt-block,
+.gantt-sub-row .gantt-block {
+  top: 6px;
+  height: calc(100% - 12px);
+}
+.gantt-subtrack-row .gantt-block-segment,
+.gantt-sub-row .gantt-block-segment {
+  top: 6px;
+  height: calc(100% - 12px);
+}
+
+
+html.dark-theme .gantt-sublabel-col  { background: #1a2838; border-color: rgba(46,168,229,0.12); }
+html.dark-theme .gantt-subtrack-name { color: #5a8090; border-color: rgba(46,168,229,0.08); }
+html.dark-theme .gantt-subtrack-row  { border-color: rgba(46,168,229,0.08); }
+
+.gantt-block {
+  position: absolute;
+  top: 4px;
+  height: 40px;
+  border-radius: 4px;
+  padding: 0 6px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
+  text-decoration: none;
+  font-size: 12px;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.35);
+  background: var(--primary);
+  min-width: 20px;
+  box-sizing: border-box;
+  transition: filter 120ms ease;
+}
+.gantt-block:hover {
+  filter: brightness(1.12);
+  text-decoration: none;
+  color: #fff;
+}
+.gantt-block.event-track    { background: #10b981; }
+.gantt-block.event-vehicle  { background: #f59e0b; }
+.gantt-block.event-operator { background: #6366f1; }
+.gantt-block.event-multi    { background: var(--primary); }
+.gantt-block.event-pending  {
+  background: color-mix(in srgb, var(--track-color, var(--primary)) 12%, transparent) !important;
+  border: 2px solid var(--track-color, var(--primary));
+  color: var(--track-color, var(--primary));
+  text-shadow: none;
+  font-weight: 600;
+}
+.gantt-block.event-past     { opacity: 0.45; filter: saturate(0.5); }
+.gantt-block.event-completed { opacity: 0.55; filter: saturate(0.65); }
+.gantt-block.event-noshow   {
+  background: rgba(245,158,11,0.10) !important;
+  border: 3px dashed #d97706;
+  color: #92400e;
+  text-shadow: none;
+  opacity: 1;
+  filter: none;
+}
+
+/* Scheduled bar — semi-transparent when segments exist.
+   Text is rendered in a separate .gantt-block-text overlay (z-index: 5)
+   so it isn't trapped by opacity stacking contexts on the bar. */
+.gantt-block.gantt-block--scheduled {
+  opacity: 0.4;
+}
+/* Scheduled window edge markers — visible above segments */
+.gantt-sched-edge {
+  position: absolute;
+  top: 4px;
+  height: 40px;
+  width: 3px;
+  z-index: 3;
+  background: #fff;
+  opacity: 0.7;
+  border-radius: 2px;
+  pointer-events: none;
+}
+html.dark-theme .gantt-sched-edge {
+  background: #cbd5e1;
+  opacity: 0.6;
+}
+
+/* Text overlay — sits above segments, unaffected by bar opacity */
+.gantt-block-text {
+  position: absolute;
+  top: 4px;
+  height: 40px;
+  border-radius: 4px;
+  padding: 0 6px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
+  text-decoration: none;
+  font-size: 12px;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.35);
+  z-index: 5;
+  pointer-events: auto;
+  box-sizing: border-box;
+}
+a.gantt-block-text,
+a.gantt-block-text:link,
+a.gantt-block-text:visited,
+a.gantt-block-text:hover,
+a.gantt-block-text:active { text-decoration: none; color: #fff; }
+/* Match subtrack row sizing */
+.gantt-subtrack-row .gantt-block-text,
+.gantt-sub-row .gantt-block-text {
+  top: 6px;
+  height: calc(100% - 12px);
+}
+/* Match fulltrack overlay sizing */
+
+/* Actual segment bars — solid, overlaid on scheduled bar */
+.gantt-block-segment {
+  position: absolute;
+  top: 4px;
+  height: 40px;
+  border-radius: 4px;
+  z-index: 2;
+  pointer-events: auto;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+/* Match fulltrack-block sizing when inside an overlay */
+.gantt-block--actual-segment {
+  background: var(--track-color, var(--primary));
+  position: relative;
+}
+/* Left-edge marker showing where the segment begins */
+.gantt-block--actual-segment::before,
+.gantt-block--active-segment::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  border-radius: 3px 0 0 3px;
+  background: #fff;
+  opacity: 0.7;
+}
+.gantt-block--active-segment {
+  background: var(--track-color, var(--primary));
+  position: relative;
+}
+.gantt-block--active-segment::after {
+  content: '';
+  position: absolute;
+  right: -1px;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  border-radius: 0 3px 3px 0;
+  background: var(--track-color, var(--primary));
+  filter: brightness(1.4);
+  animation: gantt-edge-pulse 1.5s ease-in-out infinite;
+}
+@keyframes gantt-edge-pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 6px var(--track-color, var(--primary)); }
+  50% { opacity: 0.6; box-shadow: 0 0 2px var(--track-color, var(--primary)); }
+}
+@keyframes gantt-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+/* Pause gap — diagonal stripe between segments */
+.gantt-block--pause-gap {
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--track-color, var(--primary)),
+    var(--track-color, var(--primary)) 3px,
+    transparent 3px,
+    transparent 8px
+  );
+  opacity: 0.45;
+  border: none;
+}
+/* Active (live-growing) pause gap — subtle pulse */
+.gantt-block--active-pause {
+  animation: gantt-pause-pulse 2s ease-in-out infinite;
+}
+@keyframes gantt-pause-pulse {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 0.25; }
+}
+
+/* Overflow indicators — dotted borders when actual exceeds scheduled */
+.gantt-block--overflow-start {
+  border-left: 2px dashed var(--track-color, var(--primary));
+}
+.gantt-block--overflow-end {
+  border-right: 2px dashed var(--track-color, var(--primary));
+}
+
+/* Connector line between disconnected scheduled bar and segments */
+.gantt-connector {
+  position: absolute;
+  top: 50%;
+  height: 2px;
+  transform: translateY(-1px);
+  z-index: 1;
+  pointer-events: auto;
+  cursor: pointer;
+}
+.gantt-connector--early {
+  background: var(--track-color, var(--primary));
+  opacity: 0.6;
+}
+.gantt-connector--late {
+  background: repeating-linear-gradient(
+    to right,
+    var(--track-color, var(--primary)) 0,
+    var(--track-color, var(--primary)) 6px,
+    transparent 6px,
+    transparent 12px
+  );
+  opacity: 0.5;
+}
+
+/* Gantt tooltip */
+.gantt-tooltip {
+  position: fixed;
+  z-index: 1000;
+  background: #1e293b;
+  color: #e2e8f0;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 12px;
+  line-height: 1.5;
+  min-width: 200px;
+  max-width: 320px;
+  pointer-events: none;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.gantt-tooltip.visible { opacity: 1; }
+.gantt-tooltip-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+  gap: 8px;
+}
+.gantt-tooltip-title {
+  font-weight: 600;
+  font-size: 13px;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.gantt-tooltip-status {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.gantt-tooltip-status.status-scheduled { background: #3b82f6; color: #fff; }
+.gantt-tooltip-status.status-active { background: #10b981; color: #fff; }
+.gantt-tooltip-status.status-paused { background: #f59e0b; color: #1e293b; }
+.gantt-tooltip-status.status-completed { background: #64748b; color: #fff; }
+.gantt-tooltip-status.status-no-show { background: #d97706; color: #fff; }
+.gantt-tooltip-status.status-pending { background: transparent; color: #94a3b8; border: 1px solid #94a3b8; }
+.gantt-tooltip-row {
+  display: flex;
+  gap: 6px;
+  padding: 2px 0;
+}
+.gantt-tooltip-label {
+  color: #94a3b8;
+  min-width: 60px;
+  flex-shrink: 0;
+}
+.gantt-tooltip-value { color: #e2e8f0; }
+.gantt-tooltip-divider {
+  border-top: 1px solid #334155;
+  margin: 5px 0;
+}
+.gantt-tooltip-segments {
+  margin: 0;
+  padding: 0 0 0 14px;
+  font-size: 11px;
+  color: #cbd5e1;
+}
+.gantt-tooltip-segments li { padding: 1px 0; }
+.gantt-tooltip-desc {
+  font-size: 11px;
+  color: #94a3b8;
+  font-style: italic;
+  margin-top: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+html.dark-theme .gantt-tooltip {
+  background: #0f172a;
+  border: 1px solid #334155;
+}
+
+/* Legend swatches for the day view */
+.legend-swatch-scheduled {
+  display: inline-block; width: 14px; height: 10px; border-radius: 3px;
+  background: var(--primary); opacity: 0.4;
+}
+.legend-swatch-active {
+  display: inline-block; width: 14px; height: 10px; border-radius: 3px;
+  background: var(--primary);
+  position: relative;
+}
+.legend-swatch-active::after {
+  content: '';
+  position: absolute;
+  right: -1px; top: 0; bottom: 0; width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--primary);
+  filter: brightness(1.4);
+  animation: gantt-edge-pulse 1.5s ease-in-out infinite;
+}
+.legend-swatch-paused {
+  display: inline-block; width: 14px; height: 10px; border-radius: 3px;
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--primary),
+    var(--primary) 3px,
+    transparent 3px,
+    transparent 8px
+  );
+  opacity: 0.45;
+}
+.legend-swatch-completed {
+  display: inline-block; width: 14px; height: 10px; border-radius: 3px;
+  background: var(--primary); opacity: 0.55; filter: saturate(0.65);
+}
+.legend-swatch-noshow {
+  display: inline-block; width: 14px; height: 10px; border-radius: 3px;
+  background: rgba(245,158,11,0.10);
+  border: 2px dashed #d97706;
+}
+
+.gantt-block-title {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.gantt-block-time {
+  font-size: 10px;
+  opacity: 0.85;
+  white-space: nowrap;
+  flex: 0 999 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.gantt-empty {
+  padding: 40px 24px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+/* Dark theme — Gantt */
+html.dark-theme .gantt-track-label {
+  color: #c0d8e4;
+  background: #1a2332;
+  border-color: rgba(46,168,229,0.15);
+}
+html.dark-theme .gantt-track-label-spacer,
+html.dark-theme .gantt-sublabel-spacer { background: #1a2332; }
+html.dark-theme .gantt-sublabel-col { background: #1a2838; }
+html.dark-theme .gantt-row    { border-color: rgba(46,168,229,0.12); }
+html.dark-theme .gantt-lane   {
+  background-image: repeating-linear-gradient(
+    to right,
+    rgba(46,168,229,0.15) 0,
+    rgba(46,168,229,0.15) 1px,
+    transparent 1px,
+    transparent calc(100% / 24)
+  );
+}
+html.dark-theme .gantt-axis-row { border-color: rgba(46,168,229,0.15); }
+html.dark-theme .gantt-block.event-pending {
+  border-color: var(--track-color, var(--primary));
+  color: var(--track-color, var(--primary));
+}
+html.dark-theme .gantt-block.event-completed {
+  opacity: 0.5;
+}
+html.dark-theme .gantt-block.event-noshow {
+  background: rgba(245,158,11,0.12) !important;
+  border-color: #f59e0b;
+  color: #fbbf24;
+}
+
+/* ── Gantt now-line ────────────────────────────────────────── */
+.gantt-now-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #ef4444;
+  z-index: 1;
+  pointer-events: none;
+}
+.gantt-now-axis {
+  /* In the axis row — show the "Now" label above the line */
+  bottom: -2px;
+  top: auto;
+  height: calc(100% + 4px);
+}
+.gantt-now-label {
+  position: absolute;
+  top: -1px;
+  left: 4px;
+  font-size: 9px;
+  font-weight: 700;
+  color: #ef4444;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  white-space: nowrap;
+}
+.gantt-now-body {
+  /* In the body — spans full height of all track rows */
+  top: 0;
+  bottom: 0;
+}
+
+/* ── Feedback list page ───────────────────────────────────── */
+.feedback-category-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.feedback-category-bug     { background: #fde8e8; color: #b91c1c; }
+.feedback-category-feature { background: #e0f2fe; color: #0369a1; }
+.feedback-category-other   { background: #f3f4f6; color: #4b5563; }
+html.dark-theme .feedback-category-bug     { background: rgba(185,28,28,0.2); color: #f87171; }
+html.dark-theme .feedback-category-feature { background: rgba(3,105,161,0.2); color: #7dd3fc; }
+html.dark-theme .feedback-category-other   { background: rgba(75,85,99,0.2); color: #9ca3af; }
+.feedback-message {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.4;
+  white-space: pre-wrap;
+}
+.feedback-page-link {
+  color: var(--primary);
+  font-size: 12px;
+  text-decoration: none;
+}
+.feedback-page-link:hover { text-decoration: underline; }
+
+/* ── Feedback FAB + modal ──────────────────────────────────── */
+.feedback-fab {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 900;
+  height: 44px;
+  padding: 0 18px;
+  border-radius: 22px;
+  border: none;
+  background: linear-gradient(180deg, #023447, #034259);
+  color: #fff;
+  font-size: 15px;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(2,40,54,0.35);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: center;
+  transition: transform 150ms ease, box-shadow 150ms ease;
+}
+.feedback-fab-label {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.feedback-fab:hover {
+  transform: translateY(-2px) scale(1.05);
+  box-shadow: 0 8px 24px rgba(2,40,54,0.45);
+}
+
+.feedback-modal-overlay {
+  position: fixed; inset: 0; z-index: 9999;
+  background: rgba(0,0,0,0.45);
+  display: flex; align-items: center; justify-content: center;
+  animation: fadeIn .15s;
+}
+.feedback-modal {
+  background: var(--card, #fff);
+  border-radius: 12px;
+  padding: 24px 28px;
+  max-width: 440px;
+  width: 90%;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+}
+.feedback-modal h5 {
+  color: var(--text, #023447);
+}
+.feedback-modal .form-control {
+  background: var(--card, #fff);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text, #073242);
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+.feedback-modal .form-control:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(46,168,229,0.12);
+  outline: none;
+}
+
+.feedback-toast {
+  position: fixed;
+  bottom: 84px;
+  right: 24px;
+  z-index: 10000;
+  background: linear-gradient(180deg, #023447, #034259);
+  color: #fff;
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  box-shadow: 0 4px 16px rgba(2,40,54,0.35);
+  animation: fadeIn .15s;
+}
+
+/* Dark theme overrides for feedback */
+html.dark-theme .feedback-modal { background: var(--card); }
+html.dark-theme .feedback-modal h5 { color: #e2e8f0; }
+html.dark-theme .feedback-modal .form-control { background: rgba(255,255,255,0.05); border-color: rgba(46,168,229,0.25); color: #e2e8f0; }
+html.dark-theme .feedback-modal label { color: #c0d8e4; }

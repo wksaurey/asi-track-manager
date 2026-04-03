@@ -103,21 +103,20 @@ class TimezoneDisplayTests(TestCase):
 
         This tests the round-trip: form submission -> DB storage -> form display.
         """
-        start_str = '2026-06-15T09:00'
-        end_str = '2026-06-15T11:00'
         # Create event via POST
         self.client.post(reverse('cal:event_new'), {
             'title': 'Round Trip Test',
             'description': '',
-            'start_time': start_str,
-            'end_time': end_str,
+            'event_date': '2026-06-15',
+            'start_time_only': '09:00',
+            'end_time_only': '11:00',
             'assets': [self.track.pk],
         })
         ev = Event.objects.get(title='Round Trip Test')
         # Edit page should show the originally entered time
         response = self.client.get(reverse('cal:event_edit', args=[ev.pk]))
         content = response.content.decode()
-        # The form should contain the value 2026-06-15T09:00
+        # The start_time_only field should contain 09:00
         self.assertIn('09:00', content,
                        "Edit form should show the originally entered time (9:00 AM)")
 
@@ -412,8 +411,9 @@ class EventVisibilityTests(TestCase):
         response = self.client.post(url, {
             'title': 'Hacked Title',
             'description': '',
-            'start_time': self.start.strftime('%Y-%m-%dT%H:%M'),
-            'end_time': self.end.strftime('%Y-%m-%dT%H:%M'),
+            'event_date': self.start.strftime('%Y-%m-%d'),
+            'start_time_only': self.start.strftime('%H:%M'),
+            'end_time_only': self.end.strftime('%H:%M'),
             'assets': [self.track.pk],
         })
         # Should either redirect or return 403, but NOT save changes

@@ -24,7 +24,7 @@ urlpatterns = [
     path('event/approve/<int:event_id>/',    views.event_approve,    name='event_approve'),
     path('event/unapprove/<int:event_id>/', views.event_unapprove,  name='event_unapprove'),
     path('events/pending/',                views.pending_events, name='pending_events'),
-    path('events/mass-approve/',            views.mass_approve_events, name='mass_approve_events'),
+    path('events/mass-approve/',           views.mass_approve_events, name='mass_approve_events'),
 
     # ── Asset management ───────────────────────────────────────────────────
     path('assets/',                        views.asset_list,   name='asset_list'),
@@ -36,12 +36,15 @@ urlpatterns = [
     # ── Dashboard ──────────────────────────────────────────────────────────
     path('dashboard/',                              views.dashboard,              name='dashboard'),
     path('api/dashboard-events/',                   views.dashboard_events_api,   name='dashboard_events_api'),
-    path('api/event/create/',                        views.api_create_event,       name='api_event_create'),
     path('api/event/<int:event_id>/stamp/',         views.dashboard_stamp_actual, name='dashboard_stamp_actual'),
+    path('api/segment/<int:segment_id>/edit/',       views.segment_edit,           name='segment_edit'),
+    path('api/track/<int:asset_id>/active/',        views.track_active_toggle,    name='track_active_toggle'),
     path('api/track/<int:asset_id>/channel/',      views.set_radio_channel,      name='set_radio_channel'),
     path('api/event/<int:event_id>/channel/',     views.set_event_radio_channel, name='set_event_radio_channel'),
+    path('api/event/<int:event_id>/approve/',     views.api_event_approve,       name='api_event_approve'),
     path('analytics/',                              views.analytics,              name='analytics'),
     path('api/analytics/',                          views.analytics_api,          name='analytics_api'),
+    path('api/event/create/',                         views.api_create_event,       name='api_event_create'),
     path('api/feedback/',                           views.submit_feedback,        name='submit_feedback'),
     path('feedback/',                               views.feedback_list,          name='feedback_list'),
     path('feedback/<int:feedback_id>/resolve/',     views.feedback_resolve,       name='feedback_resolve'),

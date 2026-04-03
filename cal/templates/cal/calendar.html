@@ -51,6 +51,13 @@
              onchange="togglePending(this)">
       <span class="pending-filter-label">Show pending</span>
     </label>
+
+    {% if view == 'day' %}
+    <button type="button" class="gantt-label-toggle" id="gantt-label-toggle"
+            onclick="toggleGanttLabels()" title="Toggle track labels">
+      <i class="fas fa-columns"></i> Labels
+    </button>
+    {% endif %}
   </div>
 
   <!-- Right: view switcher + new event -->
@@ -154,6 +161,24 @@
       if (body) body.classList.add('cal-hide-pending');
       var cb = document.getElementById('pending-toggle');
       if (cb) cb.checked = false;
+    }
+  })();
+
+  // ── Gantt label collapse toggle ──────────────────────────────────
+  function toggleGanttLabels() {
+    var gantt = document.querySelector('.gantt-view');
+    if (!gantt) return;
+    gantt.classList.toggle('gantt-labels-collapsed');
+    var collapsed = gantt.classList.contains('gantt-labels-collapsed');
+    localStorage.setItem('gantt-labels-collapsed', collapsed ? '1' : '0');
+    var btn = document.getElementById('gantt-label-toggle');
+    if (btn) btn.title = collapsed ? 'Show track labels' : 'Hide track labels';
+  }
+  // Restore state from localStorage
+  (function() {
+    if (localStorage.getItem('gantt-labels-collapsed') === '1') {
+      var gantt = document.querySelector('.gantt-view');
+      if (gantt) gantt.classList.add('gantt-labels-collapsed');
     }
   })();
 </script>

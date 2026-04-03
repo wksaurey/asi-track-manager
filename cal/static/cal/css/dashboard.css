@@ -1063,6 +1063,9 @@ html.dark-theme .modal-error { background: rgba(220,38,38,0.1); }
   justify-content: center;
   margin-left: 6px;
   transition: all 0.15s;
+  line-height: 0;
+  padding: 0 0 2px 0;
+  box-sizing: border-box;
 }
 .track-add-btn:hover {
   background: #059669;
@@ -1490,3 +1493,78 @@ html.dark-theme .seg-pick-done {
   color: #38bdf8;
 }
 html.dark-theme .seg-pick-done:hover { background: rgba(14, 165, 233, 0.28); }
+
+
+/* ============================================================
+   Mobile dashboard — compact horizontal header
+   ============================================================ */
+@media (max-width: 768px) {
+  .track-card__header {
+    gap: 4px;
+    padding: 6px 8px;
+  }
+
+  .track-card__header .radio-channel-select {
+    padding: 2px 4px;
+    font-size: 11px;
+    min-width: 0;
+    width: auto;
+  }
+
+  .track-card__header .track-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
+    flex: 1 1 0;
+  }
+
+  .track-card__header .track-actions {
+    gap: 3px;
+    flex-shrink: 0;
+  }
+
+  .track-card__header .track-actions .btn,
+  .track-card__header .track-actions .active-toggle-btn {
+    padding: 2px 6px;
+    font-size: 10px;
+  }
+
+  .track-card__header .track-add-btn {
+    width: 28px;
+    height: 28px;
+    font-size: 15px;
+    line-height: 1;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Subtracks: same compact treatment */
+  .subtrack-header {
+    gap: 4px;
+    padding: 4px 8px;
+  }
+
+  .subtrack-header .radio-channel-select--sub {
+    padding: 2px 4px;
+    font-size: 11px;
+  }
+
+  .subtrack-header .subtrack-name {
+    font-size: 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .subtrack-header .subtrack-add-btn {
+    width: 20px;
+    height: 20px;
+    font-size: 12px;
+  }
+}

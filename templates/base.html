@@ -25,6 +25,10 @@
       <img src="{% static 'cal/img/ASI_Logo.svg' %}" class="nav-logo" alt="" />
       ASI Track Manager
     </a>
+    <input type="checkbox" id="nav-toggle" class="nav-toggle-checkbox">
+    <label for="nav-toggle" class="nav-hamburger" aria-label="Toggle navigation">
+      <span></span><span></span><span></span>
+    </label>
     <div class="site-nav-links">
       {% if request.user.is_authenticated %}
         <a href="{% url 'cal:calendar' %}"><i class="fas fa-calendar-alt"></i> Calendar</a>

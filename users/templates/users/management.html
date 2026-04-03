@@ -200,6 +200,16 @@
     background: rgba(255,255,255,0.1);
     color: #aaa;
   }
+
+  /* Mobile responsive: hide less-important columns, keep Actions visible */
+  @media (max-width: 768px) {
+    .user-table thead th:nth-child(3),
+    .user-table thead th:nth-child(4),
+    .user-table tbody td:nth-child(3),
+    .user-table tbody td:nth-child(4) {
+      display: none;
+    }
+  }
 </style>
 {% endblock %}
 
@@ -210,6 +220,7 @@
     <span class="user-count">{{ users|length }} user{{ users|length|pluralize }}</span>
   </div>
 
+  <div style="overflow-x: auto;">
   <table class="user-table">
     <thead>
       <tr>
@@ -278,6 +289,7 @@
       {% endfor %}
     </tbody>
   </table>
+  </div>
 </div>
 
 <div class="toast-msg" id="toast"></div>

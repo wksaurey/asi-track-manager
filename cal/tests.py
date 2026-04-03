@@ -6,7 +6,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
-from django.utils.timezone import get_current_timezone
+from django.utils.timezone import get_current_timezone, localtime
 
 from .models import Asset, Event
 from .forms import EventForm
@@ -1373,7 +1373,7 @@ class RadioChannelAPITest(TestCase):
     def test_rejects_out_of_range(self):
         self.client.login(username='channeladmin', password='Testpass123!')
         resp = self.client.post(
-            self.url, data=json.dumps({'channel': 5}),
+            self.url, data=json.dumps({'channel': 0}),
             content_type='application/json',
         )
         self.assertEqual(resp.status_code, 400)
@@ -1495,7 +1495,7 @@ class EventDescriptionOptionalTest(TestCase):
         self.staff = User.objects.create_user(
             username='admin', password='Testpass123!', is_staff=True
         )
-        self.start = timezone.now().replace(second=0, microsecond=0) + timedelta(days=1)
+        self.start = localtime(timezone.now()).replace(hour=10, minute=0, second=0, microsecond=0) + timedelta(days=1)
         self.end = self.start + timedelta(hours=2)
         self.asset = Asset.objects.create(
             name='Test Track', asset_type=Asset.AssetType.TRACK
@@ -1670,7 +1670,7 @@ class EventAutoApprovalTest(TestCase):
         self.asset = Asset.objects.create(
             name='Approval Track', asset_type=Asset.AssetType.TRACK
         )
-        self.start = timezone.now().replace(second=0, microsecond=0) + timedelta(days=1)
+        self.start = localtime(timezone.now()).replace(hour=10, minute=0, second=0, microsecond=0) + timedelta(days=1)
         self.end = self.start + timedelta(hours=2)
 
     def _post_data(self):
@@ -2611,7 +2611,7 @@ class AdminEventNoLongerAutoApprovedTest(TestCase):
         )
         self.regular = User.objects.create_user(username='task4_user', password='Testpass123!')
         self.asset = Asset.objects.create(name='Task4 Track', asset_type=Asset.AssetType.TRACK)
-        self.start = timezone.now().replace(second=0, microsecond=0) + timedelta(days=1)
+        self.start = localtime(timezone.now()).replace(hour=10, minute=0, second=0, microsecond=0) + timedelta(days=1)
         self.end = self.start + timedelta(hours=2)
 
     def _post_data(self, title='Task4 Event'):

@@ -200,6 +200,16 @@
     background: rgba(255,255,255,0.1);
     color: #aaa;
   }
+
+  /* Mobile responsive: hide less-important columns, keep Actions visible */
+  @media (max-width: 768px) {
+    .user-table thead th:nth-child(3),
+    .user-table thead th:nth-child(4),
+    .user-table tbody td:nth-child(3),
+    .user-table tbody td:nth-child(4) {
+      display: none;
+    }
+  }
 </style>
 {% endblock %}
 
@@ -210,6 +220,7 @@
     <span class="user-count">{{ users|length }} user{{ users|length|pluralize }}</span>
   </div>
 
+  <div style="overflow-x: auto;">
   <table class="user-table">
     <thead>
       <tr>
@@ -233,8 +244,7 @@
           {% else %}
             <i class="fas fa-user" style="color:var(--muted);"></i>
           {% endif %}
-          {{ u.username }}
-          {% if u == request.user %}<span class="self-label">(you)</span>{% endif %}
+          {% if u == request.user %}<a href="{% url 'users:profile' %}" style="color:inherit;text-decoration:none;font-weight:600;">{{ u.username }}</a> <span class="self-label">(you)</span>{% else %}{{ u.username }}{% endif %}
         </td>
         <td>
           {% if u.is_superuser %}
@@ -279,6 +289,7 @@
       {% endfor %}
     </tbody>
   </table>
+  </div>
 </div>
 
 <div class="toast-msg" id="toast"></div>

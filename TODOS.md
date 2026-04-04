@@ -7,7 +7,19 @@
   - **Context:** Kolter has the spreadsheet. Seed via Django management command or admin interface
   - **Depends on:** Getting the spreadsheet from Kolter
 
+## Bugs
+
+- [ ] Pause gap not shown while actively paused
+  - **Why:** The diagonal-striped pause gap between segments only renders once a new segment starts. While an event is actively paused (segment ended, no new segment yet), there's no visual indicator of the growing pause period
+  - **Context:** Pause gap is computed as space between two segments (current end → next start). With no "next segment" during active pause, nothing renders. Fix needs server-side detection of "actively paused" state in `cal/utils.py` plus client-side JS to live-grow the gap like active segments do
+  - **Depends on:** None
+
 ## V2 Priorities
+
+- [ ] Admin setting: block impromptu event creation when an active/approved event exists on the same track
+  - **Why:** Safety procedure — prevents accidental overlap on active tracks. Currently uses a confirmation popup instead of a hard block
+  - **Context:** Add a site-wide or per-track admin toggle. When enabled, the dashboard "mark active" flow should refuse to create an impromptu event if a conflicting active/approved event exists, instead of just warning
+  - **Depends on:** v1.1 impromptu event + active track features
 
 - [ ] PostgreSQL migration
   - **Why:** SQLite doesn't support concurrent writes from multiple processes. Currently pinned to 1 Gunicorn worker as a workaround. Also enables proper ORM aggregation for analytics

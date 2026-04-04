@@ -25,6 +25,10 @@
       <img src="{% static 'cal/img/ASI_Logo.svg' %}" class="nav-logo" alt="" />
       ASI Track Manager
     </a>
+    <input type="checkbox" id="nav-toggle" class="nav-toggle-checkbox">
+    <label for="nav-toggle" class="nav-hamburger" aria-label="Toggle navigation">
+      <span></span><span></span><span></span>
+    </label>
     <div class="site-nav-links">
       {% if request.user.is_authenticated %}
         <a href="{% url 'cal:calendar' %}"><i class="fas fa-calendar-alt"></i> Calendar</a>
@@ -51,7 +55,7 @@
 
     <div class="site-nav-user">
       {% if request.user.is_authenticated %}
-        <span class="nav-user-name">
+        <a href="{% url 'users:profile' %}?next={{ request.path }}" class="nav-user-name" style="text-decoration:none;color:inherit;">
           {% if request.user.is_developer %}
             <i class="fas fa-user-cog"></i> {{ request.user.username }}
             <span class="admin-chip" style="background:#10b981;">Staff</span>
@@ -61,7 +65,7 @@
           {% else %}
             <i class="fas fa-user"></i> {{ request.user.username }}
           {% endif %}
-        </span>
+        </a>
         <form method="post" action="{% url 'users:logout' %}" style="display:inline;">
           {% csrf_token %}
           <button type="submit" class="nav-logout" style="background:none;border:none;cursor:pointer;color:inherit;">
@@ -204,23 +208,26 @@
           return;
         }
         if (!pendingForm) return;
-        var action = pendingForm.getAttribute('action');
-        var csrf   = pendingForm.querySelector('[name=csrfmiddlewaretoken]').value;
-        var card   = pendingForm.closest('.asset-card, .event-row, tr, .form-page');
+        var form   = pendingForm;
+        var action = form.getAttribute('action');
+        var csrf   = form.querySelector('[name=csrfmiddlewaretoken]').value;
+        var card   = form.closest('.asset-card, .event-row, tr, .form-page');
         close();
-        fetch(action, {
-          method: 'POST',
-          headers: { 'X-CSRFToken': csrf },
-          redirect: 'follow',
-        }).then(function() {
-          if (card && !card.classList.contains('form-page')) {
+        if (card && !card.classList.contains('form-page')) {
+          // Inline context (list/table row) — use fetch for fade-out animation
+          fetch(action, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrf },
+            redirect: 'follow',
+          }).then(function() {
             card.style.transition = 'opacity .25s';
             card.style.opacity = '0';
             setTimeout(function() { card.remove(); }, 250);
-          } else {
-            window.location.href = '{% url "cal:calendar" %}';
-          }
-        });
+          });
+        } else {
+          // Form page context — native submit to follow server redirects properly
+          form.submit();
+        }
       });
 
       // Form-based: used by onsubmit="return confirmDelete(this, msg, opts)"
@@ -306,6 +313,8 @@
     })();
   </script>
   {% endif %}
+
+  {{ app_timezone|json_script:"app-timezone" }}
 
   {% block extra_js %}{% endblock %}
 

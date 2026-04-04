@@ -5,6 +5,7 @@
 
 {% block extra_css %}
   <link rel="stylesheet" href="{% static 'cal/css/dashboard.css' %}" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
 {% endblock %}
 
 {% block extra_head %}
@@ -29,6 +30,10 @@
       </div>
       <button id="dateNextBtn" class="date-nav-arrow" aria-label="Next day">&#9654;</button>
       <button id="dateTodayBtn" class="date-today-btn">Today</button>
+      <label class="pending-filter" title="Show or hide unapproved events">
+        <input type="checkbox" id="show-unapproved-toggle" checked />
+        <span>Show unapproved</span>
+      </label>
     </div>
 
     <main>
@@ -52,18 +57,30 @@
           <header class="track-card__header">
             <select class="radio-channel-select" title="Assign radio channel">
               <option value="">Radio Ch</option>
-              <option value="11">Ch 11</option>
-              <option value="12">Ch 12</option>
-              <option value="13">Ch 13</option>
-              <option value="14">Ch 14</option>
-              <option value="15">Ch 15</option>
-              <option value="16">Ch 16</option>
+              <option value="1">Ch 1</option><option value="2">Ch 2</option><option value="3">Ch 3</option><option value="4">Ch 4</option>
+              <option value="5">Ch 5</option><option value="6">Ch 6</option><option value="7">Ch 7</option><option value="8">Ch 8</option>
+              <option value="9">Ch 9</option><option value="10">Ch 10</option><option value="11">Ch 11</option><option value="12">Ch 12</option>
+              <option value="13">Ch 13</option><option value="14">Ch 14</option><option value="15">Ch 15</option><option value="16">Ch 16</option>
             </select>
             <h2 class="track-name"></h2>
             <div class="track-actions">
-              <button class="icon-btn add-event-btn" title="Add event">&#xff0b;</button>
+              <button class="btn btn-xxs active-toggle-btn" title="Toggle track active state">Inactive</button>
+              <button class="track-add-btn add-event-btn" title="Add impromptu event">+</button>
             </div>
           </header>
+
+          <div class="track-add-forms">
+            <form class="note-form hidden" autocomplete="off">
+              <div class="row">
+                <label>Note</label>
+                <input name="note" type="text" placeholder="Quick note for this track..." required />
+              </div>
+              <div class="row form-actions">
+                <button type="submit" class="btn">Add Note</button>
+                <button type="button" class="btn btn-outline cancel-note">Cancel</button>
+              </div>
+            </form>
+          </div>
 
           <div class="track-content">
             <ol class="events-list"></ol>
@@ -82,15 +99,13 @@
         <div class="subtrack-header">
           <select class="radio-channel-select radio-channel-select--sub" title="Assign radio channel">
             <option value="">Radio Ch</option>
-            <option value="11">Ch 11</option>
-            <option value="12">Ch 12</option>
-            <option value="13">Ch 13</option>
-            <option value="14">Ch 14</option>
-            <option value="15">Ch 15</option>
-            <option value="16">Ch 16</option>
+            <option value="1">Ch 1</option><option value="2">Ch 2</option><option value="3">Ch 3</option><option value="4">Ch 4</option>
+              <option value="5">Ch 5</option><option value="6">Ch 6</option><option value="7">Ch 7</option><option value="8">Ch 8</option>
+              <option value="9">Ch 9</option><option value="10">Ch 10</option><option value="11">Ch 11</option><option value="12">Ch 12</option>
+              <option value="13">Ch 13</option><option value="14">Ch 14</option><option value="15">Ch 15</option><option value="16">Ch 16</option>
           </select>
           <span class="subtrack-name"></span>
-          <button class="icon-btn icon-btn--sm subtrack-add-btn" title="Add event to this subtrack">&#xff0b;</button>
+          <button class="track-add-btn subtrack-add-btn" title="Add impromptu event">+</button>
         </div>
         <ol class="events-list subtrack-events-list"></ol>
       </div>
@@ -123,7 +138,7 @@
 
     <input type="hidden" id="currentUserName" value="{{ request.user.username }}" />
 
-    <!-- Impromptu event creation modal -->
+    <!-- Quick Add Event Modal -->
     <div id="eventPopup" class="event-popup-overlay" hidden>
       <div class="event-popup-box" id="eventPopupBox">
         <div class="event-popup__header">
@@ -155,6 +170,13 @@
 
 {% endblock %}
 
+{% block extra_js %}
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+{% endblock %}
+
 {% block script %}
+  <script>
+    window.APP_TZ = JSON.parse(document.getElementById('app-timezone').textContent);
+  </script>
   <script src="{% static 'cal/js/dashboard.js' %}"></script>
 {% endblock %}

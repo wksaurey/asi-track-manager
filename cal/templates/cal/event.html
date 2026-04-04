@@ -3,6 +3,33 @@
 
 {% block extra_css %}
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+  <style>
+    .actual-segments-section { margin-top: 24px; padding: 16px; background: var(--card, #f9fafb); border: 1px solid var(--border, #e5e7eb); border-radius: 8px; }
+    .actual-segments-section h4 { margin: 0 0 12px 0; font-size: 15px; color: var(--text, #111827); }
+    .segments-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .segments-table th { text-align: left; padding: 6px 10px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted, #6b7280); border-bottom: 2px solid var(--border, #e5e7eb); }
+    .segments-table td { padding: 8px 10px; border-bottom: 1px solid var(--border, #e5e7eb); }
+    .seg-num { color: var(--muted, #6b7280); font-weight: 600; width: 30px; }
+    .seg-duration { color: var(--muted, #6b7280); white-space: nowrap; }
+    .segment-active td { background: rgba(16, 185, 129, 0.06); }
+    .seg-in-progress { color: #10b981; font-weight: 600; font-size: 12px; }
+    .seg-time-input { border: 1px solid var(--border, #d1d5db); border-radius: 4px; padding: 4px 8px; font-size: 13px; width: 150px; background: var(--card, #fff); color: var(--text, #111827); cursor: pointer; }
+    .seg-time-input:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59,130,246,0.15); }
+    .seg-save-status { font-size: 11px; margin-left: 6px; }
+    .seg-save-status.success { color: #10b981; }
+    .seg-save-status.error { color: #dc2626; }
+    .segments-total { margin-top: 10px; font-size: 13px; color: var(--muted, #6b7280); text-align: right; }
+    html.dark-theme .actual-segments-section { background: var(--card); border-color: var(--border); }
+    html.dark-theme .actual-segments-section h4 { color: #e5e7eb; }
+    html.dark-theme .segments-table th { color: #9ca3af; border-bottom-color: #4b5563; }
+    html.dark-theme .segments-table td { color: #d1d5db; border-bottom-color: #374151; }
+    html.dark-theme .seg-num { color: #9ca3af; }
+    html.dark-theme .seg-duration { color: #9ca3af; }
+    html.dark-theme .segments-total { color: #9ca3af; }
+    html.dark-theme .seg-time-input { background: var(--bg); border-color: #4b5563; color: #e5e7eb; }
+    html.dark-theme .seg-in-progress { color: #34d399; }
+    html.dark-theme .segment-active td { background: rgba(52, 211, 153, 0.08); }
+  </style>
 {% endblock %}
 
 {% block title %}{% if event %}Edit Event{% else %}New Event{% endif %}{% endblock %}
@@ -14,6 +41,9 @@
     <h2 class="page-heading">
       {% if event %}
         Edit Event
+        {% if event.is_impromptu %}
+          <span class="status-pill" style="font-size:13px;vertical-align:middle;background:linear-gradient(180deg,#f59e0b,#d97706);color:#fff;">IMPROMPTU</span>
+        {% endif %}
         {% if not event.is_approved %}
           <span class="status-pill status-inactive" style="font-size:13px;vertical-align:middle;">PENDING</span>
         {% endif %}
@@ -39,6 +69,12 @@
       &nbsp;·&nbsp; <span style="color:#d97706;">Awaiting admin approval</span>
     {% endif %}
   </p>
+  {% endif %}
+
+  {% if messages %}
+  {% for message in messages %}
+  <div class="alert alert-{{ message.tags }}" style="margin-bottom:16px;">{{ message }}</div>
+  {% endfor %}
   {% endif %}
 
   <!-- Form errors -->
@@ -72,25 +108,30 @@
         </td>
       </tr>
       {% else %}
+      {% if event.is_impromptu and field.html_name == 'start_time_only' or event.is_impromptu and field.html_name == 'end_time_only' %}
+        {# Hide scheduled start/end time fields for impromptu events #}
+      {% elif field.html_name == 'event_date' %}
       <tr>
-        <td><label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="required-mark">*</span>{% endif %}</label></td>
+        <td><label for="{{ field.id_for_label }}">Date</label></td>
+        <td>{{ field }}</td>
+      </tr>
+      {% elif field.html_name == 'start_time_only' %}
+      <tr>
+        <td><label for="{{ field.id_for_label }}">Start time</label></td>
         <td>
-          {% if field.html_name == 'start_time' %}
           <div class="start-time-row">
             {{ field }}
             <button type="button" class="btn btn-now" id="btn-now" title="Set to current time">
               <i class="fas fa-clock"></i> Now
             </button>
           </div>
-          {% else %}
-          {{ field }}
-          {% endif %}
-          {% if field.help_text %}
-            <small class="field-help">{{ field.help_text }}</small>
-          {% endif %}
         </td>
       </tr>
-      {% if field.html_name == 'end_time' %}
+      {% elif field.html_name == 'end_time_only' %}
+      <tr>
+        <td><label for="{{ field.id_for_label }}">End time</label></td>
+        <td>{{ field }}</td>
+      </tr>
       <tr>
         <td><label>Duration</label></td>
         <td>
@@ -105,14 +146,82 @@
           </div>
         </td>
       </tr>
-      {% endif %}
-      {% endif %}
+      {% else %}{# other fields: title, description, radio_channel, etc. #}
+      <tr>
+        <td><label for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="required-mark">*</span>{% endif %}</label></td>
+        <td>
+          {{ field }}
+          {% if field.help_text %}
+            <small class="field-help">{{ field.help_text }}</small>
+          {% endif %}
+        </td>
+      </tr>
+      {% endif %}{# end impromptu/start/end/other #}
+      {% endif %}{# end assets check #}
       {% endfor %}
     </table>
 
     {# Hidden submit button — the real Save is in the action bar below #}
     <button type="submit" id="event-save-hidden" hidden></button>
   </form>
+
+  {% if segments %}
+  <div class="actual-segments-section">
+    <h4><i class="fas fa-clock"></i> Actual Time Segments</h4>
+    {% if event.is_stopped %}
+      <span class="status-pill" style="font-size:11px;background:#dc2626;color:#fff;margin-bottom:8px;display:inline-block;">STOPPED</span>
+    {% endif %}
+    <table class="segments-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Start</th>
+          <th>End</th>
+          <th>Duration</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for seg in segments %}
+        <tr class="segment-row{% if not seg.end %} segment-active{% endif %}" data-segment-id="{{ seg.pk }}">
+          <td class="seg-num">{{ forloop.counter }}</td>
+          <td class="seg-start">
+            {% if is_admin %}
+              <input type="text" class="seg-time-input" data-field="start"
+                     value="{{ seg.start|date:'H:i' }}" readonly>
+            {% else %}
+              {{ seg.start|date:"g:i A" }}
+            {% endif %}
+          </td>
+          <td class="seg-end">
+            {% if seg.end %}
+              {% if is_admin %}
+                <input type="text" class="seg-time-input" data-field="end"
+                       value="{{ seg.end|date:'H:i' }}" readonly>
+              {% else %}
+                {{ seg.end|date:"g:i A" }}
+              {% endif %}
+            {% else %}
+              <span class="seg-in-progress"><i class="fas fa-circle" style="color:#10b981;font-size:8px;"></i> In progress</span>
+            {% endif %}
+          </td>
+          <td class="seg-duration">
+            {% if seg.end %}
+              {{ seg.duration_display }}
+            {% else %}
+              &mdash;
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% if event.total_actual_seconds > 0 %}
+    <div class="segments-total">
+      Total actual time: <strong>{{ event.total_actual_display }}</strong>
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
 
   {% if can_edit %}
   <div class="event-action-bar">
@@ -133,7 +242,7 @@
       <form method="post" action="{% url 'cal:event_unapprove' event.id %}"
             onsubmit="return confirmDelete(this, 'Revoke approval for &quot;{{ event.title|escapejs }}&quot;? It will return to pending status.', {confirmLabel:'Revoke', confirmClass:'btn-warning'})">
         {% csrf_token %}
-        <input type="hidden" name="next" value="{% url 'cal:event_edit' event.id %}{% if next_url %}?next={{ next_url|urlencode }}{% endif %}">
+        {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
         <button type="submit" class="btn btn-warning">
           <i class="fas fa-undo"></i> Revoke Approval
         </button>
@@ -362,76 +471,76 @@ document.addEventListener('DOMContentLoaded', function () {
   }
   // ── End asset picker ───────────────────────────────────────────────────
 
-  // ── Flatpickr date/time pickers ────────────────────────────────────────
-  const fpOpts = {
-    enableTime:    true,
-    dateFormat:    'Y-m-d\\TH:i',      // value submitted to Django
-    altInput:      true,
-    altFormat:     'F j, Y  \\a\\t  h:i K',  // friendly display
+  // ── Flatpickr pickers (date + time are real Django fields, no sync needed) ──
+  const APP_TZ = JSON.parse(document.getElementById('app-timezone').textContent);
+  function easternNow() {
+    return new Date(new Date().toLocaleString('en-US', { timeZone: APP_TZ }));
+  }
+
+  const dateInput = document.getElementById('event-date');
+  const startTimeInput = document.getElementById('event-start-time');
+  const endTimeInput = document.getElementById('event-end-time');
+
+  // Set defaults for new events (fields are empty)
+  if (dateInput && !dateInput.value) {
+    const etNow = easternNow();
+    const dateParam = new URLSearchParams(window.location.search).get('date');
+    if (dateParam) {
+      dateInput.value = dateParam;
+    } else {
+      const y = etNow.getFullYear();
+      const m = String(etNow.getMonth() + 1).padStart(2, '0');
+      const d = String(etNow.getDate()).padStart(2, '0');
+      dateInput.value = `${y}-${m}-${d}`;
+    }
+    // Round start to next half-hour
+    const mins = etNow.getMinutes();
+    const nextMin = mins < 30 ? 30 : 0;
+    const nextHr = mins < 30 ? etNow.getHours() : etNow.getHours() + 1;
+    if (startTimeInput) startTimeInput.value = String(nextHr).padStart(2, '0') + ':' + String(nextMin).padStart(2, '0');
+    if (endTimeInput) endTimeInput.value = String(nextHr + 1).padStart(2, '0') + ':' + String(nextMin).padStart(2, '0');
+  }
+
+  // Attach Flatpickr to each field — they write directly to the input Django reads
+  const fpDate = dateInput ? flatpickr(dateInput, {
+    dateFormat: 'Y-m-d',
+    altInput: true,
+    altFormat: 'F j, Y',
+    altInputClass: 'form-control flatpickr-display',
+  }) : null;
+
+  const fpStartTime = startTimeInput ? flatpickr(startTimeInput, {
+    enableTime: true,
+    noCalendar: true,
+    dateFormat: 'H:i',
+    altInput: true,
+    altFormat: 'h:i K',
     altInputClass: 'form-control flatpickr-display',
     minuteIncrement: 15,
-    time_24hr:     false,
-  };
+    time_24hr: false,
+  }) : null;
 
-  // Compute default start/end times for new events only
-  const startInput = document.getElementById('id_start_time');
-  const endInput   = document.getElementById('id_end_time');
+  const fpEndTime = endTimeInput ? flatpickr(endTimeInput, {
+    enableTime: true,
+    noCalendar: true,
+    dateFormat: 'H:i',
+    altInput: true,
+    altFormat: 'h:i K',
+    altInputClass: 'form-control flatpickr-display',
+    minuteIncrement: 15,
+    time_24hr: false,
+  }) : null;
 
-  let endOpts;
-  if (!startInput.value) {
-    const now  = new Date();
-    const mins = now.getMinutes();
-    // Round UP strictly to next half-hour boundary
-    let nextMin;
-    if (mins < 30) {
-      nextMin = 30;
-    } else {
-      nextMin = 60;  // will roll over to next hour
-    }
-
-    // Use ?date=YYYY-MM-DD from the URL (set when clicking a calendar day)
-    const dateParam = new URLSearchParams(window.location.search).get('date');
-    let baseYear, baseMonth, baseDay;
-    if (dateParam) {
-      const parts = dateParam.split('-');
-      baseYear  = parseInt(parts[0], 10);
-      baseMonth = parseInt(parts[1], 10) - 1;  // 0-indexed
-      baseDay   = parseInt(parts[2], 10);
-    } else {
-      baseYear  = now.getFullYear();
-      baseMonth = now.getMonth();
-      baseDay   = now.getDate();
-    }
-
-    const defStart = new Date(baseYear, baseMonth, baseDay, now.getHours(), nextMin, 0, 0);
-    const defEnd = new Date(defStart.getTime() + 60 * 60 * 1000);
-    fpOpts.defaultDate = defStart;
-    endOpts = Object.assign({}, fpOpts, { defaultDate: defEnd });
-  } else {
-    endOpts = Object.assign({}, fpOpts);
-  }
-
-  const fpStart = flatpickr('#id_start_time', fpOpts);
-  const fpEnd   = flatpickr('#id_end_time',   endOpts);
-
-  // Ensure defaultDate values are written to the hidden inputs
-  if (fpOpts.defaultDate) fpStart.setDate(fpOpts.defaultDate, true);
-  if (endOpts.defaultDate) fpEnd.setDate(endOpts.defaultDate, true);
-
-  // "Now" button — sets start time to current time (rounded to nearest minute)
+  // "Now" button — sets start time to current time (rounded to minute)
   const btnNow = document.getElementById('btn-now');
-  if (btnNow) {
+  if (btnNow && fpStartTime) {
     btnNow.addEventListener('click', function() {
-      const now = new Date();
-      now.setSeconds(0, 0);
-      fpStart.setDate(now, true);
+      const etNow = easternNow();
+      const h = String(etNow.getHours()).padStart(2, '0');
+      const m = String(etNow.getMinutes()).padStart(2, '0');
+      fpStartTime.setDate(h + ':' + m, true);
     });
   }
-
-  // Auto-set end minimum to match start so you can't pick an earlier end time
-  fpStart.config.onChange.push(function(dates) {
-    if (dates[0]) fpEnd.set('minDate', dates[0]);
-  });
 
   // ── Duration quick-select buttons ──────────────────────────────────────
   const durationRow = document.getElementById('duration-row');
@@ -449,13 +558,16 @@ document.addEventListener('DOMContentLoaded', function () {
       return h + 'h ' + m + 'm';
     }
 
+    function parseHHMM(str) {
+      if (!str) return null;
+      const p = str.split(':');
+      return parseInt(p[0], 10) * 60 + parseInt(p[1], 10);
+    }
+
     function updateActiveDuration() {
-      const startDates = fpStart.selectedDates;
-      const endDates   = fpEnd.selectedDates;
-      const diffMs     = (startDates.length && endDates.length)
-                       ? endDates[0].getTime() - startDates[0].getTime()
-                       : null;
-      const diffMins   = diffMs !== null ? Math.round(diffMs / 60000) : null;
+      const startMins = parseHHMM(fpStartTime.input.value);
+      const endMins   = parseHHMM(fpEndTime.input.value);
+      const diffMins  = (startMins !== null && endMins !== null) ? endMins - startMins : null;
 
       let presetMatch = false;
       durationBtns.forEach(btn => {
@@ -477,22 +589,100 @@ document.addEventListener('DOMContentLoaded', function () {
 
     durationBtns.forEach(btn => {
       btn.addEventListener('click', () => {
-        const minutes    = parseInt(btn.getAttribute('data-minutes'), 10);
-        const startDates = fpStart.selectedDates;
-        if (!startDates.length) return; // no start time set yet
+        const minutes  = parseInt(btn.getAttribute('data-minutes'), 10);
+        const startMins = parseHHMM(fpStartTime.input.value);
+        if (startMins === null) return;
 
-        const newEnd = new Date(startDates[0].getTime() + minutes * 60000);
-        fpEnd.setDate(newEnd, true);
+        const endMins = startMins + minutes;
+        const endH = String(Math.floor(endMins / 60) % 24).padStart(2, '0');
+        const endM = String(endMins % 60).padStart(2, '0');
+        fpEndTime.setDate(endH + ':' + endM, true);
         updateActiveDuration();
       });
     });
 
     // Update highlight whenever start or end changes
-    fpStart.config.onChange.push(updateActiveDuration);
-    fpEnd.config.onChange.push(updateActiveDuration);
+    fpStartTime.config.onChange.push(updateActiveDuration);
+    fpEndTime.config.onChange.push(updateActiveDuration);
 
     // Set initial highlight
     updateActiveDuration();
+  }
+
+  // ── Segment inline editing (admin only, time-only) ─────────────────────
+  document.querySelectorAll('.seg-time-input').forEach(function(input) {
+    const row = input.closest('.segment-row');
+    const segId = row ? row.dataset.segmentId : null;
+    const field = input.dataset.field;
+    if (!segId) return;
+
+    const fp = flatpickr(input, {
+      enableTime: true,
+      noCalendar: true,
+      dateFormat: 'H:i',
+      altInput: true,
+      altFormat: 'h:i K',
+      altInputClass: 'form-control seg-time-input',
+      time_24hr: false,
+      onClose: function(selectedDates) {
+        if (!selectedDates.length) return;
+        // Send as HH:MM — the server's parse_api_datetime will combine with event date
+        const h = String(selectedDates[0].getHours()).padStart(2, '0');
+        const m = String(selectedDates[0].getMinutes()).padStart(2, '0');
+        saveSegmentTime(segId, field, h + ':' + m, input);
+      }
+    });
+  });
+
+  async function saveSegmentTime(segId, field, isoTime, inputEl) {
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '{{ csrf_token }}';
+    const row = inputEl.closest('.segment-row');
+    // Remove any previous status
+    const oldStatus = row.querySelector('.seg-save-status');
+    if (oldStatus) oldStatus.remove();
+
+    try {
+      const body = {};
+      body[field] = isoTime;
+      const resp = await fetch('/cal/api/segment/' + segId + '/edit/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrfToken,
+        },
+        body: JSON.stringify(body),
+      });
+      const data = await resp.json();
+      const status = document.createElement('span');
+      status.className = 'seg-save-status';
+      if (resp.ok) {
+        status.className += ' success';
+        status.textContent = 'Saved';
+        // Update duration cell
+        const durCell = row.querySelector('.seg-duration');
+        if (durCell && data.segments) {
+          const seg = data.segments.find(s => s.id === parseInt(segId));
+          if (seg && seg.end) {
+            const ms = new Date(seg.end) - new Date(seg.start);
+            const mins = Math.round(ms / 60000);
+            const h = Math.floor(mins / 60);
+            const m = mins % 60;
+            durCell.textContent = h ? (m ? h + 'h ' + m + 'm' : h + 'h') : m + 'm';
+          }
+        }
+      } else {
+        status.className += ' error';
+        status.textContent = data.error || 'Error';
+      }
+      inputEl.parentNode.appendChild(status);
+      setTimeout(() => status.remove(), 3000);
+    } catch (err) {
+      const status = document.createElement('span');
+      status.className = 'seg-save-status error';
+      status.textContent = 'Network error';
+      inputEl.parentNode.appendChild(status);
+      setTimeout(() => status.remove(), 3000);
+    }
   }
 });
 </script>

@@ -124,7 +124,8 @@ ul { list-style: none; padding: 0; margin: 0; }
 .site-nav-links a:last-child { border-right: none; }
 .site-nav-links a:hover { color: #fff; text-decoration: none; }
 .site-nav-user  { display: flex; align-items: center; gap: 12px; }
-.nav-user-name  { color: rgba(255,255,255,0.9); font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 6px; }
+.nav-user-name  { color: rgba(255,255,255,0.9); font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 6px; transition: background 150ms; }
+a.nav-user-name:hover { background: rgba(255,255,255,0.12); text-decoration: none; color: #fff; }
 .admin-chip     { background: rgba(245,158,11,0.25); color: #fff; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 999px; }
 .nav-logout     { color: rgba(255,255,255,0.6) !important; font-size: 13px; transition: color 120ms; display: flex; align-items: center; gap: 4px; }
 .nav-logout:hover { color: #fff !important; text-decoration: none; }
@@ -594,8 +595,7 @@ html.dark-theme table.calendar td:hover {
 
 /* Hide pending events when filter is active */
 .cal-hide-pending .event-pending { display: none !important; }
-.cal-hide-pending .gantt-block.event-pending { display: none !important; }
-.cal-hide-pending .gantt-fulltrack-overlay.event-pending { display: none !important; }
+.cal-hide-pending .event-pending.gantt-block { display: none !important; }
 
 .pending-badge {
   display: inline-block;
@@ -771,13 +771,67 @@ html.dark-theme table.calendar td:hover {
 }
 
 
-/* ── Legend ─────────────────────────────────────────────────── */
+/* ── Legend (sticky, collapsible) ──────────────────────────── */
+.cal-legend-wrapper {
+  position: fixed;
+  bottom: 12px;
+  left: 0;
+  z-index: 100;
+}
 .cal-legend {
   display: flex;
-  gap: 20px;
   align-items: center;
-  padding: 10px 18px 16px;
-  flex-wrap: wrap;
+  padding: 6px 14px 6px 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-left: none;
+  border-radius: 0 8px 8px 0;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  white-space: nowrap;
+}
+.cal-legend-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px 2px 6px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--muted);
+  flex-shrink: 0;
+  border-radius: 4px;
+}
+.cal-legend-toggle:hover { color: var(--text); background: rgba(0,0,0,0.04); }
+.cal-legend-arrow {
+  display: inline-block;
+  font-size: 18px;
+  transform: rotate(180deg);
+  transition: transform 200ms ease;
+}
+.cal-legend-collapsed .cal-legend-arrow {
+  transform: rotate(0deg);
+}
+.cal-legend-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+.cal-legend-divider {
+  width: 1px;
+  height: 16px;
+  background: var(--border);
+  flex-shrink: 0;
+  margin-right: 14px;
+}
+/* Collapsed: hide items + divider */
+.cal-legend-collapsed .legend-item,
+.cal-legend-collapsed .cal-legend-divider {
+  display: none;
+}
+/* Expanded: gap between legend items */
+.cal-legend .legend-item {
+  margin-left: 14px;
 }
 .legend-item  { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
 .legend-dot   { display: inline-block; width: 12px; height: 12px; border-radius: 3px; }
@@ -788,6 +842,12 @@ html.dark-theme table.calendar td:hover {
 
 /* Day-view legend extras */
 .legend-separator  { width: 1px; height: 14px; background: var(--border); margin: 0 2px; }
+.legend-swatch-pending {
+  display: inline-block; width: 14px; height: 10px; border-radius: 3px;
+  background: transparent;
+  border: 2px solid var(--primary);
+  opacity: 0.85;
+}
 .legend-dot-pending {
   display: inline-block; width: 12px; height: 12px; border-radius: 3px;
   background: var(--primary); opacity: 0.7;
@@ -1454,7 +1514,10 @@ html.dark-theme .card a            { color: var(--primary); }
 
 /* Cal-body dark bg fill */
 html.dark-theme .cal-body { background: var(--bg); }
-html.dark-theme .cal-legend { background: var(--bg); }
+html.dark-theme .cal-legend { background: var(--bg); border-color: rgba(46,168,229,0.18); box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
+html.dark-theme .cal-legend-toggle { color: #7090a0; }
+html.dark-theme .cal-legend-toggle:hover { color: #c0d8e4; background: rgba(255,255,255,0.05); }
+html.dark-theme .cal-legend-divider { background: rgba(46,168,229,0.18); }
 html.dark-theme .legend-item { color: #7090a0; }
 html.dark-theme .legend-separator { background: rgba(46,168,229,0.18); }
 
@@ -1632,6 +1695,10 @@ html.dark-theme .wk-today-head    { background: rgba(46,168,229,0.08); }
 html.dark-theme .wk-weekend-head  { background: rgba(99,102,241,0.05); }
 html.dark-theme .wk-today-num    { background: var(--primary); color: #fff; }
 
+/* ── Hamburger toggle (hidden on desktop, shown in 768px media query) ── */
+.nav-toggle-checkbox { display: none; }
+.nav-hamburger       { display: none; }
+
 /* ── Responsive ─────────────────────────────────────────────── */
 @media (max-width: 900px) {
 
@@ -1647,6 +1714,572 @@ html.dark-theme .wk-today-num    { background: var(--primary); color: #fff; }
   .login-divider   { flex-direction: row; width: auto; padding: 12px 24px; height: 40px; border: none; border-top: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0; }
   .login-panel-admin { border-left: none; }
   .site-nav-user   { display: none; }
+}
+
+/* ════════════════════════════════════════════════════════════════
+   RESPONSIVE — Mobile: 768px
+   ════════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+
+  /* ── Page container: edge-to-edge ─────────────────────────── */
+  .page-container {
+    padding: 12px 10px 32px;
+  }
+  .form-page {
+    max-width: 100%;
+  }
+
+  /* ── Page header ──────────────────────────────────────────── */
+  .page-heading {
+    font-size: 19px;
+  }
+
+  /* ── Form table: single column, labels stacked above inputs ─ */
+  .form-table,
+  .form-table tbody,
+  .form-table tr,
+  .form-table td {
+    display: block;
+    width: 100%;
+  }
+  .form-table td {
+    padding: 4px 0;
+  }
+  .form-table td:first-child {
+    width: 100%;
+    padding-bottom: 2px;
+    font-size: 15px;
+  }
+
+  /* ── Inputs: larger touch targets ─────────────────────────── */
+  form input,
+  form select,
+  form textarea {
+    min-width: 0;
+    width: 100%;
+    min-height: 44px;
+    padding: 10px 12px;
+    font-size: 16px;            /* prevents iOS zoom on focus */
+  }
+  .flatpickr-display {
+    min-height: 44px !important;
+    padding: 10px 12px !important;
+    font-size: 16px !important;
+  }
+
+  /* ── Start time row: stack Now button below on very small ── */
+  .start-time-row {
+    flex-wrap: wrap;
+  }
+  .btn-now {
+    min-height: 40px;
+    padding: 8px 16px;
+    font-size: 14px;
+  }
+
+  /* ── Duration shortcut buttons: 3 per row, bigger targets ── */
+  .duration-row {
+    gap: 8px;
+  }
+  .duration-btn {
+    min-height: 44px;
+    min-width: calc(33.33% - 6px);
+    padding: 8px 12px;
+    font-size: 14px;
+    justify-content: center;
+    flex: 1 1 calc(33.33% - 6px);
+  }
+  .duration-custom {
+    width: 100%;
+    text-align: center;
+    margin-left: 0;
+    font-size: 14px;
+  }
+
+  /* ── Asset picker: larger pills, better wrapping ──────────── */
+  .asset-picker {
+    gap: 8px;
+  }
+  .asset-picker-heading {
+    font-size: 12px;
+    margin-top: 12px;
+    margin-bottom: 4px;
+  }
+  .track-pill {
+    padding: 8px 16px;
+    font-size: 14px;
+    min-height: 44px;
+  }
+  .pill-sub-label {
+    font-size: 12px;
+  }
+
+  /* Subtrack panel: more room on mobile */
+  .subtrack-panel {
+    gap: 6px;
+    padding: 8px 10px;
+    margin-left: 0;
+    border-left-width: 3px;
+  }
+  .subtrack-option {
+    padding: 7px 14px;
+    font-size: 13px;
+    min-height: 40px;
+    display: inline-flex;
+    align-items: center;
+  }
+
+  /* ── Event action bar: full-width stacked buttons ─────────── */
+  .event-action-bar {
+    padding-left: 0;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 16px;
+  }
+  .event-action-bar .btn,
+  .event-action-bar form {
+    width: 100%;
+  }
+  .event-action-bar form {
+    display: flex;
+  }
+  .event-action-bar form .btn {
+    width: 100%;
+    flex: 1;
+  }
+  .event-action-bar .btn {
+    min-height: 50px;
+    font-size: 16px;
+    justify-content: center;
+  }
+
+  /* ── Sticky save bar at bottom ────────────────────────────── */
+  .event-action-bar {
+    position: sticky;
+    bottom: 0;
+    background: var(--bg);
+    padding: 12px 0;
+    border-top: 1px solid var(--border);
+    z-index: 50;
+  }
+
+  /* ── View-only banner: tighter on mobile ─────────────────── */
+  .view-only-banner {
+    font-size: 13px;
+    padding: 8px 12px;
+  }
+
+  /* ── Form errors ─────────────────────────────────────────── */
+  .form-errors {
+    padding: 8px 10px;
+    font-size: 13px;
+  }
+
+  /* ── Field help text ─────────────────────────────────────── */
+  .field-help {
+    font-size: 13px;
+  }
+
+  /* ── Navbar mobile layout ────────────────────────────────── */
+  .site-nav {
+    flex-wrap: wrap;
+    height: auto;
+    padding: 10px 12px;
+    gap: 0;
+    align-items: center;
+  }
+  .site-nav-brand {
+    font-size: 15px;
+    gap: 6px;
+    order: 1;
+    flex: 1;
+  }
+  .nav-logo { height: 22px; }
+
+  /* Hamburger icon — CSS-drawn lines */
+  .nav-hamburger {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 5px;
+    width: 40px;
+    height: 40px;
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 8px;
+    order: 2;
+    flex-shrink: 0;
+    background: rgba(255,255,255,0.08);
+  }
+  .nav-hamburger:active {
+    background: rgba(255,255,255,0.15);
+  }
+  .nav-hamburger span {
+    display: block;
+    height: 2px;
+    width: 100%;
+    background: rgba(255,255,255,0.85);
+    border-radius: 2px;
+    transition: transform 200ms ease, opacity 200ms ease;
+  }
+
+  /* Animate hamburger to X when open */
+  .nav-toggle-checkbox:checked ~ .nav-hamburger {
+    background: rgba(255,255,255,0.15);
+  }
+  .nav-toggle-checkbox:checked ~ .nav-hamburger span:nth-child(1) {
+    transform: translateY(7px) rotate(45deg);
+  }
+  .nav-toggle-checkbox:checked ~ .nav-hamburger span:nth-child(2) {
+    opacity: 0;
+  }
+  .nav-toggle-checkbox:checked ~ .nav-hamburger span:nth-child(3) {
+    transform: translateY(-7px) rotate(-45deg);
+  }
+
+  /* Theme toggle next to hamburger */
+  .theme-toggle {
+    order: 3;
+    margin-left: 8px;
+    flex-shrink: 0;
+  }
+
+  /* Nav links — hidden by default, shown when checkbox is checked */
+  .site-nav-links {
+    display: none;
+    flex-direction: column;
+    width: 100%;
+    order: 10;
+    padding: 10px 0 6px;
+    border-top: 1px solid rgba(255,255,255,0.15);
+    margin-top: 10px;
+  }
+  .nav-toggle-checkbox:checked ~ .site-nav-links {
+    display: flex;
+  }
+  .site-nav-links a {
+    padding: 12px 10px;
+    font-size: 15px;
+    border-right: none;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .site-nav-links a:last-child { border-bottom: none; }
+  .site-nav-links a i { width: 18px; text-align: center; }
+
+  /* User section — full width below links */
+  .site-nav-user {
+    display: none;
+    width: 100%;
+    order: 11;
+    padding: 10px 10px 6px;
+    border-top: 1px solid rgba(255,255,255,0.15);
+    justify-content: space-between;
+    align-items: center;
+  }
+  .nav-toggle-checkbox:checked ~ .site-nav-user {
+    display: flex;
+  }
+
+  /* ── Prevent horizontal overflow ─────────────────────────── */
+  body { overflow-x: hidden; }
+
+  /* ── Schedule / pending events rows ──────────────────────── */
+  .schedule-row {
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+  }
+  .schedule-date {
+    display: flex;
+    gap: 6px;
+    align-items: baseline;
+    min-width: unset;
+    text-align: left;
+  }
+  .schedule-info { width: 100%; }
+
+  /* Action buttons — stacked vertically with large touch targets */
+  .schedule-row > div:last-child {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    gap: 8px;
+  }
+  .schedule-row > div:last-child form {
+    width: 100%;
+  }
+  .schedule-row > div:last-child .btn,
+  .schedule-row > div:last-child button.btn {
+    width: 100%;
+    min-height: 44px;
+    font-size: 14px;
+    padding: 10px 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+  }
+
+  /* ── Buttons — larger touch targets globally ─────────────── */
+  .btn { min-height: 40px; padding: 10px 14px; }
+
+  /* ── Asset grid — single column ──────────────────────────── */
+  .asset-grid { grid-template-columns: 1fr; }
+
+  /* ── Asset cards — stack name above buttons on mobile ────── */
+  .asset-card {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    padding: 12px 36px 12px 12px;
+  }
+  .asset-card-actions {
+    justify-content: flex-start;
+  }
+
+  /* ── Asset delete button — larger touch target on mobile ─── */
+  .asset-card-delete-btn {
+    width: 36px; height: 36px;
+    font-size: 20px;
+    top: 6px; right: 6px;
+  }
+
+  /* ── Delete / feedback modals ────────────────────────────── */
+  .delete-modal-box { padding: 20px 16px; }
+  .feedback-modal   { width: 95%; padding: 20px 16px; }
+
+  /* ── Calendar legend — wrap on mobile to prevent overflow ── */
+  .cal-legend {
+    white-space: normal;
+    flex-wrap: wrap;
+    max-width: calc(100vw - 20px);
+    gap: 2px 8px;
+    padding: 6px 10px;
+  }
+  .cal-legend-wrapper { max-width: 100vw; }
+
+  /* ── Feedback FAB — compact on mobile, above legend bar ──── */
+  .feedback-fab { bottom: 56px; right: 12px; }
+  .feedback-fab-label { display: none; }
+  .feedback-toast { right: 12px; bottom: 112px; }
+
+  /* ── Empty state ─────────────────────────────────────────── */
+  .empty-state { padding: 32px 16px; }
+
+  /* ── Calendar toolbar — touch-friendly controls ─────────────── */
+  .cal-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 8px 10px;
+    gap: 8px;
+    top: 0;
+  }
+  .cal-tb-left { justify-content: center; gap: 8px; }
+  .cal-tb-center { justify-content: center; flex-wrap: wrap; gap: 8px; }
+  .cal-tb-right { justify-content: center; flex-wrap: wrap; gap: 8px; }
+
+  /* Nav arrows — 44px minimum touch target */
+  .cal-nav-arrow { width: 44px; height: 44px; font-size: 24px; }
+  .cal-today-btn {
+    padding: 8px 18px; font-size: 14px;
+    min-height: 44px; display: inline-flex; align-items: center;
+  }
+
+  /* View switcher — full width, equal spacing, 44px targets */
+  .view-switcher { display: flex; width: 100%; }
+  .vsw {
+    flex: 1; text-align: center;
+    padding: 10px 8px; font-size: 14px;
+    min-height: 44px;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+
+  /* New event button — full width */
+  .btn-new-event {
+    width: 100%; justify-content: center;
+    padding: 10px 16px; font-size: 14px; min-height: 44px;
+  }
+
+  /* Asset filter — full width */
+  .asset-filter-form { width: 100%; }
+  .asset-filter-select {
+    width: 100%; min-width: unset;
+    padding: 8px 12px; font-size: 14px; min-height: 44px;
+  }
+
+  /* Pending filter — touch-friendly */
+  .pending-filter { font-size: 14px; gap: 8px; }
+  .pending-filter input[type="checkbox"] {
+    width: 18px; height: 18px; min-width: 18px;
+  }
+
+  /* ── Month view — compact cells ─────────────────────────────── */
+  .cal-body { padding: 0 4px 4px; }
+  .month-table, table.calendar { font-size: 12px; border-radius: 6px; }
+  .month-table .month, table.calendar .month { font-size: 16px; padding: 10px 0; }
+  .month-table th, table.calendar th { font-size: 10px; padding: 6px 2px; letter-spacing: 0; }
+  .month-table td, table.calendar td {
+    height: auto;
+    min-height: 70px;
+    vertical-align: top;
+  }
+  .day-cell-inner { padding: 4px; }
+  .date { font-size: 12px; margin-bottom: 2px; }
+  .today-circle { width: 24px; height: 24px; font-size: 12px; }
+  .day-cell-header { margin-bottom: 2px; gap: 2px; }
+
+  /* Event tiles — compact but readable */
+  .calendar li.event,
+  .month-table li.event {
+    margin: 1px 0; padding: 3px 5px;
+    border-radius: 4px; font-size: 11px; border-left-width: 3px;
+  }
+  .event-title { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .event-time { display: none; }
+  .event-creator { display: none; }
+  .event-badges { display: none; }
+
+  /* "+N more" button — larger touch target */
+  .day-more-btn {
+    font-size: 12px; padding: 4px 0;
+    min-height: 32px; display: flex; align-items: center;
+  }
+
+  /* Hover-to-add — always visible on touch devices */
+  .day-add-overlay {
+    opacity: 1 !important; visibility: visible !important;
+    width: 28px; height: 28px; font-size: 18px;
+  }
+
+  /* Day-events modal — centered on screen instead of anchored */
+  .day-modal-box {
+    width: calc(100vw - 24px);
+    max-width: calc(100vw - 24px);
+    position: fixed;
+    top: 50% !important; left: 50% !important;
+    transform: translate(-50%, -50%);
+  }
+
+  /* ── Week view — horizontal scroll with sticky labels ───────── */
+  .trk-scroll-wrap { -webkit-overflow-scrolling: touch; }
+  .trk-table { min-width: 560px; }
+  .trk-label-th, .trk-label-cell { width: 80px; min-width: 70px; padding: 6px 4px; }
+  .trk-name { font-size: 11px; }
+  .trk-th { padding: 8px 4px; }
+  .wk-dayname { font-size: 10px; }
+  .wk-daynum { font-size: 15px; }
+  .wk-today-num { width: 24px; height: 24px; font-size: 13px; }
+  .trk-td { padding: 4px 3px; min-height: 60px; }
+  .trk-sublabel-cell { width: 50px; min-width: 40px; left: 80px; padding: 4px 3px; }
+  .trk-subname { font-size: 9px; }
+  .trk-events li.event { font-size: 10px; padding: 3px 4px; }
+
+  /* ── Nav logout — 44px touch target ─────────────────────── */
+  .nav-logout {
+    min-height: 44px;
+    padding: 10px 10px;
+  }
+
+  /* ── Menu backdrop when hamburger is open ────────────────── */
+  .nav-toggle-checkbox:checked ~ .site-nav-links::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.3);
+    z-index: -1;
+  }
+}
+
+/* ── Collapsible Gantt labels (toggled by JS class) ───────────── */
+.gantt-labels-collapsed .gantt-track-label {
+  width: 8px;
+  min-width: 8px;
+  padding: 0;
+  overflow: hidden;
+  font-size: 0;
+  border-right: none;
+}
+.gantt-labels-collapsed .gantt-track-label-spacer {
+  width: 8px;
+  min-width: 8px;
+}
+.gantt-labels-collapsed .gantt-sublabel-col {
+  width: 0;
+  min-width: 0;
+  padding: 0;
+  overflow: hidden;
+  border-right: none;
+}
+.gantt-labels-collapsed .gantt-sublabel-spacer {
+  width: 0;
+  min-width: 0;
+}
+.gantt-labels-collapsed .gantt-sublabel-col,
+.gantt-labels-collapsed .gantt-sublabel-spacer {
+  left: 8px;
+}
+.gantt-labels-collapsed .gantt-axis-label {
+  width: 8px;
+  min-width: 8px;
+}
+.gantt-labels-collapsed .gantt-axis-sublabel {
+  width: 0;
+  min-width: 0;
+}
+.gantt-label-toggle {
+  display: none;
+  background: none;
+  border: 1px solid var(--border, #d1d5db);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: var(--muted, #6b7280);
+  cursor: pointer;
+  margin-left: 8px;
+}
+.gantt-label-toggle:hover { background: var(--border, #e5e7eb); }
+@media (max-width: 768px) {
+  .gantt-label-toggle { display: inline-flex; align-items: center; gap: 4px; }
+}
+
+/* ════════════════════════════════════════════════════════════════
+   RESPONSIVE — Very small phones (max-width: 480px)
+   ════════════════════════════════════════════════════════════════ */
+@media (max-width: 480px) {
+
+  /* ── Month view — ultra compact ─────────────────────────────── */
+  .month-table td, table.calendar td { height: 80px; }
+  .day-cell-inner { padding: 2px 2px; }
+  .date { font-size: 10px; }
+  .today-circle { width: 20px; height: 20px; font-size: 10px; }
+  .calendar li.event, .month-table li.event { padding: 2px 3px; margin: 1px 0; }
+  .event-title { font-size: 9px; }
+  .event-time { display: none; }
+
+  /* ── Week view — tighter labels ─────────────────────────────── */
+  .wk-dayname { font-size: 9px; }
+  .wk-daynum { font-size: 13px; }
+  .trk-label-th, .trk-label-cell { width: 60px; min-width: 55px; }
+  .trk-name { font-size: 10px; }
+  .trk-sublabel-cell { width: 40px; min-width: 35px; left: 60px; }
+
+  /* ── Toolbar controls — slightly smaller ────────────────────── */
+  .cal-nav-arrow { width: 40px; height: 40px; }
+  .vsw { font-size: 13px; padding: 8px 6px; }
+  .btn-new-event { font-size: 13px; }
+
+  /* ── Nav links — icon-only in the top bar, but show text when hamburger is open ── */
+  .site-nav-links a { font-size: 0; }
+  .site-nav-links a i { font-size: 14px; }
+  .site-nav-links a .nav-badge { font-size: 9px; }
+  .nav-toggle-checkbox:checked ~ .site-nav-links a { font-size: 15px; }
+  .nav-toggle-checkbox:checked ~ .site-nav-links a i { font-size: 16px; }
+  .nav-toggle-checkbox:checked ~ .site-nav-user { display: block; }
+  .site-nav-user { display: none; }
 }
 
 /* ── Gantt day view ─────────────────────────────────────────── */
@@ -1803,7 +2436,7 @@ html.dark-theme .wk-today-num    { background: var(--primary); color: #fff; }
 /* Each subtrack within a track row — now just a lane, no inline label */
 .gantt-subtrack-row {
   position: relative;
-  height: 58px;
+  height: calc(var(--lane-rows, 1) * 58px);
   flex-shrink: 0;
   border-bottom: 1px solid rgba(46,168,229,0.07);
 }
@@ -1812,26 +2445,32 @@ html.dark-theme .wk-today-num    { background: var(--primary); color: #fff; }
 }
 
 /* Overlay for full-track (parent) events — spans all subtrack rows */
-.gantt-fulltrack-overlay {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  z-index: 2;
-  pointer-events: none;   /* subtrack events behind it remain clickable */
+/* Parent track lane — dedicated row above subtracks for parent-booked events */
+.gantt-parent-lane {
+  height: calc(var(--lane-rows, 1) * 48px);
+  border-bottom: 2px solid rgba(14, 165, 233, 0.15);
 }
-.gantt-fulltrack-overlay .gantt-block {
-  pointer-events: auto;
+.gantt-parent-lane .gantt-sub-row {
+  height: 48px;
+}
+.gantt-parent-lane-label {
+  font-weight: 600;
+  font-style: italic;
+  opacity: 0.7;
 }
 
-/* Full-track blocks span the full height of the overlay (both subtrack rows) */
-.gantt-block.gantt-fulltrack-block {
+/* Subtrack blocks fill their row height consistently */
+.gantt-subtrack-row .gantt-block,
+.gantt-sub-row .gantt-block {
   top: 6px;
   height: calc(100% - 12px);
-  opacity: 0.88;
-  border-top: 2px solid rgba(255,255,255,0.25);
 }
+.gantt-subtrack-row .gantt-block-segment,
+.gantt-sub-row .gantt-block-segment {
+  top: 6px;
+  height: calc(100% - 12px);
+}
+
 
 html.dark-theme .gantt-sublabel-col  { background: #1a2838; border-color: rgba(46,168,229,0.12); }
 html.dark-theme .gantt-subtrack-name { color: #5a8090; border-color: rgba(46,168,229,0.08); }
@@ -1850,6 +2489,7 @@ html.dark-theme .gantt-subtrack-row  { border-color: rgba(46,168,229,0.08); }
   text-decoration: none;
   font-size: 12px;
   color: #fff;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.35);
   background: var(--primary);
   min-width: 20px;
   box-sizing: border-box;
@@ -1858,72 +2498,318 @@ html.dark-theme .gantt-subtrack-row  { border-color: rgba(46,168,229,0.08); }
 .gantt-block:hover {
   filter: brightness(1.12);
   text-decoration: none;
+  color: #fff;
 }
 .gantt-block.event-track    { background: #10b981; }
 .gantt-block.event-vehicle  { background: #f59e0b; }
 .gantt-block.event-operator { background: #6366f1; }
 .gantt-block.event-multi    { background: var(--primary); }
 .gantt-block.event-pending  {
-  opacity: 0.7;
-  border: 2px dashed rgba(255,255,255,0.85);
+  background: color-mix(in srgb, var(--track-color, var(--primary)) 12%, transparent) !important;
+  border: 2px solid var(--track-color, var(--primary));
+  color: var(--track-color, var(--primary));
+  text-shadow: none;
+  font-weight: 600;
 }
 .gantt-block.event-past     { opacity: 0.45; filter: saturate(0.5); }
-
-/* Impromptu event — dashed border + subtle pulse when in-progress */
-.gantt-block.event-impromptu {
-  border: 2px dashed rgba(255,255,255,0.8);
-  box-shadow: 0 0 6px rgba(46,168,229,0.3);
-}
-.gantt-block.event-impromptu:not(.gantt-block--ghost) {
-  animation: impromptu-pulse 2s ease-in-out infinite;
-}
-@keyframes impromptu-pulse {
-  0%, 100% { box-shadow: 0 0 6px rgba(46,168,229,0.3); }
-  50%      { box-shadow: 0 0 14px rgba(46,168,229,0.6); }
-}
-.calendar li.event-impromptu {
-  border-left: 3px dashed var(--primary);
-  font-style: italic;
+.gantt-block.event-completed { opacity: 0.55; filter: saturate(0.65); }
+.gantt-block.event-noshow   {
+  background: rgba(245,158,11,0.10) !important;
+  border: 3px dashed #d97706;
+  color: #92400e;
+  text-shadow: none;
+  opacity: 1;
+  filter: none;
 }
 
-/* Ghost bar (scheduled time when actuals exist) — offset below actual */
-.gantt-block.gantt-block--ghost {
-  top: 32px;
-  height: 22px;
-  opacity: 0.7;
-  border: 2px dashed rgba(108,117,125,0.6);
-  background: rgba(108,117,125,0.12) !important;
-  font-size: 10px;
-  padding: 0 5px;
+/* Scheduled bar — semi-transparent when segments exist.
+   Text is rendered in a separate .gantt-block-text overlay (z-index: 5)
+   so it isn't trapped by opacity stacking contexts on the bar. */
+.gantt-block.gantt-block--scheduled {
+  opacity: 0.4;
 }
-.gantt-block.gantt-block--ghost .gantt-block-title { display: none; }
-.gantt-block.gantt-block--ghost .gantt-block-time {
-  color: var(--muted); font-size: 10px; opacity: 0.85;
-}
-
-/* Actual bar (solid, occupies top portion of lane) */
-.gantt-block.gantt-block--actual {
+/* Scheduled window edge markers — visible above segments */
+.gantt-sched-edge {
+  position: absolute;
   top: 4px;
-  height: 26px;
-  border: 1.5px solid rgba(255,255,255,0.35);
+  height: 40px;
+  width: 3px;
+  z-index: 3;
+  background: #fff;
+  opacity: 0.7;
+  border-radius: 2px;
+  pointer-events: none;
+}
+html.dark-theme .gantt-sched-edge {
+  background: #cbd5e1;
+  opacity: 0.6;
+}
+
+/* Text overlay — sits above segments, unaffected by bar opacity */
+.gantt-block-text {
+  position: absolute;
+  top: 4px;
+  height: 40px;
+  border-radius: 4px;
+  padding: 0 6px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
+  text-decoration: none;
+  font-size: 12px;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.35);
+  z-index: 5;
+  pointer-events: auto;
+  box-sizing: border-box;
+}
+a.gantt-block-text,
+a.gantt-block-text:link,
+a.gantt-block-text:visited,
+a.gantt-block-text:hover,
+a.gantt-block-text:active { text-decoration: none; color: #fff; }
+/* Match subtrack row sizing */
+.gantt-subtrack-row .gantt-block-text,
+.gantt-sub-row .gantt-block-text {
+  top: 6px;
+  height: calc(100% - 12px);
+}
+/* Match fulltrack overlay sizing */
+
+/* Actual segment bars — solid, overlaid on scheduled bar */
+.gantt-block-segment {
+  position: absolute;
+  top: 4px;
+  height: 40px;
+  border-radius: 4px;
+  z-index: 2;
+  pointer-events: auto;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+/* Match fulltrack-block sizing when inside an overlay */
+.gantt-block--actual-segment {
+  background: var(--track-color, var(--primary));
+  position: relative;
+}
+/* Left-edge marker showing where the segment begins */
+.gantt-block--actual-segment::before,
+.gantt-block--active-segment::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  border-radius: 3px 0 0 3px;
+  background: #fff;
+  opacity: 0.7;
+}
+.gantt-block--active-segment {
+  background: var(--track-color, var(--primary));
+  position: relative;
+}
+.gantt-block--active-segment::after {
+  content: '';
+  position: absolute;
+  right: -1px;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  border-radius: 0 3px 3px 0;
+  background: var(--track-color, var(--primary));
+  filter: brightness(1.4);
+  animation: gantt-edge-pulse 1.5s ease-in-out infinite;
+}
+@keyframes gantt-edge-pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 6px var(--track-color, var(--primary)); }
+  50% { opacity: 0.6; box-shadow: 0 0 2px var(--track-color, var(--primary)); }
+}
+@keyframes gantt-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+/* Pause gap — diagonal stripe between segments */
+.gantt-block--pause-gap {
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--track-color, var(--primary)),
+    var(--track-color, var(--primary)) 3px,
+    transparent 3px,
+    transparent 8px
+  );
+  opacity: 0.45;
+  border: none;
+}
+/* Active (live-growing) pause gap — subtle pulse */
+.gantt-block--active-pause {
+  animation: gantt-pause-pulse 2s ease-in-out infinite;
+}
+@keyframes gantt-pause-pulse {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 0.25; }
+}
+
+/* Overflow indicators — dotted borders when actual exceeds scheduled */
+.gantt-block--overflow-start {
+  border-left: 2px dashed var(--track-color, var(--primary));
+}
+.gantt-block--overflow-end {
+  border-right: 2px dashed var(--track-color, var(--primary));
+}
+
+/* Connector line between disconnected scheduled bar and segments */
+.gantt-connector {
+  position: absolute;
+  top: 50%;
+  height: 2px;
+  transform: translateY(-1px);
+  z-index: 1;
+  pointer-events: auto;
+  cursor: pointer;
+}
+.gantt-connector--early {
+  background: var(--track-color, var(--primary));
+  opacity: 0.6;
+}
+.gantt-connector--late {
+  background: repeating-linear-gradient(
+    to right,
+    var(--track-color, var(--primary)) 0,
+    var(--track-color, var(--primary)) 6px,
+    transparent 6px,
+    transparent 12px
+  );
+  opacity: 0.5;
+}
+
+/* Gantt tooltip */
+.gantt-tooltip {
+  position: fixed;
+  z-index: 1000;
+  background: #1e293b;
+  color: #e2e8f0;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 12px;
+  line-height: 1.5;
+  min-width: 200px;
+  max-width: 320px;
+  pointer-events: none;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.gantt-tooltip.visible { opacity: 1; }
+.gantt-tooltip-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+  gap: 8px;
+}
+.gantt-tooltip-title {
+  font-weight: 600;
+  font-size: 13px;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.gantt-tooltip-status {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.gantt-tooltip-status.status-scheduled { background: #3b82f6; color: #fff; }
+.gantt-tooltip-status.status-active { background: #10b981; color: #fff; }
+.gantt-tooltip-status.status-paused { background: #f59e0b; color: #1e293b; }
+.gantt-tooltip-status.status-completed { background: #64748b; color: #fff; }
+.gantt-tooltip-status.status-no-show { background: #d97706; color: #fff; }
+.gantt-tooltip-status.status-pending { background: transparent; color: #94a3b8; border: 1px solid #94a3b8; }
+.gantt-tooltip-row {
+  display: flex;
+  gap: 6px;
+  padding: 2px 0;
+}
+.gantt-tooltip-label {
+  color: #94a3b8;
+  min-width: 60px;
+  flex-shrink: 0;
+}
+.gantt-tooltip-value { color: #e2e8f0; }
+.gantt-tooltip-divider {
+  border-top: 1px solid #334155;
+  margin: 5px 0;
+}
+.gantt-tooltip-segments {
+  margin: 0;
+  padding: 0 0 0 14px;
+  font-size: 11px;
+  color: #cbd5e1;
+}
+.gantt-tooltip-segments li { padding: 1px 0; }
+.gantt-tooltip-desc {
+  font-size: 11px;
+  color: #94a3b8;
+  font-style: italic;
+  margin-top: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+html.dark-theme .gantt-tooltip {
+  background: #0f172a;
+  border: 1px solid #334155;
 }
 
 /* Legend swatches for the day view */
-.legend-swatch-actual {
+.legend-swatch-scheduled {
   display: inline-block; width: 14px; height: 10px; border-radius: 3px;
-  background: var(--primary); border: 1.5px solid rgba(255,255,255,0.35);
+  background: var(--primary); opacity: 0.4;
 }
-.legend-swatch-dual {
-  display: inline-flex; flex-direction: column; gap: 1px; vertical-align: middle;
+.legend-swatch-active {
+  display: inline-block; width: 14px; height: 10px; border-radius: 3px;
+  background: var(--primary);
+  position: relative;
 }
-.legend-swatch-dual__actual {
-  width: 14px; height: 7px; border-radius: 2px;
-  background: var(--primary); border: 1px solid rgba(255,255,255,0.3);
+.legend-swatch-active::after {
+  content: '';
+  position: absolute;
+  right: -1px; top: 0; bottom: 0; width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--primary);
+  filter: brightness(1.4);
+  animation: gantt-edge-pulse 1.5s ease-in-out infinite;
 }
-.legend-swatch-dual__ghost {
-  width: 14px; height: 5px; border-radius: 2px;
-  border: 1.5px dashed rgba(108,117,125,0.6);
-  background: rgba(108,117,125,0.12); opacity: 0.7;
+.legend-swatch-paused {
+  display: inline-block; width: 14px; height: 10px; border-radius: 3px;
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--primary),
+    var(--primary) 3px,
+    transparent 3px,
+    transparent 8px
+  );
+  opacity: 0.45;
+}
+.legend-swatch-completed {
+  display: inline-block; width: 14px; height: 10px; border-radius: 3px;
+  background: var(--primary); opacity: 0.55; filter: saturate(0.65);
+}
+.legend-swatch-noshow {
+  display: inline-block; width: 14px; height: 10px; border-radius: 3px;
+  background: rgba(245,158,11,0.10);
+  border: 2px dashed #d97706;
 }
 
 .gantt-block-title {
@@ -1969,6 +2855,18 @@ html.dark-theme .gantt-lane   {
   );
 }
 html.dark-theme .gantt-axis-row { border-color: rgba(46,168,229,0.15); }
+html.dark-theme .gantt-block.event-pending {
+  border-color: var(--track-color, var(--primary));
+  color: var(--track-color, var(--primary));
+}
+html.dark-theme .gantt-block.event-completed {
+  opacity: 0.5;
+}
+html.dark-theme .gantt-block.event-noshow {
+  background: rgba(245,158,11,0.12) !important;
+  border-color: #f59e0b;
+  color: #fbbf24;
+}
 
 /* ── Gantt now-line ────────────────────────────────────────── */
 .gantt-now-line {

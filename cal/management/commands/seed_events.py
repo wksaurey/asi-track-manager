@@ -161,7 +161,7 @@ class Command(BaseCommand):
         # Summary stats
         approved = Event.objects.filter(is_approved=True).count()
         pending = Event.objects.filter(is_approved=False).count()
-        with_actual = Event.objects.exclude(actual_start=None).count()
+        with_actual = Event.objects.filter(segments__isnull=False).distinct().count()
         self.stdout.write(f"  Approved: {approved}")
         self.stdout.write(f"  Pending:  {pending}")
         self.stdout.write(f"  With actual times: {with_actual}")
@@ -268,15 +268,15 @@ class Command(BaseCommand):
 
     def _add_actual_times(self, event, sched_start, sched_end, partial=False):
         """
-        Add realistic actual start/end times.
+        Add realistic actual start/end times as segments.
         Adds slight variance from scheduled times to simulate real-world conditions.
         """
+        from cal.models import ActualTimeSegment
         # Actual start: usually within ±15 min of scheduled
         offset_min = random.gauss(0, 5)  # Normal distribution, stddev=5 min
         offset_min = max(-15, min(15, offset_min))  # Clamp
         actual_start = sched_start + timedelta(minutes=offset_min)
-
-        event.actual_start = actual_start
+        actual_end = None
 
         if not partial:
             # Actual end: usually within ±20 min of scheduled
@@ -288,6 +288,4 @@ class Command(BaseCommand):
             if actual_end <= actual_start:
                 actual_end = actual_start + timedelta(minutes=30)
 
-            event.actual_end = actual_end
-
-        event.save()
+        ActualTimeSegment.objects.create(event=event, start=actual_start, end=actual_end)

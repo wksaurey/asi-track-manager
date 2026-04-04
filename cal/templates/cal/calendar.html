@@ -51,6 +51,13 @@
              onchange="togglePending(this)">
       <span class="pending-filter-label">Show pending</span>
     </label>
+
+    {% if view == 'day' %}
+    <button type="button" class="gantt-label-toggle" id="gantt-label-toggle"
+            onclick="toggleGanttLabels()" title="Toggle track labels">
+      <i class="fas fa-columns"></i> Labels
+    </button>
+    {% endif %}
   </div>
 
   <!-- Right: view switcher + new event -->
@@ -70,32 +77,65 @@
   {{ calendar }}
 </div>
 
-<!-- ── Legend ───────────────────────────────────────────────────── -->
-{% if view == 'day' %}
-<div class="cal-legend">
-  <span class="legend-item">
-    <span class="legend-swatch-actual"></span> Scheduled
-  </span>
-  <span class="legend-item">
-    <span class="legend-swatch-dual"><span class="legend-swatch-dual__actual"></span><span class="legend-swatch-dual__ghost"></span></span> Actual <span class="text-muted" style="font-size:0.8em">(scheduled shown below)</span>
-  </span>
-  <span class="legend-item">
-    <span class="legend-dot legend-dot-pending"></span> Pending
-  </span>
+<!-- ── Legend (sticky, collapsible) ─────────────────────────────── -->
+<div class="cal-legend-wrapper" id="cal-legend-wrapper">
+  <div class="cal-legend" id="cal-legend">
+    <button class="cal-legend-toggle" onclick="toggleLegend()" aria-label="Toggle key">
+      <span class="cal-legend-arrow">&#8250;</span>
+      <span class="cal-legend-label">Key</span>
+    </button>
+    <span class="cal-legend-divider"></span>
+  {% if view == 'day' %}
+    <span class="legend-item">
+      <span class="legend-swatch-scheduled"></span> Scheduled
+    </span>
+    <span class="legend-item">
+      <span class="legend-swatch-active"></span> Active
+    </span>
+    <span class="legend-item">
+      <span class="legend-swatch-paused"></span> Paused
+    </span>
+    <span class="legend-item">
+      <span class="legend-swatch-completed"></span> Completed
+    </span>
+    <span class="legend-item">
+      <span class="legend-swatch-noshow"></span> No-show
+    </span>
+    <span class="legend-item">
+      <span class="legend-swatch-pending"></span> Pending
+    </span>
+  {% else %}
+    <span class="legend-item"><span class="legend-dot dot-vehicle"></span> Vehicle</span>
+    <span class="legend-item"><span class="legend-dot dot-track"></span> Track</span>
+    <span class="legend-item"><span class="legend-dot dot-operator"></span> Operator</span>
+    <span class="legend-item"><span class="legend-dot dot-pending"></span> Pending Approval</span>
+  {% endif %}
+  </div>
 </div>
-{% else %}
-<div class="cal-legend">
-  <span class="legend-item"><span class="legend-dot dot-vehicle"></span> Vehicle</span>
-  <span class="legend-item"><span class="legend-dot dot-track"></span> Track</span>
-  <span class="legend-item"><span class="legend-dot dot-operator"></span> Operator</span>
-  <span class="legend-item"><span class="legend-dot dot-pending"></span> Pending Approval</span>
-</div>
-{% endif %}
+<script>
+  // Restore collapsed state immediately (before paint) to prevent flash
+  function toggleLegend() {
+    var w = document.getElementById('cal-legend-wrapper');
+    if (w) w.classList.toggle('cal-legend-collapsed');
+    try {
+      localStorage.setItem('cal-legend-collapsed', w.classList.contains('cal-legend-collapsed') ? '1' : '');
+    } catch(e) {}
+  }
+  (function() {
+    try {
+      if (localStorage.getItem('cal-legend-collapsed') === '1') {
+        document.getElementById('cal-legend-wrapper').classList.add('cal-legend-collapsed');
+      }
+    } catch(e) {}
+  })();
+</script>
 
+<link rel="stylesheet" href="{% static 'cal/css/easter-egg.css' %}">
 {% endblock %}
 
 {% block script %}
 <script>
+
   // ── Pending filter toggle (client-side, no reload) ────────────────
   function togglePending(cb) {
     var body = document.querySelector('.cal-body');
@@ -121,6 +161,24 @@
       if (body) body.classList.add('cal-hide-pending');
       var cb = document.getElementById('pending-toggle');
       if (cb) cb.checked = false;
+    }
+  })();
+
+  // ── Gantt label collapse toggle ──────────────────────────────────
+  function toggleGanttLabels() {
+    var gantt = document.querySelector('.gantt-view');
+    if (!gantt) return;
+    gantt.classList.toggle('gantt-labels-collapsed');
+    var collapsed = gantt.classList.contains('gantt-labels-collapsed');
+    localStorage.setItem('gantt-labels-collapsed', collapsed ? '1' : '0');
+    var btn = document.getElementById('gantt-label-toggle');
+    if (btn) btn.title = collapsed ? 'Show track labels' : 'Hide track labels';
+  }
+  // Restore state from localStorage
+  (function() {
+    if (localStorage.getItem('gantt-labels-collapsed') === '1') {
+      var gantt = document.querySelector('.gantt-view');
+      if (gantt) gantt.classList.add('gantt-labels-collapsed');
     }
   })();
 </script>
@@ -206,15 +264,21 @@
     if (!gantt) return;
     var ganttStart = parseInt(gantt.dataset.ganttStart || '0');
     var ganttMins = parseInt(gantt.dataset.ganttMins || '1440');
+    var APP_TZ = JSON.parse(document.getElementById('app-timezone').textContent);
 
     // ── Now line (only on today's date) ──────────────────────────
     {% if is_today %}
     (function() {
       var nowLines = [];
 
+      function getEasternMinutes() {
+        var hhmm = new Date().toLocaleTimeString('en-GB', { timeZone: APP_TZ, hour: '2-digit', minute: '2-digit', hour12: false });
+        var parts = hhmm.split(':');
+        return parseInt(parts[0]) * 60 + parseInt(parts[1]);
+      }
+
       function getNowPct() {
-        var d = new Date();
-        var mins = d.getHours() * 60 + d.getMinutes();
+        var mins = getEasternMinutes();
         var offset = mins - (ganttStart * 60);
         return (offset / ganttMins) * 100;
       }
@@ -254,14 +318,259 @@
       var container = document.querySelector('.gantt-scroll-container');
       if (!container) return;
 
-      var now = new Date();
-      var nowMin = now.getHours() * 60 + now.getMinutes();
+      var hhmm = new Date().toLocaleTimeString('en-GB', { timeZone: APP_TZ, hour: '2-digit', minute: '2-digit', hour12: false });
+      var parts = hhmm.split(':');
+      var nowMin = parseInt(parts[0]) * 60 + parseInt(parts[1]);
       var scrollableWidth = container.scrollWidth;
       var viewportWidth = container.clientWidth;
       var nowPx = ((nowMin - ganttStart * 60) / ganttMins) * scrollableWidth;
       container.scrollLeft = Math.max(0, nowPx - viewportWidth / 2);
     })();
+
+    // ── Live update active segment widths ────────────────────────
+    (function() {
+      function updateActiveSegments() {
+        document.querySelectorAll('.gantt-block--active-segment').forEach(function(el) {
+          var segStartISO = el.getAttribute('data-segment-start');
+          if (!segStartISO) return;
+          var segStartDate = new Date(segStartISO);
+          // Get current time in app timezone as minutes since midnight
+          var hhmm = new Date().toLocaleTimeString('en-GB', { timeZone: APP_TZ, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+          var parts = hhmm.split(':');
+          var nowMin = parseInt(parts[0]) * 60 + parseInt(parts[1]) + parseInt(parts[2]) / 60;
+          // Get segment start as minutes since midnight in app timezone
+          var startHHMM = segStartDate.toLocaleTimeString('en-GB', { timeZone: APP_TZ, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+          var startParts = startHHMM.split(':');
+          var startMin = parseInt(startParts[0]) * 60 + parseInt(startParts[1]) + parseInt(startParts[2]) / 60;
+          var elapsedMin = nowMin - startMin;
+          if (elapsedMin < 0) return;
+          var leftPct = (startMin - ganttStart * 60) / ganttMins * 100;
+          var widthPct = elapsedMin / ganttMins * 100;
+          el.style.left = Math.max(0, leftPct) + '%';
+          el.style.width = widthPct + '%';
+        });
+      }
+      updateActiveSegments();
+      setInterval(updateActiveSegments, 60000);
+    })();
+
+    // ── Live update active pause gap widths ──────────────────────
+    (function() {
+      function updateActivePauses() {
+        document.querySelectorAll('.gantt-block--active-pause').forEach(function(el) {
+          var pauseStartISO = el.getAttribute('data-pause-start');
+          if (!pauseStartISO) return;
+          var pauseStartDate = new Date(pauseStartISO);
+          var hhmm = new Date().toLocaleTimeString('en-GB', { timeZone: APP_TZ, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+          var parts = hhmm.split(':');
+          var nowMin = parseInt(parts[0]) * 60 + parseInt(parts[1]) + parseInt(parts[2]) / 60;
+          var startHHMM = pauseStartDate.toLocaleTimeString('en-GB', { timeZone: APP_TZ, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+          var startParts = startHHMM.split(':');
+          var startMin = parseInt(startParts[0]) * 60 + parseInt(startParts[1]) + parseInt(startParts[2]) / 60;
+          var elapsedMin = nowMin - startMin;
+          if (elapsedMin < 0) return;
+          var leftPct = (startMin - ganttStart * 60) / ganttMins * 100;
+          var widthPct = elapsedMin / ganttMins * 100;
+          el.style.left = Math.max(0, leftPct) + '%';
+          el.style.width = widthPct + '%';
+        });
+      }
+      updateActivePauses();
+      setInterval(updateActivePauses, 60000);
+    })();
+
+    // ── Gantt block hover tooltips ───────────────────────────────
+    (function() {
+      var tip = document.createElement('div');
+      tip.className = 'gantt-tooltip';
+      document.body.appendChild(tip);
+      var hideTimer = null;
+
+      function buildHTML(d) {
+        var statusCls = 'status-' + d.status.toLowerCase().replace('-', '-').replace(' ', '-');
+        // No-show → status-no-show
+        if (d.status === 'No-show') statusCls = 'status-no-show';
+        var h = '<div class="gantt-tooltip-header">'
+          + '<span class="gantt-tooltip-title">' + d.title + '</span>'
+          + '<span class="gantt-tooltip-status ' + statusCls + '">' + d.status + '</span>'
+          + '</div>';
+        if (d.creator) {
+          h += '<div class="gantt-tooltip-row"><span class="gantt-tooltip-label">Creator</span><span class="gantt-tooltip-value">' + d.creator + '</span></div>';
+        }
+        h += '<div class="gantt-tooltip-row"><span class="gantt-tooltip-label">Scheduled</span><span class="gantt-tooltip-value">' + d.scheduled + '</span></div>';
+        if (d.tracks) {
+          h += '<div class="gantt-tooltip-row"><span class="gantt-tooltip-label">Tracks</span><span class="gantt-tooltip-value">' + d.tracks + '</span></div>';
+        }
+        if (d.vehicles) {
+          h += '<div class="gantt-tooltip-row"><span class="gantt-tooltip-label">Vehicles</span><span class="gantt-tooltip-value">' + d.vehicles + '</span></div>';
+        }
+        if (d.segments) {
+          h += '<div class="gantt-tooltip-divider"></div>';
+          h += '<div class="gantt-tooltip-row"><span class="gantt-tooltip-label">Actual</span><span class="gantt-tooltip-value">' + d.totalActual + ' total</span></div>';
+          h += '<ol class="gantt-tooltip-segments">';
+          for (var i = 0; i < d.segments.length; i++) {
+            h += '<li>' + d.segments[i] + '</li>';
+          }
+          h += '</ol>';
+          if (d.pauseTime) {
+            h += '<div class="gantt-tooltip-row"><span class="gantt-tooltip-label">Paused</span><span class="gantt-tooltip-value">' + d.pauseTime + '</span></div>';
+          }
+        }
+        if (d.description) {
+          h += '<div class="gantt-tooltip-divider"></div>';
+          h += '<div class="gantt-tooltip-desc">' + d.description + '</div>';
+        }
+        return h;
+      }
+
+      function positionTip(e) {
+        var x = e.clientX + 12;
+        var y = e.clientY + 12;
+        var tw = tip.offsetWidth;
+        var th = tip.offsetHeight;
+        if (x + tw > window.innerWidth - 8) x = e.clientX - tw - 12;
+        if (y + th > window.innerHeight - 8) y = e.clientY - th - 12;
+        tip.style.left = Math.max(4, x) + 'px';
+        tip.style.top = Math.max(4, y) + 'px';
+      }
+
+      function showTip(e) {
+        var target = e.target.closest('[data-gantt-info]');
+        if (!target) return;
+        clearTimeout(hideTimer);
+        try {
+          var data = JSON.parse(target.getAttribute('data-gantt-info'));
+          tip.innerHTML = buildHTML(data);
+          positionTip(e);
+          tip.classList.add('visible');
+        } catch(ex) {}
+      }
+
+      function moveTip(e) {
+        if (tip.classList.contains('visible')) positionTip(e);
+      }
+
+      function hideTip() {
+        hideTimer = setTimeout(function() { tip.classList.remove('visible'); }, 100);
+      }
+
+      var container = document.querySelector('.gantt-scroll-container');
+      if (container) {
+        container.addEventListener('mouseover', showTip);
+        container.addEventListener('mousemove', moveTip);
+        container.addEventListener('mouseout', function(e) {
+          if (!e.relatedTarget || !e.relatedTarget.closest('[data-gantt-info]')) hideTip();
+        });
+        // Click on segments navigates to the event edit page
+        container.addEventListener('click', function(e) {
+          var seg = e.target.closest('.gantt-block-segment');
+          if (!seg) return;
+          var eventId = seg.getAttribute('data-event-id');
+          if (eventId) {
+            window.location.href = '/cal/event/edit/' + eventId + '/';
+          }
+        });
+      }
+    })();
   });
 </script>
 {% endif %}
+
+<!-- ── Konami Code Easter Egg ──────────────────────────────────── -->
+<div class="easter-egg-overlay" id="easter-egg">
+
+  <!-- Starfield background -->
+  <canvas id="starfield-canvas"></canvas>
+
+  <!-- 3D CSS scene on top -->
+  <div class="egg-scene">
+    <div class="egg-card">
+      <div class="rocket-wrapper">
+        <div class="galaxy-bg"></div>
+        <div class="rocket-orbit"><div class="rocket-emoji">🚀</div></div>
+      </div>
+      <div class="egg-label">Hollis was here</div>
+    </div>
+    <div class="egg-card">
+      <svg class="saturn-svg" xmlns="http://www.w3.org/2000/svg" viewBox="35 42 190 138" width="220" height="160">
+        <defs>
+          <clipPath id="top"><rect x="-500" y="-500" width="1000" height="575"/></clipPath>
+          <clipPath id="bottom"><rect x="-500" y="75" width="1000" height="500"/></clipPath>
+          <clipPath id="planetClip"><circle cx="100" cy="75" r="35"/></clipPath>
+        </defs>
+        <g transform="rotate(-35, 130, 110) translate(30, 35)">
+          <path d="M -10,75 A 110,24 0 1,1 210,75 A 110,24 0 1,1 -10,75 Z
+                    M 50,75 A 50,11 0 1,0 150,75 A 50,11 0 1,0 50,75 Z"
+                fill="#7c3aed" fill-rule="evenodd" opacity="0.7" clip-path="url(#top)"/>
+          <g clip-path="url(#top)" opacity="0.45">
+            <path d="M -10,75 A 110,24 0 1,1 210,75 A 110,24 0 1,1 -10,75 Z
+                      M -2,75 A 102,22 0 1,0 202,75 A 102,22 0 1,0 -2,75 Z"
+                  fill="#a78bfa" fill-rule="evenodd"/>
+            <path d="M 2,75 A 98,21 0 1,1 198,75 A 98,21 0 1,1 2,75 Z
+                      M 10,75 A 90,20 0 1,0 190,75 A 90,20 0 1,0 10,75 Z"
+                  fill="#2e1065" fill-rule="evenodd"/>
+            <path d="M 14,75 A 86,19 0 1,1 186,75 A 86,19 0 1,1 14,75 Z
+                      M 22,75 A 78,17 0 1,0 178,75 A 78,17 0 1,0 22,75 Z"
+                  fill="#6d28d9" fill-rule="evenodd"/>
+            <path d="M 26,75 A 74,16 0 1,1 174,75 A 74,16 0 1,1 26,75 Z
+                      M 32,75 A 68,15 0 1,0 168,75 A 68,15 0 1,0 32,75 Z"
+                  fill="#1e1b4b" fill-rule="evenodd"/>
+            <path d="M 35,75 A 65,14 0 1,1 165,75 A 65,14 0 1,1 35,75 Z
+                      M 40,75 A 60,13 0 1,0 160,75 A 60,13 0 1,0 40,75 Z"
+                  fill="#a78bfa" fill-rule="evenodd"/>
+            <path d="M 42,75 A 58,13 0 1,1 158,75 A 58,13 0 1,1 42,75 Z
+                      M 46,75 A 54,12 0 1,0 154,75 A 54,12 0 1,0 46,75 Z"
+                  fill="#2e1065" fill-rule="evenodd"/>
+            <path d="M 47,75 A 53,12 0 1,1 153,75 A 53,12 0 1,1 47,75 Z
+                      M 50,75 A 50,11 0 1,0 150,75 A 50,11 0 1,0 50,75 Z"
+                  fill="#6d28d9" fill-rule="evenodd"/>
+          </g>
+          <circle cx="100" cy="75" r="35" fill="#581c87"/>
+          <g clip-path="url(#planetClip)" opacity="0.35">
+            <ellipse cx="100" cy="48" rx="40" ry="3" fill="#7c3aed"/>
+            <ellipse cx="100" cy="54" rx="40" ry="4" fill="#3b0764"/>
+            <ellipse cx="100" cy="61" rx="40" ry="3" fill="#8b5cf6"/>
+            <ellipse cx="100" cy="67" rx="40" ry="5" fill="#6d28d9"/>
+            <ellipse cx="100" cy="75" rx="40" ry="3" fill="#3b0764"/>
+            <ellipse cx="100" cy="81" rx="40" ry="4" fill="#7c3aed"/>
+            <ellipse cx="100" cy="88" rx="40" ry="3" fill="#8b5cf6"/>
+            <ellipse cx="100" cy="94" rx="40" ry="5" fill="#4c1d95"/>
+            <ellipse cx="100" cy="101" rx="40" ry="3" fill="#6d28d9"/>
+          </g>
+          <path d="M -10,75 A 110,24 0 1,1 210,75 A 110,24 0 1,1 -10,75 Z
+                    M 50,75 A 50,11 0 1,0 150,75 A 50,11 0 1,0 50,75 Z"
+                fill="#7c3aed" fill-rule="evenodd" opacity="0.7" clip-path="url(#bottom)"/>
+          <g clip-path="url(#bottom)" opacity="0.45">
+            <path d="M -10,75 A 110,24 0 1,1 210,75 A 110,24 0 1,1 -10,75 Z
+                      M -2,75 A 102,22 0 1,0 202,75 A 102,22 0 1,0 -2,75 Z"
+                  fill="#a78bfa" fill-rule="evenodd"/>
+            <path d="M 2,75 A 98,21 0 1,1 198,75 A 98,21 0 1,1 2,75 Z
+                      M 10,75 A 90,20 0 1,0 190,75 A 90,20 0 1,0 10,75 Z"
+                  fill="#2e1065" fill-rule="evenodd"/>
+            <path d="M 14,75 A 86,19 0 1,1 186,75 A 86,19 0 1,1 14,75 Z
+                      M 22,75 A 78,17 0 1,0 178,75 A 78,17 0 1,0 22,75 Z"
+                  fill="#6d28d9" fill-rule="evenodd"/>
+            <path d="M 26,75 A 74,16 0 1,1 174,75 A 74,16 0 1,1 26,75 Z
+                      M 32,75 A 68,15 0 1,0 168,75 A 68,15 0 1,0 32,75 Z"
+                  fill="#1e1b4b" fill-rule="evenodd"/>
+            <path d="M 35,75 A 65,14 0 1,1 165,75 A 65,14 0 1,1 35,75 Z
+                      M 40,75 A 60,13 0 1,0 160,75 A 60,13 0 1,0 40,75 Z"
+                  fill="#a78bfa" fill-rule="evenodd"/>
+            <path d="M 42,75 A 58,13 0 1,1 158,75 A 58,13 0 1,1 42,75 Z
+                      M 46,75 A 54,12 0 1,0 154,75 A 54,12 0 1,0 46,75 Z"
+                  fill="#2e1065" fill-rule="evenodd"/>
+            <path d="M 47,75 A 53,12 0 1,1 153,75 A 53,12 0 1,1 47,75 Z
+                      M 50,75 A 50,11 0 1,0 150,75 A 50,11 0 1,0 50,75 Z"
+                  fill="#6d28d9" fill-rule="evenodd"/>
+          </g>
+        </g>
+      </svg>
+      <div class="egg-label">Kolter was here</div>
+    </div>
+  </div>
+
+  <span class="egg-hint">press any key to close</span>
+</div>
+
+<script src="{% static 'cal/js/easter-egg.js' %}"></script>
 {% endblock %}

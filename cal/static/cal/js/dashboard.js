@@ -50,6 +50,7 @@
 
 const CURRENT_USER_NAME = (document.getElementById("currentUserName") || {}).value || "";
 const API_URL = "/cal/api/dashboard-events/";
+const APP_TZ = window.APP_TZ || "America/Denver";
 
 
 // ============================================================
@@ -60,9 +61,11 @@ let data          = {};   // trackName → [events]
 let trackChannels = {};   // trackName → channel int
 let trackIds      = {};   // trackName → asset pk
 let trackColors   = {};
+let trackActive   = {};   // trackName → bool (is_active state)
 let trackSubtracks = {};  // parentName → { subName: { id, radio_channel, events: [] } }
 let filterText    = "";
 let currentDate   = new Date(); // defaults to today
+let showUnapproved = true;  // toggle for unapproved event visibility
 
 
 // ============================================================
@@ -95,8 +98,7 @@ function sortEvents(events) {
 }
 
 function nowHHMM() {
-  const d = new Date();
-  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  return new Date().toLocaleTimeString("en-GB", { timeZone: APP_TZ, hour: "2-digit", minute: "2-digit", hour12: false });
 }
 
 function parseHHMM(str) {
@@ -134,18 +136,24 @@ function formatTimeChip(timeStr) {
 }
 
 /**
- * Convert a bare "HH:MM" string to a UTC ISO string using the dashboard's
- * currently selected date and the browser's local timezone.
+ * Convert a bare "HH:MM" string (in Eastern Time) to a UTC ISO string
+ * using the dashboard's currently selected date.
  */
 function localHHMMtoISO(hhmmStr) {
   const [h, m] = hhmmStr.split(":").map(Number);
-  const d = new Date(currentDate);
-  d.setHours(h, m, 0, 0);
-  return d.toISOString();
+  const dateStr = toISODateStr(currentDate);
+  // Determine the Eastern Time UTC offset for this date
+  const probe = new Date(`${dateStr}T12:00:00Z`);
+  const utcStr = probe.toLocaleString("en-US", { timeZone: "UTC" });
+  const etStr  = probe.toLocaleString("en-US", { timeZone: APP_TZ });
+  const offsetMs = new Date(etStr) - new Date(utcStr);
+  // Construct the target time as if UTC, then subtract Eastern offset
+  const fakeUTC = new Date(`${dateStr}T${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}:00Z`);
+  return new Date(fakeUTC.getTime() - offsetMs).toISOString();
 }
 
 /**
- * Format a UTC ISO datetime string as "HH:MM" in local time.
+ * Format an ISO datetime string as "HH:MM" in Eastern Time.
  * Returns null if parsing fails.
  */
 function isoToLocalHHMM(isoStr) {
@@ -153,9 +161,7 @@ function isoToLocalHHMM(isoStr) {
   try {
     const d = new Date(isoStr);
     if (isNaN(d.getTime())) return null;
-    const h = String(d.getHours()).padStart(2, "0");
-    const m = String(d.getMinutes()).padStart(2, "0");
-    return `${h}:${m}`;
+    return d.toLocaleTimeString("en-GB", { timeZone: APP_TZ, hour: "2-digit", minute: "2-digit", hour12: false });
   } catch {
     return null;
   }
@@ -180,7 +186,7 @@ function escapeHTML(str) {
 // ============================================================
 
 function toISODateStr(d) {
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  return d.toLocaleDateString("en-CA", { timeZone: APP_TZ });
 }
 
 function updateDateDisplay() {
@@ -190,7 +196,8 @@ function updateDateDisplay() {
 
   if (displayEl) {
     displayEl.textContent = currentDate.toLocaleDateString("en-US", {
-      weekday: "long", year: "numeric", month: "long", day: "numeric"
+      weekday: "long", year: "numeric", month: "long", day: "numeric",
+      timeZone: APP_TZ
     });
   }
   if (inputEl) {
@@ -279,6 +286,7 @@ async function fetchAndLoadData() {
     trackChannels = {};
     trackIds      = {};
     trackColors   = {};
+    trackActive   = {};
     trackSubtracks = {};
 
     function parseEvents(events, color) {
@@ -289,17 +297,21 @@ async function fetchAndLoadData() {
         let timeStr = "";
         if (startHHMM && endHHMM) timeStr = `${startHHMM}-${endHHMM}`;
         else if (startHHMM) timeStr = startHHMM;
-        const isImpromptu = !!ev.is_impromptu;
         const notes = [];
         if (ev.description && ev.description.trim()) notes.push(ev.description.trim());
         result.push({
           time: timeStr, scheduledTime: timeStr,
           desc: ev.title || "(untitled)", notes, channel: "",
-          eventId: ev.id, isScheduled: true, isImpromptu: isImpromptu,
+          eventId: ev.id, isScheduled: true,
           actualStart: ev.actual_start || null,
           actualEnd: ev.actual_end || null,
           _trackColor: color || null,
           radioChannelOverride: ev.radio_channel || null,
+          isApproved: ev.is_approved !== false,
+          isStopped: !!ev.is_stopped,
+          isCurrentlyActive: !!ev.is_currently_active,
+          segments: ev.segments || [],
+          totalActualSeconds: ev.total_actual_seconds || 0,
         });
       }
       return result;
@@ -309,6 +321,7 @@ async function fetchAndLoadData() {
       if (trackInfo.id) trackIds[trackName] = trackInfo.id;
       if (trackInfo.color) trackColors[trackName] = trackInfo.color;
       if (trackInfo.radio_channel) trackChannels[trackName] = trackInfo.radio_channel;
+      trackActive[trackName] = !!trackInfo.is_active;
       data[trackName] = parseEvents(trackInfo.events, trackInfo.color);
 
       // Parse subtracks
@@ -317,9 +330,11 @@ async function fetchAndLoadData() {
         for (const [subName, subInfo] of Object.entries(trackInfo.subtracks)) {
           trackIds[`${trackName}::${subName}`] = subInfo.id;
           if (subInfo.radio_channel) trackChannels[`${trackName}::${subName}`] = subInfo.radio_channel;
+          trackActive[`${trackName}::${subName}`] = !!subInfo.is_active;
           trackSubtracks[trackName][subName] = {
             id: subInfo.id,
             radio_channel: subInfo.radio_channel,
+            is_active: !!subInfo.is_active,
             events: parseEvents(subInfo.events, trackInfo.color),
           };
         }
@@ -373,7 +388,225 @@ async function stampActualTime(eventId, action, time) {
 }
 
 
-// (Export / Import helpers removed — data is server-managed)
+// ============================================================
+// Segment edit popup — inline time editing
+// ============================================================
+
+const SEGMENT_EDIT_API = "/cal/api/segment/{id}/edit/";
+
+async function saveSegmentTime(segmentId, field, timeStr) {
+  const url = SEGMENT_EDIT_API.replace("{id}", segmentId);
+  const csrf = document.querySelector('meta[name="csrf-token"]')?.content || "";
+  const body = {};
+  body[field] = localHHMMtoISO(timeStr);
+  try {
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-CSRFToken": csrf },
+      body: JSON.stringify(body),
+    });
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      const msg = data.error || `Failed to update segment (${resp.status})`;
+      return { _error: msg };
+    }
+    return await resp.json();
+  } catch (err) {
+    console.error("Segment edit error:", err);
+    return { _error: "Network error — could not reach server." };
+  }
+}
+
+function openSegmentEditPopup(segmentId, field, currentValue, eventId, anchorEl) {
+  // Remove any existing popup
+  const existing = document.getElementById("segEditPopup");
+  if (existing) existing.remove();
+
+  const box = document.createElement("div");
+  box.id = "segEditPopup";
+  box.className = "seg-edit-box";
+
+  // Header
+  const header = document.createElement("div");
+  header.className = "seg-edit-header";
+  const title = document.createElement("span");
+  title.className = "seg-edit-title";
+  title.textContent = field === "start" ? "Edit Start" : "Edit End";
+  header.appendChild(title);
+  box.appendChild(header);
+
+  // Flatpickr input
+  const input = document.createElement("input");
+  input.type = "text";
+  input.className = "seg-edit-fp-input";
+  box.appendChild(input);
+
+  // Error display
+  const errorEl = document.createElement("div");
+  errorEl.className = "seg-edit-error";
+  box.appendChild(errorEl);
+
+  function showInlineError(msg) {
+    errorEl.textContent = msg;
+    errorEl.style.display = "block";
+    setTimeout(() => { errorEl.style.display = "none"; }, 4000);
+  }
+
+  // Button row
+  const btnRow = document.createElement("div");
+  btnRow.className = "seg-edit-btn-row";
+
+  // "Now" button
+  const nowBtn = document.createElement("button");
+  nowBtn.className = "seg-pick-pill seg-pick-now";
+  nowBtn.textContent = "Now";
+  nowBtn.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    box.classList.add("saving");
+    const result = await saveSegmentTime(segmentId, field, nowHHMM());
+    if (result && result._error) {
+      showInlineError(result._error);
+      box.classList.remove("saving");
+    } else if (result) {
+      cleanup();
+      await fetchAndLoadData();
+      render();
+    } else {
+      box.classList.remove("saving");
+    }
+  });
+  btnRow.appendChild(nowBtn);
+
+  // "Done" button
+  const doneBtn = document.createElement("button");
+  doneBtn.className = "seg-pick-pill seg-pick-done";
+  doneBtn.textContent = "Done";
+  doneBtn.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    if (input.value && input.value !== currentValue) {
+      if (saveTimer) clearTimeout(saveTimer);
+      box.classList.add("saving");
+      const result = await saveSegmentTime(segmentId, field, input.value);
+      if (result && result._error) {
+        showInlineError(result._error);
+        box.classList.remove("saving");
+        return;
+      }
+      if (result) {
+        cleanup();
+        await fetchAndLoadData();
+        render();
+        return;
+      }
+      box.classList.remove("saving");
+    } else {
+      cleanup();
+    }
+  });
+  btnRow.appendChild(doneBtn);
+
+  box.appendChild(btnRow);
+
+  document.body.appendChild(box);
+
+  // Parse default time from "HH:MM"
+  let defaultDate = null;
+  if (currentValue) {
+    const parts = currentValue.trim().split(":");
+    if (parts.length === 2) {
+      const h = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10);
+      if (!isNaN(h) && !isNaN(m)) {
+        defaultDate = new Date(2000, 0, 1, h, m);
+      }
+    }
+  }
+
+  // Init Flatpickr in time-only mode
+  const fp = flatpickr(input, {
+    enableTime: true,
+    noCalendar: true,
+    dateFormat: "H:i",
+    time_24hr: true,
+    minuteIncrement: 1,
+    defaultDate: defaultDate,
+    inline: true,
+    onChange: () => {
+      // Clear any pending save timer on change
+      if (saveTimer) clearTimeout(saveTimer);
+      saveTimer = setTimeout(doSave, 600);
+    },
+  });
+
+  let saveTimer = null;
+  let saving = false;
+
+  async function doSave() {
+    if (saving) return;
+    const val = input.value;
+    if (!val || val === currentValue) return;
+    saving = true;
+    box.classList.add("saving");
+    const result = await saveSegmentTime(segmentId, field, val);
+    if (result && result._error) {
+      showInlineError(result._error);
+      saving = false;
+      box.classList.remove("saving");
+    } else if (result) {
+      currentValue = val; // update so repeated saves don't re-save same value
+      saving = false;
+      box.classList.remove("saving");
+      await fetchAndLoadData();
+      render();
+      // Popup is gone after render since DOM is rebuilt
+    } else {
+      saving = false;
+      box.classList.remove("saving");
+    }
+  }
+
+  // Position next to the anchor element
+  const rect = anchorEl.getBoundingClientRect();
+  const boxRect = box.getBoundingClientRect();
+  let top = rect.bottom + 4 + window.scrollY;
+  let left = rect.left + window.scrollX;
+  if (left + boxRect.width > window.innerWidth - 8) {
+    left = window.innerWidth - boxRect.width - 8 + window.scrollX;
+  }
+  if (top + boxRect.height > window.innerHeight + window.scrollY - 8) {
+    top = rect.top - boxRect.height - 4 + window.scrollY;
+  }
+  box.style.top = `${top}px`;
+  box.style.left = `${left}px`;
+
+  function cleanup() {
+    if (saveTimer) clearTimeout(saveTimer);
+    fp.destroy();
+    box.remove();
+    document.removeEventListener("keydown", onKey);
+    document.removeEventListener("mousedown", onClickOutside);
+  }
+  function onClickOutside(e) {
+    if (!box.contains(e.target)) {
+      // Save on close if value changed
+      if (input.value && input.value !== currentValue) {
+        if (saveTimer) clearTimeout(saveTimer);
+        doSave();
+      }
+      cleanup();
+    }
+  }
+  setTimeout(() => document.addEventListener("mousedown", onClickOutside), 0);
+  function onKey(e) {
+    if (e.key === "Escape") cleanup();
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (saveTimer) clearTimeout(saveTimer);
+      doSave();
+    }
+  }
+  document.addEventListener("keydown", onKey);
+}
 
 
 // ============================================================
@@ -416,10 +649,8 @@ const noteItemTpl  = document.getElementById("noteItemTemplate");
 
 
 // ============================================================
-// Event popup
+// Quick Add Event Modal
 // ============================================================
-
-let modalTrackName = null;
 
 const eventPopup        = document.getElementById("eventPopup");
 const eventPopupBox     = document.getElementById("eventPopupBox");
@@ -431,6 +662,7 @@ const modalDescInput    = document.getElementById("modalDesc");
 const modalError        = document.getElementById("modalError");
 const modalSubmitBtn    = document.getElementById("eventModalSubmit");
 const modalFullFormLink = document.getElementById("modalFullFormLink");
+let modalTrackName      = null;
 
 function openEventModal(trackName, trackId, anchorEl) {
   modalTrackName = trackName;
@@ -443,38 +675,29 @@ function openEventModal(trackName, trackId, anchorEl) {
   modalSubmitBtn.disabled = false;
   modalSubmitBtn.textContent = "Create";
 
-  // Set "Open full form" link
   const dateStr = toISODateStr(currentDate);
   let fullFormUrl = `/cal/event/new/?next=/cal/dashboard/&date=${dateStr}`;
   if (trackId) fullFormUrl += `&track=${trackId}`;
   modalFullFormLink.href = fullFormUrl;
 
-  // Show so the box is measurable
   eventPopup.hidden = false;
 
-  // Position near the triggering track card
-  const card   = anchorEl ? anchorEl.closest(".track-card") : null;
+  const card = anchorEl ? anchorEl.closest(".track-card") : null;
   const anchor = (card || anchorEl) ? (card || anchorEl).getBoundingClientRect() : null;
   if (anchor) {
-    const gap  = 12;
-    const vw   = window.innerWidth;
-    const vh   = window.innerHeight;
+    const gap = 12;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
     const boxW = eventPopupBox.offsetWidth;
     const boxH = eventPopupBox.offsetHeight;
-
-    // Prefer right of card, flip left if it would overflow
     let left = anchor.right + gap;
     if (left + boxW > vw - gap) left = anchor.left - boxW - gap;
     left = Math.max(gap, left);
-
-    // Align top with card top, clamp to stay on screen
     let top = anchor.top;
     top = Math.max(gap, Math.min(top, vh - boxH - gap));
-
-    eventPopupBox.style.top  = top  + "px";
+    eventPopupBox.style.top = top + "px";
     eventPopupBox.style.left = left + "px";
   }
-
   modalTitleInput.focus();
 }
 
@@ -488,8 +711,7 @@ document.getElementById("eventModalCancel").addEventListener("click", closeEvent
 eventPopup.addEventListener("click", (e) => { if (e.target === eventPopup) closeEventModal(); });
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !eventPopup.hidden) closeEventModal(); });
 
-eventModalForm.addEventListener("submit", async (e) => {
-  e.preventDefault();
+async function submitCreateEvent(confirmed) {
   const title = modalTitleInput.value.trim();
   if (!title) return;
 
@@ -500,26 +722,40 @@ eventModalForm.addEventListener("submit", async (e) => {
     return;
   }
 
-  // Loading state
   modalSubmitBtn.disabled = true;
-  modalSubmitBtn.textContent = "Creating...";
+  modalSubmitBtn.textContent = confirmed ? "Pausing & Creating..." : "Creating...";
   modalError.hidden = true;
 
   try {
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
+    const payload = {
+      title: title,
+      description: modalDescInput.value.trim(),
+      asset_ids: [trackId],
+      is_impromptu: true,
+    };
+    if (confirmed) payload.confirmed = true;
+
     const resp = await fetch("/cal/api/event/create/", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "X-CSRFToken": csrfToken,
       },
-      body: JSON.stringify({
-        title: title,
-        description: modalDescInput.value.trim(),
-        asset_ids: [trackId],
-        is_impromptu: true,
-      }),
+      body: JSON.stringify(payload),
     });
+
+    const data = await resp.json().catch(() => ({}));
+
+    if (data.requires_confirmation) {
+      // Show confirmation with active event warning
+      showConfirmModal(data.message, async () => {
+        await submitCreateEvent(true);
+      });
+      modalSubmitBtn.disabled = false;
+      modalSubmitBtn.textContent = "Create";
+      return;
+    }
 
     if (resp.ok) {
       closeEventModal();
@@ -527,8 +763,7 @@ eventModalForm.addEventListener("submit", async (e) => {
       await fetchAndLoadData();
       render();
     } else {
-      const errData = await resp.json().catch(() => ({}));
-      modalError.textContent = errData.error || "Failed to create event.";
+      modalError.textContent = data.error || "Failed to create event.";
       modalError.hidden = false;
       modalSubmitBtn.disabled = false;
       modalSubmitBtn.textContent = "Create";
@@ -539,6 +774,11 @@ eventModalForm.addEventListener("submit", async (e) => {
     modalSubmitBtn.disabled = false;
     modalSubmitBtn.textContent = "Create";
   }
+}
+
+eventModalForm.addEventListener("submit", (e) => {
+  e.preventDefault();
+  submitCreateEvent(false);
 });
 
 
@@ -556,6 +796,11 @@ function renderEventItem(ev, trackLabel, dataSource, listEl, normalizedFilter) {
   const timeChip = item.querySelector(".time-chip");
   if (timeChip) timeChip.remove();
 
+  // Mark unapproved events visually
+  if (!ev.isApproved) {
+    item.classList.add("event-item--unapproved");
+  }
+
   // Per-event radio channel dropdown (scheduled events only)
   if (ev.isScheduled && ev.eventId) {
     const chSelect = document.createElement("select");
@@ -567,7 +812,7 @@ function renderEventItem(ev, trackLabel, dataSource, listEl, normalizedFilter) {
     defaultOpt.value = "";
     defaultOpt.textContent = "Track Ch";
     chSelect.appendChild(defaultOpt);
-    for (let ch = 11; ch <= 16; ch++) {
+    for (let ch = 1; ch <= 16; ch++) {
       const opt = document.createElement("option");
       opt.value = String(ch);
       opt.textContent = `Ch ${ch}`;
@@ -604,112 +849,218 @@ function renderEventItem(ev, trackLabel, dataSource, listEl, normalizedFilter) {
     eventMain.appendChild(chSelect);
   }
 
-  // Actual-time row (scheduled events only)
+  // Time info and controls row (scheduled events only)
   if (ev.isScheduled) {
     const actualRow = document.createElement("div");
     actualRow.className = "actual-time-row";
 
     const schedLabel = document.createElement("span");
     schedLabel.className   = "time-label time-label--scheduled";
-    if (ev.isImpromptu && !ev.scheduledTime) {
-      schedLabel.textContent = "Impromptu";
-      schedLabel.classList.add("time-label--impromptu");
-    } else {
-      schedLabel.textContent = `Scheduled: ${formatTimeChip(ev.scheduledTime)}`;
-    }
+    schedLabel.textContent = `Scheduled: ${formatTimeChip(ev.scheduledTime)}`;
     actualRow.appendChild(schedLabel);
 
-    const actualLabel = document.createElement("span");
-    actualLabel.className = "time-label time-label--actual";
+    // ── Task #7: Unapproved events show Approve button instead of time controls ──
+    if (!ev.isApproved) {
+      const pendingLabel = document.createElement("span");
+      pendingLabel.className = "time-label time-label--pending";
+      pendingLabel.textContent = "PENDING";
+      actualRow.appendChild(pendingLabel);
 
-    if (!ev.actualStart) {
-      actualLabel.textContent = "Actual: \u2014";
-      const startBtn = document.createElement("button");
-      startBtn.className = "btn btn-xxs btn-start";
-      startBtn.innerHTML = "&#9654; Start";
-      startBtn.addEventListener("click", async () => {
-        const result = await stampActualTime(ev.eventId, "start");
-        if (result) { ev.actualStart = result.actual_start; render(); }
-      });
-      actualRow.appendChild(actualLabel);
-      actualRow.appendChild(startBtn);
-    } else if (!ev.actualEnd) {
-      const startHHMM = isoToLocalHHMM(ev.actualStart);
-      actualLabel.innerHTML = `Actual: <span class="editable-time" title="Click to edit start time">${startHHMM || "?"}</span> \u2013 ...`;
-      actualLabel.classList.add("time-label--active");
-
-      const clearStartBtn = document.createElement("button");
-      clearStartBtn.className = "stamp-clear-btn";
-      clearStartBtn.innerHTML = "&times;";
-      clearStartBtn.setAttribute("aria-label", "Clear actual start time");
-      clearStartBtn.addEventListener("click", async (e) => {
+      const approveBtn = document.createElement("button");
+      approveBtn.className = "btn btn-xxs btn-approve";
+      approveBtn.textContent = "Approve";
+      approveBtn.addEventListener("click", async (e) => {
         e.stopPropagation();
-        const result = await stampActualTime(ev.eventId, "clear_start");
-        if (result) { ev.actualStart = result.actual_start; ev.actualEnd = result.actual_end; render(); }
+        await approveEvent(ev.eventId);
       });
-      actualLabel.appendChild(clearStartBtn);
-
-      const editableStart = actualLabel.querySelector(".editable-time");
-      editableStart.addEventListener("click", async (e) => {
-        e.stopPropagation();
-        const newTime = prompt("Edit actual start time (HH:MM, 24h):", startHHMM || "");
-        if (newTime === null) return;
-        const trimmed = newTime.trim();
-        if (!trimmed.match(/^\d{1,2}:\d{2}$/)) { alert("Invalid format. Use HH:MM (e.g., 09:15)"); return; }
-        const result = await stampActualTime(ev.eventId, "start", localHHMMtoISO(trimmed));
-        if (result) { ev.actualStart = result.actual_start; render(); }
-      });
-
-      const endBtn = document.createElement("button");
-      endBtn.className = "btn btn-xxs btn-end";
-      endBtn.innerHTML = "&#9632; End";
-      endBtn.addEventListener("click", async () => {
-        const result = await stampActualTime(ev.eventId, "end");
-        if (result) { ev.actualEnd = result.actual_end; render(); }
-      });
-      actualRow.appendChild(actualLabel);
-      actualRow.appendChild(endBtn);
+      actualRow.appendChild(approveBtn);
     } else {
-      const startHHMM = isoToLocalHHMM(ev.actualStart);
-      const endHHMM = isoToLocalHHMM(ev.actualEnd);
-      const dur = durationMinutes(startHHMM, endHHMM);
-      const durStr = formatDuration(dur);
-      actualLabel.innerHTML = `Actual: <span class="editable-time" data-field="start" title="Click to edit start time">${startHHMM}</span><button class="stamp-clear-btn" data-clear="start" aria-label="Clear actual start time">&times;</button>\u2013<span class="editable-time" data-field="end" title="Click to edit end time">${endHHMM}</span><button class="stamp-clear-btn" data-clear="end" aria-label="Clear actual end time">&times;</button>${durStr ? ` \u2022 ${durStr}` : ""}`;
-      actualLabel.classList.add("time-label--complete");
+      // ── Play/Pause/Stop controls + expandable segment list ──
+      const segmentInfo = document.createElement("span");
+      segmentInfo.className = "time-label time-label--actual";
 
-      actualLabel.querySelectorAll(".stamp-clear-btn").forEach(btn => {
-        btn.addEventListener("click", async (e) => {
+      const segCount = ev.segments ? ev.segments.length : 0;
+
+      if (ev.isStopped) {
+        // Stopped — show summary + undo
+        const totalSecs = ev.totalActualSeconds || 0;
+        const totalMins = Math.round(totalSecs / 60);
+        const startHHMM = ev.actualStart ? isoToLocalHHMM(ev.actualStart) : null;
+        const endHHMM = ev.actualEnd ? isoToLocalHHMM(ev.actualEnd) : null;
+        if (startHHMM && endHHMM) {
+          segmentInfo.textContent = `Stopped: ${startHHMM}\u2013${endHHMM} \u2022 ${formatDuration(totalMins)}`;
+        } else {
+          segmentInfo.textContent = "Stopped";
+        }
+        segmentInfo.classList.add("time-label--complete");
+        actualRow.appendChild(segmentInfo);
+
+        const undoBtn = document.createElement("button");
+        undoBtn.className = "btn btn-xxs btn-undo";
+        undoBtn.innerHTML = "&#8630; Undo";
+        undoBtn.title = "Undo stop";
+        undoBtn.addEventListener("click", async (e) => {
           e.stopPropagation();
-          const field = btn.dataset.clear;
-          const action = field === "start" ? "clear_start" : "clear_end";
-          const result = await stampActualTime(ev.eventId, action);
-          if (result) {
-            ev.actualStart = result.actual_start;
-            ev.actualEnd = result.actual_end;
-            render();
-          }
+          const result = await stampActualTime(ev.eventId, "undo");
+          if (result) { await fetchAndLoadData(); render(); }
         });
-      });
+        actualRow.appendChild(undoBtn);
+      } else if (ev.isCurrentlyActive) {
+        // Currently playing — show Pause + Stop
+        const openSeg = ev.segments.find(s => s.end === null);
+        const activeStart = openSeg ? isoToLocalHHMM(openSeg.start) : null;
+        segmentInfo.innerHTML = `Active since ${activeStart || "?"}`;
+        if (segCount > 1) segmentInfo.innerHTML += ` (${segCount} seg)`;
+        segmentInfo.classList.add("time-label--active");
+        actualRow.appendChild(segmentInfo);
 
-      actualLabel.querySelectorAll(".editable-time").forEach(span => {
-        span.addEventListener("click", async (e) => {
+        const pauseBtn = document.createElement("button");
+        pauseBtn.className = "btn btn-xxs btn-pause";
+        pauseBtn.innerHTML = "&#10074;&#10074; Pause";
+        pauseBtn.addEventListener("click", async (e) => {
           e.stopPropagation();
-          const field = span.dataset.field;
-          const currentVal = field === "start" ? startHHMM : endHHMM;
-          const newTime = prompt(`Edit actual ${field} time (HH:MM, 24h):`, currentVal || "");
-          if (newTime === null) return;
-          const trimmed = newTime.trim();
-          if (!trimmed.match(/^\d{1,2}:\d{2}$/)) { alert("Invalid format. Use HH:MM (e.g., 09:15)"); return; }
-          const result = await stampActualTime(ev.eventId, field, localHHMMtoISO(trimmed));
-          if (result) {
-            if (field === "start") ev.actualStart = result.actual_start;
-            else ev.actualEnd = result.actual_end;
-            render();
-          }
+          const result = await stampActualTime(ev.eventId, "pause");
+          if (result) { await fetchAndLoadData(); render(); }
         });
-      });
+        actualRow.appendChild(pauseBtn);
 
-      actualRow.appendChild(actualLabel);
+        const stopBtn = document.createElement("button");
+        stopBtn.className = "btn btn-xxs btn-stop";
+        stopBtn.innerHTML = "&#9632; Stop";
+        stopBtn.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          const result = await stampActualTime(ev.eventId, "stop");
+          if (result) { await fetchAndLoadData(); render(); }
+        });
+        actualRow.appendChild(stopBtn);
+
+        const undoBtn = document.createElement("button");
+        undoBtn.className = "btn btn-xxs btn-undo";
+        undoBtn.innerHTML = "&#8630; Undo";
+        undoBtn.title = "Undo last stamp";
+        undoBtn.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          const result = await stampActualTime(ev.eventId, "undo");
+          if (result) { await fetchAndLoadData(); render(); }
+        });
+        actualRow.appendChild(undoBtn);
+      } else if (segCount > 0) {
+        // Has segments but not active (paused)
+        const totalSecs = ev.totalActualSeconds || 0;
+        const totalMins = Math.round(totalSecs / 60);
+        segmentInfo.textContent = `Paused (${segCount} seg \u2022 ${formatDuration(totalMins)})`;
+        segmentInfo.classList.add("time-label--paused");
+        actualRow.appendChild(segmentInfo);
+
+        const playBtn = document.createElement("button");
+        playBtn.className = "btn btn-xxs btn-play";
+        playBtn.innerHTML = "&#9654; Resume";
+        playBtn.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          const result = await stampActualTime(ev.eventId, "play");
+          if (result) { await fetchAndLoadData(); render(); }
+        });
+        actualRow.appendChild(playBtn);
+
+        const undoBtn = document.createElement("button");
+        undoBtn.className = "btn btn-xxs btn-undo";
+        undoBtn.innerHTML = "&#8630; Undo";
+        undoBtn.title = "Undo last stamp";
+        undoBtn.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          const result = await stampActualTime(ev.eventId, "undo");
+          if (result) { await fetchAndLoadData(); render(); }
+        });
+        actualRow.appendChild(undoBtn);
+      } else {
+        // No segments — show Play
+        segmentInfo.textContent = "Actual: \u2014";
+        actualRow.appendChild(segmentInfo);
+
+        const playBtn = document.createElement("button");
+        playBtn.className = "btn btn-xxs btn-play";
+        playBtn.innerHTML = "&#9654; Play";
+        playBtn.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          const result = await stampActualTime(ev.eventId, "play");
+          if (result) { await fetchAndLoadData(); render(); }
+        });
+        actualRow.appendChild(playBtn);
+      }
+
+      // ── Expandable segment list (when segments exist) ──
+      if (segCount > 0) {
+        const segToggle = document.createElement("button");
+        segToggle.className = "btn btn-xxs btn-seg-toggle";
+        segToggle.textContent = `${segCount} seg`;
+        segToggle.title = "Show/hide segments";
+        actualRow.appendChild(segToggle);
+
+        const segList = document.createElement("div");
+        segList.className = "segment-list hidden";
+
+        ev.segments.forEach((seg, i) => {
+          const row = document.createElement("div");
+          row.className = "segment-row";
+
+          const label = document.createElement("span");
+          label.className = "segment-label";
+          label.textContent = `Seg ${i + 1}:`;
+          row.appendChild(label);
+
+          const startTime = document.createElement("span");
+          startTime.className = "editable-time";
+          startTime.textContent = isoToLocalHHMM(seg.start) || "?";
+          startTime.title = "Click to edit start time";
+          startTime.addEventListener("click", (e) => {
+            e.stopPropagation();
+            openSegmentEditPopup(seg.id, "start", startTime.textContent, ev.eventId, startTime);
+          });
+          row.appendChild(startTime);
+
+          const dash = document.createElement("span");
+          dash.className = "segment-dash";
+          dash.textContent = "\u2013";
+          row.appendChild(dash);
+
+          const endTime = document.createElement("span");
+          endTime.className = "editable-time";
+          endTime.textContent = seg.end ? isoToLocalHHMM(seg.end) : (ev.isCurrentlyActive && !seg.end ? "now" : "\u2014");
+          endTime.title = seg.end ? "Click to edit end time" : "";
+          if (seg.end) {
+            endTime.addEventListener("click", (e) => {
+              e.stopPropagation();
+              openSegmentEditPopup(seg.id, "end", endTime.textContent, ev.eventId, endTime);
+            });
+          } else {
+            endTime.classList.add("editable-time--disabled");
+          }
+          row.appendChild(endTime);
+
+          // Show segment duration
+          if (seg.end) {
+            const segStart = isoToLocalHHMM(seg.start);
+            const segEnd = isoToLocalHHMM(seg.end);
+            const dur = durationMinutes(segStart, segEnd);
+            if (dur != null) {
+              const durSpan = document.createElement("span");
+              durSpan.className = "segment-dur";
+              durSpan.textContent = formatDuration(dur);
+              row.appendChild(durSpan);
+            }
+          }
+
+          segList.appendChild(row);
+        });
+
+        actualRow.appendChild(segList);
+
+        segToggle.addEventListener("click", (e) => {
+          e.stopPropagation();
+          segList.classList.toggle("hidden");
+          segToggle.classList.toggle("active");
+        });
+      }
     }
 
     const eventMain = item.querySelector(".event-main");
@@ -740,6 +1091,32 @@ function renderEventItem(ev, trackLabel, dataSource, listEl, normalizedFilter) {
   listEl.appendChild(item);
 }
 
+
+// ============================================================
+// Approve event (Task #7)
+// ============================================================
+
+async function approveEvent(eventId) {
+  const csrf = document.querySelector('meta[name="csrf-token"]')?.content || "";
+  try {
+    const resp = await fetch(`/cal/api/event/${eventId}/approve/`, {
+      method: "POST",
+      headers: { "X-CSRFToken": csrf },
+    });
+    const result = await resp.json();
+    if (result.approved) {
+      await fetchAndLoadData();
+      render();
+    } else if (result.error) {
+      showStampToast(result.error);
+    }
+  } catch (err) {
+    console.error("Approve error:", err);
+    showStampToast("Network error — could not approve event.");
+  }
+}
+
+
 function render() {
   grid.innerHTML = "";
   const normalizedFilter = filterText.trim().toLowerCase();
@@ -752,12 +1129,51 @@ function render() {
     // Apply track color via CSS custom property on the card element.
     // Track colors disabled in dashboard tracks view — cards use uniform styling.
 
+    // Active/Inactive toggle — red border on active tracks
+    // Also activate when any event (parent or subtrack) is currently active
+    const hasActiveEvent = (entries || []).some(e => e.isCurrentlyActive) ||
+      Object.values(trackSubtracks[trackName] || {}).some(sub =>
+        (sub.events || []).some(e => e.isCurrentlyActive)
+      );
+    if (trackActive[trackName] || hasActiveEvent) {
+      card.classList.add("track-card--active");
+    }
+    const activeToggleBtn = card.querySelector(".active-toggle-btn");
+    if (activeToggleBtn) {
+      if (trackActive[trackName] || hasActiveEvent) {
+        activeToggleBtn.classList.add("active");
+        activeToggleBtn.textContent = "Active";
+      } else {
+        activeToggleBtn.textContent = "Inactive";
+      }
+      activeToggleBtn.addEventListener("click", async () => {
+        const trackId = trackIds[trackName];
+        if (!trackId) return;
+        const newState = !trackActive[trackName];
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || "";
+        const resp = await fetch(`/cal/api/track/${trackId}/active/`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-CSRFToken": csrfToken },
+          body: JSON.stringify({ is_active: newState }),
+        });
+        if (resp.ok) {
+          const result = await resp.json();
+          trackActive[trackName] = result.is_active;
+          render();
+        } else {
+          showStampToast("Failed to toggle track active state");
+        }
+      });
+    }
+
     // Radio channel dropdown (track-level, persisted server-side)
     const channelSelect = card.querySelector(".radio-channel-select");
     const chVal = trackChannels[trackName];
     if (chVal) channelSelect.value = String(chVal);
+    channelSelect.setAttribute("data-empty", chVal ? "false" : "true");
     channelSelect.addEventListener("change", async () => {
       const val = channelSelect.value;
+      channelSelect.setAttribute("data-empty", val ? "false" : "true");
       const trackId = trackIds[trackName];
       if (!trackId) return;
       const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
@@ -777,14 +1193,16 @@ function render() {
     });
 
     // Form and button refs
+    const noteForm       = card.querySelector(".note-form");
+    const cancelNoteBtn  = card.querySelector(".cancel-note");
     const quickAddBtn    = card.querySelector(".add-event-btn");
     const eventsListEl   = card.querySelector(".events-list");
     const notesListEl    = card.querySelector(".notes-list");
 
-    on(quickAddBtn,   "click", (e) => {
-      const tid = trackIds[trackName];
-      openEventModal(trackName, tid, e.target);
+    on(quickAddBtn, "click", (e) => {
+      openEventModal(trackName, trackIds[trackName], e.target);
     });
+    on(cancelNoteBtn, "click", () => noteForm?.classList.add("hidden"));
 
     // Separate events from track-level notes
     const events = sortEvents(
@@ -792,9 +1210,11 @@ function render() {
     );
     const notes = entries.filter(e => e.desc === "__TRACK_NOTE__");
 
-    // Filter logic
+    // Filter logic — text search + unapproved toggle (Task #9)
     let matchesFilter = !normalizedFilter;
     const filteredEvents = events.filter((e) => {
+      // Hide unapproved events when toggle is off
+      if (!showUnapproved && !e.isApproved) return false;
       if (!normalizedFilter) return true;
       const target = `${e.time} ${e.desc} ${(e.notes || []).join(" ")}`.toLowerCase();
       const ok = target.includes(normalizedFilter);
@@ -840,6 +1260,17 @@ function render() {
       notesListEl.appendChild(note);
     });
 
+    // New track-level note form submission
+    noteForm.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const fd   = new FormData(noteForm);
+      const note = (fd.get("note") || "").toString().trim();
+      if (!note) return;
+      data[trackName].push({ time: note, desc: "__TRACK_NOTE__", notes: [] });
+      noteForm.reset();
+      noteForm.classList.add("hidden");
+      render();
+    });
 
     // Filter visibility check
     if (normalizedFilter && !matchesFilter && filteredEvents.length === 0) {
@@ -860,8 +1291,10 @@ function render() {
         const subChKey = `${trackName}::${subName}`;
         const subChVal = trackChannels[subChKey];
         if (subChVal) subChSelect.value = String(subChVal);
+        subChSelect.setAttribute("data-empty", subChVal ? "false" : "true");
         subChSelect.addEventListener("change", async () => {
           const val = subChSelect.value;
+          subChSelect.setAttribute("data-empty", val ? "false" : "true");
           const subId = trackIds[subChKey];
           if (!subId) return;
           const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
@@ -880,7 +1313,7 @@ function render() {
           }
         });
 
-        // Subtrack "+" button — open impromptu event modal
+        // Subtrack "+" button — open quick-add modal for this subtrack
         const subAddBtn = subSection.querySelector(".subtrack-add-btn");
         if (subAddBtn) {
           const subTrackId = trackIds[subChKey] || subInfo.id;
@@ -889,9 +1322,9 @@ function render() {
           });
         }
 
-        // Subtrack events — same rendering as parent track events
+        // Subtrack events — same rendering as parent track events (with unapproved filter)
         const subEventsList = subSection.querySelector(".subtrack-events-list");
-        const subEvents = sortEvents(subInfo.events || []);
+        const subEvents = sortEvents((subInfo.events || []).filter(e => showUnapproved || e.isApproved));
         if (subEvents.length === 0) {
           const li = document.createElement("li");
           li.className = "empty-msg";
@@ -932,9 +1365,56 @@ function render() {
 // Boot — fetch from server, then render
 // ============================================================
 
+// ============================================================
+// Unapproved toggle (Task #9)
+// ============================================================
+
+function initUnapprovedToggle() {
+  // Read initial state from URL
+  const params = new URLSearchParams(window.location.search);
+  if (params.has("show_unapproved")) {
+    showUnapproved = params.get("show_unapproved") !== "0";
+  }
+  const toggle = document.getElementById("show-unapproved-toggle");
+  if (toggle) {
+    toggle.checked = showUnapproved;
+    toggle.addEventListener("change", () => {
+      showUnapproved = toggle.checked;
+      syncUnapprovedToURL();
+      render();
+    });
+  }
+}
+
+function syncUnapprovedToURL() {
+  const url = new URL(window.location);
+  if (showUnapproved) {
+    url.searchParams.delete("show_unapproved");
+  } else {
+    url.searchParams.set("show_unapproved", "0");
+  }
+  history.replaceState(null, "", url.toString());
+}
+
+
+// ============================================================
+// Boot — fetch from server, then render
+// ============================================================
+
+// ── Snap grid width to fit exact columns (no extra stretch) ──
+function snapGridWidth() {
+  const colWidth = 350, gap = 18, pad = 40; // pad = grid padding L+R
+  const avail = window.innerWidth - pad;
+  const cols = Math.max(1, Math.floor((avail + gap) / (colWidth + gap)));
+  grid.style.maxWidth = (cols * colWidth + (cols - 1) * gap + pad) + "px";
+}
+window.addEventListener("resize", snapGridWidth);
+
 (async function init() {
   initDateNav();
+  initUnapprovedToggle();
   updateDateDisplay();
+  snapGridWidth();
   await fetchAndLoadData();
   render();
 })();

@@ -69,3 +69,53 @@ A Django-based scheduling and asset management system for ASI Mendon Campus. Res
     python manage.py makemigrations
     python manage.py migrate
     ```
+
+## Git Workflow
+
+Trunk-based flow. `main` is always deployable — never commit directly to it.
+
+### Starting Work
+
+```bash
+# 1. Make sure you're on main and up to date
+git checkout main
+git pull --rebase origin main
+
+# 2. Create a branch named <type>/<short-description>
+git checkout -b feat/my-new-feature    # for a new feature
+git checkout -b fix/broken-calendar    # for a bug fix
+git checkout -b chore/update-deps      # for maintenance
+```
+
+Branch type prefixes: `feat/`, `fix/`, `chore/`, `docs/`, `test/`, `refactor/`
+
+### While Working
+
+```bash
+# Stage specific files and commit (never git add . or git add -A)
+git add cal/views.py cal/models.py
+git commit -m "feat: add email notifications for pending approvals"
+```
+
+Commit messages use `<type>: <description>` format. Keep the subject under 72 characters. Focus on *why*, not *what*.
+
+### Before Opening a PR
+
+```bash
+# Rebase onto latest main to avoid merge conflicts
+git pull --rebase origin main
+
+# Run the full test suite
+python3 manage.py test
+
+# If deploying migrations, test against prod data first
+python3 manage.py preflight_migrate --db /path/to/prod-backup.sqlite3
+```
+
+### Opening a PR
+
+- PRs merge to `main` — no `dev` or integration branches
+- Keep PRs small: under ~400 lines, reviewable in 15 minutes
+- Description says WHY, not just what
+- Kolter and Hollis review each other before merging
+- Delete the branch after merging

@@ -94,10 +94,14 @@ Trunk-based flow. Two contributors: Kolter and Hollis.
 
 **Branching:**
 - `main` is always deployable — merge to it frequently (weekly minimum)
+- **NEVER commit directly to `main`** — always create a feature branch first
+- One branch per feature/fix/chore — named `<type>/<short-description>` (e.g., `feat/email-notifications`, `fix/null-migration`, `chore/deploy-docs-cleanup`)
 - Feature branches are short-lived: branch off `main`, PR back to `main`, delete after merge
 - No `dev` or integration branches — features merge directly to `main`
+- No permanent per-person branches — use per-feature branches instead
 - Never work on parallel long-lived branches — separate features from the same base
 - `git pull --rebase origin main` before starting work and before opening PRs
+- Before starting any work, verify you are NOT on `main`: `git branch --show-current`
 
 **Commits:** Use `/commit` skill — enforces atomic commits, conventional prefixes, test-before-commit, and split detection.
 

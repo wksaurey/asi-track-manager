@@ -651,7 +651,7 @@ class Calendar(HTMLCalendar):
                 # Events booked directly on the parent (full-track)
                 parent_events = sorted(
                     [ev for ev in all_events if track.pk in event_asset_ids[ev.pk]],
-                    key=lambda ev: ev.start_time,
+                    key=lambda ev: ev.start_time or datetime.max,
                 )
 
                 # Events booked on ≥2 subtracks of this parent → promote to full-track
@@ -664,7 +664,7 @@ class Calendar(HTMLCalendar):
                 if multi_sub_pks:
                     parent_events = sorted(
                         parent_events + [ev for ev in all_events if ev.pk in multi_sub_pks],
-                        key=lambda ev: ev.start_time,
+                        key=lambda ev: ev.start_time or datetime.max,
                     )
 
                 n_sub = len(subtracks)
@@ -677,7 +677,7 @@ class Calendar(HTMLCalendar):
                         [ev for ev in all_events
                          if sub.pk in event_asset_ids[ev.pk]
                          and ev.pk not in multi_sub_pks],
-                        key=lambda ev: ev.start_time,
+                        key=lambda ev: ev.start_time or datetime.max,
                     )
                     assigned, n_rows = self._assign_rows(sub_events)
                     row_buckets = [[] for _ in range(max(n_rows, 1))]
@@ -733,7 +733,7 @@ class Calendar(HTMLCalendar):
                 # ── Track without subtracks (original behaviour) ──────
                 track_events = sorted(
                     [ev for ev in all_events if track.pk in event_asset_ids[ev.pk]],
-                    key=lambda ev: ev.start_time,
+                    key=lambda ev: ev.start_time or datetime.max,
                 )
                 assigned, n_rows = self._assign_rows(track_events)
 
@@ -861,10 +861,11 @@ class Calendar(HTMLCalendar):
             return sorted(
                 [
                     ev for ev in events
-                    if localtime(ev.start_time).date() == day
+                    if ev.start_time is not None
+                    and localtime(ev.start_time).date() == day
                     and asset_pk in event_asset_ids[ev.pk]
                 ],
-                key=lambda ev: ev.start_time,
+                key=lambda ev: ev.start_time or datetime.max,
             )
 
         def _cell_html(day_evs, td_cls):
@@ -901,7 +902,7 @@ class Calendar(HTMLCalendar):
                 all_pks = [track.pk] + [s.pk for s in subtracks]
                 day_evs = sorted(
                     {ev for pk in all_pks for ev in _day_events_for_asset(pk, day)},
-                    key=lambda ev: ev.start_time,
+                    key=lambda ev: ev.start_time or datetime.max,
                 )
                 row += _cell_html(day_evs, td_cls)
             body_rows += f'<tr>{row}</tr>'

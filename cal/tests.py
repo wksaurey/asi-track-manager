@@ -872,6 +872,62 @@ class GanttDayViewTest(TestCase):
         self.assertGreaterEqual(response.content.decode().count('gantt-sub-row'), 2)
 
 
+class ImpromptuDayViewTest(TestCase):
+    """Regression: day view must not crash when multiple impromptu events
+    (null start_time) exist on the same track.  See formatdayview sort bug."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='employee', password='Testpass123!')
+        self.client.force_login(self.user)
+        self.track = Asset.objects.create(name='Test Track', asset_type='track')
+
+    def _make_impromptu(self, title):
+        ev = Event.objects.create(
+            title=title, created_by=self.user, is_approved=True, is_impromptu=True,
+        )
+        ev.assets.add(self.track)
+        return ev
+
+    def test_multiple_impromptu_events_same_track(self):
+        """Two impromptu events (null start_time) on the same track must not
+        crash the day view sort."""
+        self._make_impromptu('Impromptu A')
+        self._make_impromptu('Impromptu B')
+        today = localtime(timezone.now()).date()
+        url = reverse('cal:calendar') + f'?view=day&date={today.year}-{today.month}-{today.day}'
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+
+    def test_impromptu_mixed_with_scheduled_events(self):
+        """Impromptu + scheduled events on the same track sort without error."""
+        self._make_impromptu('Impromptu')
+        today = localtime(timezone.now()).date()
+        start = datetime.combine(today, datetime.min.time().replace(hour=9), tzinfo=_local_tz)
+        end = datetime.combine(today, datetime.min.time().replace(hour=11), tzinfo=_local_tz)
+        ev = Event.objects.create(
+            title='Scheduled', start_time=start, end_time=end,
+            created_by=self.user, is_approved=True,
+        )
+        ev.assets.add(self.track)
+        url = reverse('cal:calendar') + f'?view=day&date={today.year}-{today.month}-{today.day}'
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+
+    def test_multiple_impromptu_on_subtracks(self):
+        """Impromptu events on subtracks of the same parent must not crash."""
+        parent = Asset.objects.create(name='Parent', asset_type='track')
+        sub = Asset.objects.create(name='Sub', asset_type='track', parent=parent)
+        for title in ('Imp 1', 'Imp 2'):
+            ev = Event.objects.create(
+                title=title, created_by=self.user, is_approved=True, is_impromptu=True,
+            )
+            ev.assets.add(sub)
+        today = localtime(timezone.now()).date()
+        url = reverse('cal:calendar') + f'?view=day&date={today.year}-{today.month}-{today.day}'
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+
+
 # ════════════════════════════════════════════════════════════════════════════════
 # Subtrack tests
 # ════════════════════════════════════════════════════════════════════════════════

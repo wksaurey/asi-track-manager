@@ -9,6 +9,15 @@
 
 Use the admin account credentials provided to you. Report PASS/FAIL for each test, and a summary at the end.
 
+**Pre-flight:** Before starting manual smoke tests, run the automated suite and migration check:
+
+```bash
+python3 manage.py test
+python3 manage.py preflight_migrate
+```
+
+All 436+ tests must pass and preflight must succeed before proceeding.
+
 **Precondition:** Use a private/incognito browser window. This ensures a clean session (no existing login, no cached localStorage for dark mode or Gantt state).
 
 ---

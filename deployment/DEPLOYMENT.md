@@ -1,6 +1,6 @@
 # ASI Track Manager — Deployment Guide
 
-This guide walks you through deploying the ASI Track Manager on a Windows VM using **Waitress** as the production WSGI server. No Docker, no WSL, no Linux — everything runs natively on Windows.
+This guide walks you through deploying the ASI Track Manager on a Windows VM using **Waitress** as the production WSGI server. Commands use `python` (Windows). For development setup on WSL2/Linux, see the project `README.md` (which uses `python3`).
 
 **Stack:**
 - **Django 5.2** (Python 3.12) served by **Waitress**
@@ -47,7 +47,7 @@ python -m venv .venv\asi_track_manager
 pip install -r requirements.txt
 ```
 
-> **Why Waitress?** Django's built-in `runserver` is single-threaded and not safe for production. Gunicorn (the standard Linux alternative) doesn't run on Windows. Waitress is the standard Windows-compatible production WSGI server — maintained by the Pylons Project and used in production by many Django/Flask apps. It's included in `requirements.txt`.
+> **Why Waitress?** Django's built-in `runserver` is single-threaded and not safe for production. Waitress is a production-grade Windows-compatible WSGI server — maintained by the Pylons Project and used in production by many Django/Flask apps. It's included in `requirements.txt`.
 
 ---
 

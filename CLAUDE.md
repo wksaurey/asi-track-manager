@@ -6,12 +6,9 @@
 
 ## Commands
 
-```bash
-# Setup
-python3 -m venv .venv/asi-track-manager
-. ./.venv/asi-track-manager/bin/activate
-pip install -r requirements.txt
+Development runs on WSL2 (Linux) — use `python3`. Windows deployment uses `python` (see `deployment/DEPLOYMENT.md`).
 
+```bash
 # Development
 python3 manage.py runserver
 python3 manage.py migrate
@@ -30,9 +27,9 @@ python3 manage.py test users        # users app only
 
 ## Architecture
 
-Django MTV with two apps (`cal`, `users`). SQLite DB, Bootstrap 4, Docker/Caddy/Gunicorn deployment.
+Django MTV with two apps (`cal`, `users`). SQLite DB, Bootstrap 4, native Windows + Waitress deployment.
 
-**Models:** `Asset` (track/vehicle/operator, self-referential parent FK for subtracks) and `Event` (M2M to Asset, approval workflow, nullable start/end times for impromptu events, optional radio channel override). `ActualTimeSegment` tracks play/pause/stop segments per event.
+**Models:** `Asset` (track/vehicle/operator, self-referential parent FK for subtracks), `Event` (M2M to Asset, approval workflow, nullable start/end times for impromptu events, optional radio channel override), `ActualTimeSegment` (play/pause/stop segments per event), and `Feedback` (user-submitted bug reports/feature requests).
 
 **Shared modules:** `cal/decorators.py` (`@staff_required`, `@staff_required_api`) and `cal/helpers.py` (`parse_api_datetime`, `validate_radio_channel`, `serialize_segments`, `stamp_response`). Module-level `RADIO_CHANNEL_CHOICES` in `cal/models.py`.
 
@@ -52,11 +49,7 @@ Django MTV with two apps (`cal`, `users`). SQLite DB, Bootstrap 4, Docker/Caddy/
 
 **Dashboard APIs:** `/cal/api/dashboard-events/`, `/cal/api/event/create/`, `/cal/api/event/<id>/stamp/`, `/cal/api/event/<id>/approve/`, `/cal/api/event/<id>/channel/`, `/cal/api/track/<id>/channel/`, `/cal/api/analytics/`
 
-**Deployment:** `--workers 1 --threads 4` (SQLite constraint). See `deployment/` and `TODOS.md`.
-
-## Testing
-
-436+ tests covering: access control, event CRUD, approval workflow, conflict detection (including subtrack rules), calendar rendering (month/week/day/Gantt), dashboard APIs, stamp validation, analytics computation, user management (toggle admin, delete user), asset CRUD, color auto-assignment, dark-mode CSS integrity, Gantt event state classification, Gantt block rendering, Gantt legend context, Gantt CSS integrity, decorator access control, helper functions, approve API, conflict badge annotations, mass approve with conflict detection, impromptu event creation, profile edit, page template smoke tests.
+**Deployment:** Waitress with `--threads 4` (single process, SQLite constraint). See `deployment/DEPLOYMENT.md`.
 
 ## Key Patterns
 
@@ -86,58 +79,19 @@ Django MTV with two apps (`cal`, `users`). SQLite DB, Bootstrap 4, Docker/Caddy/
 
 Fixture at `cal/fixtures/seed.json` contains 31 assets (7 parent tracks + 11 subtracks + 13 vehicles) and 2 users (admin, kolter). `setup_testdb` command loads this fixture and generates realistic events.
 
-**Recent migrations:** `0021_nullable_event_times` (start_time/end_time nullable for impromptu events), `0022_expand_radio_channels_1_16` (radio channels 1-16, was 11-16).
-
 ## Git Workflow
 
-Trunk-based flow. Two contributors: Kolter and Hollis.
-
-**Branching:**
-- `main` is always deployable — merge to it frequently (weekly minimum)
+See `README.md` for the full git workflow. Key points for Claude:
 - **NEVER commit directly to `main`** — always create a feature branch first
-- One branch per feature/fix/chore — named `<type>/<short-description>` (e.g., `feat/email-notifications`, `fix/null-migration`, `chore/deploy-docs-cleanup`)
-- Feature branches are short-lived: branch off `main`, PR back to `main`, delete after merge
-- No `dev` or integration branches — features merge directly to `main`
-- No permanent per-person branches — use per-feature branches instead
-- Never work on parallel long-lived branches — separate features from the same base
-- `git pull --rebase origin main` before starting work and before opening PRs
 - Before starting any work, verify you are NOT on `main`: `git branch --show-current`
-
-**Commits:** Use `/commit` skill — enforces atomic commits, conventional prefixes, test-before-commit, and split detection.
-
-**PRs:**
-- Small: under ~400 lines changed, reviewable in 15 minutes
-- Description says WHY, not just what
-- Kolter and Hollis review each other before merging
-- Before `/ship`, check diff size and warn if over ~400 lines
+- Use `/commit` skill — enforces atomic commits, conventional prefixes, test-before-commit, and split detection
+- PRs: small (under ~400 lines), description says WHY. Before `/ship`, check diff size and warn if over ~400 lines
 
 ## Server Update Procedure
 
-When the user asks how to update the server, deploy, or push to prod, give them this full procedure. The server is at `test-scl-mobius00.asi.asirobots.com` (10.10.105.198), running native Windows + Waitress via Task Scheduler.
+See `deployment/DEPLOYMENT.md` ("Updating After a Code Change" section) for the full procedure. The server is at `test-scl-mobius00.asi.asirobots.com` (10.10.105.198), running native Windows + Waitress via Task Scheduler.
 
-```powershell
-# 1. Stop the scheduled task (right-click → End in Task Scheduler)
-
-# 2. Pull and rebuild:
-cd C:\apps\asi-track-manager
-.venv\asi_track_manager\Scripts\Activate.ps1
-git pull origin main
-pip install -r requirements.txt
-
-# 3. Test migrations against prod data BEFORE applying:
-python manage.py preflight_migrate
-# If this fails, DO NOT run migrate — fix the issue first.
-
-# 4. Apply migrations and rebuild static files:
-python manage.py migrate --noinput
-python manage.py collectstatic --noinput
-
-# 5. Start the scheduled task (right-click → Run in Task Scheduler)
-```
-
-See `deployment/DEPLOYMENT.md` for full details.
-
-## gstack
+## Web Browsing
 
 Use `/browse` for all web browsing. Never use `mcp__claude-in-chrome__*` tools.
 

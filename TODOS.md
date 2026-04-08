@@ -29,13 +29,6 @@
   - **Context:** Likely needs a `@media` tweak or adjusting when the hamburger triggers
   - **Depends on:** None
 
-## Bugs
-
-- [ ] Pause gap not shown while actively paused
-  - **Why:** The diagonal-striped pause gap between segments only renders once a new segment starts. While an event is actively paused (segment ended, no new segment yet), there's no visual indicator of the growing pause period
-  - **Context:** Pause gap is computed as space between two segments (current end → next start). With no "next segment" during active pause, nothing renders. Fix needs server-side detection of "actively paused" state in `cal/utils.py` plus client-side JS to live-grow the gap like active segments do
-  - **Depends on:** None
-
 ## Testing
 
 - [ ] Add negative/error tests to production smoke test
@@ -48,6 +41,20 @@
   - **Context:** Quick addition to `deployment/PROD_SMOKE_TEST.md`
   - **Depends on:** None
 
+## Code Cleanup
+
+- [ ] Consolidate `set_radio_channel` and `set_event_radio_channel` views
+  - **Why:** Nearly identical views (views.py:688, 701). DRY violation
+  - **Depends on:** None
+
+- [ ] Audit legacy stamp actions (`clear_start`/`clear_end`)
+  - **Why:** Still in views.py:1103-1105 with tests, but may be dead code in the UI (replaced by segment-based stamping)
+  - **Depends on:** None
+
+- [ ] Clean up `analytics_api` redundant querysets
+  - **Why:** Multiple querysets that could be consolidated
+  - **Depends on:** None
+
 ## V2 Priorities
 
 - [ ] Admin setting: block impromptu event creation when an active/approved event exists on the same track
@@ -56,9 +63,9 @@
   - **Depends on:** v1.1 impromptu event + active track features
 
 - [ ] PostgreSQL migration
-  - **Why:** SQLite doesn't support concurrent writes from multiple processes. Currently pinned to 1 Gunicorn worker as a workaround. Also enables proper ORM aggregation for analytics
-  - **Trigger:** If >1 Gunicorn worker needed, or "database is locked" errors appear, or when adding dashboard auto-refresh polling
-  - **Context:** Add PostgreSQL to docker-compose.yml, update settings.py DATABASE config, migrate data
+  - **Why:** SQLite doesn't support concurrent writes from multiple processes. Currently pinned to 1 Waitress process as a workaround. Also enables proper ORM aggregation for analytics
+  - **Trigger:** If more Waitress workers needed, or "database is locked" errors appear, or when adding dashboard auto-refresh polling
+  - **Context:** Update settings.py DATABASE config, migrate data
   - **Depends on:** Initial deployment to VM
 
 - [ ] Waitress threading constraint (document prominently)
@@ -66,12 +73,3 @@
   - **Context:** Waitress runs with `--threads 4` (no `--workers`). Documented in DEPLOYMENT.md but should be more visible — add a warning banner or comment in settings.py. Do not increase to multiple processes until PostgreSQL migration
   - **Depends on:** PostgreSQL migration removes this constraint
 
-## Completed
-
-- [x] Create subtracks within track assets
-- [x] Make month view fixed with scrollable day cells
-- [x] Update project documentation
-- [x] Remove password restrictions
-- [x] Copy timeline style from dashboard project
-- [x] Combine control dashboard with scheduler app
-- [x] User management — admin can promote/demote users (toggle_admin + delete_user views)

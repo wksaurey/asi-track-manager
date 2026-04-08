@@ -61,10 +61,12 @@ local_settings.py
 db.sqlite3
 db.sqlite3-journal
 
-# Claude Code
-.claude/
-CLAUDE.md
-prompt.md
+# Claude Code — personal/ephemeral (not tracked)
+.claude/settings.local.json
+.claude/worktrees/
+.claude/agent-memory/
+.claude/notes/
+.claude/edit-log.md
 
 # Flask stuff:
 instance/

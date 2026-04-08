@@ -40,7 +40,7 @@ Django MTV with two apps (`cal`, `users`). SQLite DB, Bootstrap 4, Docker/Caddy/
 - One track group per reservation (multiple subtracks of same parent OK)
 - Multi-subtrack events (booked on 2+ subtracks of same parent) are promoted to full-track events in day view and dashboard API
 - Booking a parent track conflicts with all subtracks and vice versa
-- Admin events auto-approved; user events default to pending
+- All events default to pending (unapproved) regardless of creator — must go through approval workflow
 - Case-insensitive login (custom auth backend in `users/backends.py`)
 - Per-event radio channel override (defaults to track's channel, channels 1-16); admin-only in event form
 - Impromptu events have null start_time/end_time — created from dashboard, open a segment immediately

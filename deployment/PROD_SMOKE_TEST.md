@@ -9,11 +9,13 @@
 
 Use the admin account credentials provided to you. Report PASS/FAIL for each test, and a summary at the end.
 
+**Precondition:** Use a private/incognito browser window. This ensures a clean session (no existing login, no cached localStorage for dark mode or Gantt state).
+
 ---
 
 ## Test 1: Static Files & Login
 
-1. Navigate to the site root URL. Confirm it redirects to the login page.
+1. Navigate to the site root URL. Confirm it redirects to the login page (if already logged in, go to `/users/logout/` first).
 2. Verify the login page renders correctly — CSS is loaded (styled form, not raw HTML), Bootstrap is working.
 3. Log in with the admin credentials.
 4. Confirm redirect to the calendar day view (`/cal/calendar/`).

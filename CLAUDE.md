@@ -111,6 +111,32 @@ Trunk-based flow. Two contributors: Kolter and Hollis.
 - Kolter and Hollis review each other before merging
 - Before `/ship`, check diff size and warn if over ~400 lines
 
+## Server Update Procedure
+
+When the user asks how to update the server, deploy, or push to prod, give them this full procedure. The server is at `test-scl-mobius00.asi.asirobots.com` (10.10.105.198), running native Windows + Waitress via Task Scheduler.
+
+```powershell
+# 1. Stop the scheduled task (right-click → End in Task Scheduler)
+
+# 2. Pull and rebuild:
+cd C:\apps\asi-track-manager
+.venv\asi_track_manager\Scripts\Activate.ps1
+git pull origin main
+pip install -r requirements.txt
+
+# 3. Test migrations against prod data BEFORE applying:
+python manage.py preflight_migrate
+# If this fails, DO NOT run migrate — fix the issue first.
+
+# 4. Apply migrations and rebuild static files:
+python manage.py migrate --noinput
+python manage.py collectstatic --noinput
+
+# 5. Start the scheduled task (right-click → Run in Task Scheduler)
+```
+
+See `deployment/DEPLOYMENT.md` for full details.
+
 ## gstack
 
 Use `/browse` for all web browsing. Never use `mcp__claude-in-chrome__*` tools.

@@ -52,7 +52,7 @@
 - Komatsu Wheel Loader
 
 ## Dozer
-- Komatsu Dozer
+* Komatsu Dozer
 
 ## AG
 * Agricultural Team at ASI

@@ -1,4 +1,6 @@
-# Production Smoke Test Suite
+# Post-Deploy Verification
+
+Run these checks **against the production server** after deploying. See [`PRE_DEPLOY.md`](PRE_DEPLOY.md) for pre-deploy checks on your dev machine.
 
 **Target:** ASI Track Manager on `http://test-scl-mobius00.asi.asirobots.com` (or the server's IP)
 
@@ -8,15 +10,6 @@
 - Do NOT change any settings, toggle any admin flags, or approve/unapprove existing events.
 
 Use the admin account credentials provided to you. Report PASS/FAIL for each test, and a summary at the end.
-
-**Pre-flight:** Before starting manual smoke tests, run the automated suite and migration check:
-
-```bash
-python3 manage.py test
-python3 manage.py preflight_migrate
-```
-
-All 436+ tests must pass and preflight must succeed before proceeding.
 
 **Precondition:** Use a private/incognito browser window. This ensures a clean session (no existing login, no cached localStorage for dark mode or Gantt state).
 

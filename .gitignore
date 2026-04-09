@@ -67,6 +67,8 @@ db.sqlite3-journal
 .claude/agent-memory/
 .claude/notes/
 .claude/edit-log.md
+.claude/retro.md
+prompt.md
 
 # Flask stuff:
 instance/

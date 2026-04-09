@@ -61,17 +61,15 @@ Generate a secret key:
 python -c "import secrets; print(secrets.token_urlsafe(50))"
 ```
 
-Create the `.env` file with these contents (replace `<VM-IP>` with the VM's actual IP):
+Copy the example file and fill in the values (replace `<VM-IP>` with the VM's actual IP):
 
-```
-SECRET_KEY=generate-a-new-key-with-python-c-import-secrets-print-secrets-token_urlsafe-50
-DEBUG=False
-ALLOWED_HOSTS=schedule.asi.com,localhost,127.0.0.1,<VM-IP>,.asi.asirobots.com
-CSRF_TRUSTED_ORIGINS=http://schedule.asi.com,http://localhost,http://<VM-IP>,http://*.asi.asirobots.com
+```powershell
+copy deployment\env.example .env
 ```
 
-> **Why these variables?**
-> - `SECRET_KEY` signs cookies and tokens — must be secret and unique per deployment.
+See `deployment/env.example` for the template with all available variables. Key notes:
+
+> - `SECRET_KEY` signs cookies and tokens — must be secret and unique per deployment. Generate one with the command above.
 > - `DEBUG=False` disables the interactive error page (which leaks code internals).
 > - `ALLOWED_HOSTS` prevents HTTP Host header attacks. Include every hostname/IP users will access.
 > - `CSRF_TRUSTED_ORIGINS` is required by Django 4+ — include the full origin with scheme (`http://...`).

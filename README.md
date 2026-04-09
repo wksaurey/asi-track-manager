@@ -12,6 +12,7 @@ A Django-based scheduling and asset management system for ASI Mendon Campus. Res
 - **Approval workflow** -- all events default to pending and require admin approval; mass-approve with conflict detection
 - **Control center dashboard** -- admin-only live view with play/pause/stop time tracking, radio channel controls, and impromptu event creation
 - **Analytics** -- track utilization and event statistics
+- **Feedback** -- in-app bug reports and feature requests with admin resolution tracking
 - **Mobile responsive** -- 768px/480px breakpoints, hamburger nav, collapsible Gantt labels
 - **Dark/light theme** -- toggle with localStorage persistence
 
@@ -71,7 +72,7 @@ Default test accounts: `admin`/`admin` (staff) and `kolter`/`testpass123`.
 
 ## Testing
 
-436+ tests covering access control, event CRUD, approval workflow, conflict detection, calendar rendering, dashboard APIs, analytics, user management, and more.
+Comprehensive test suite covering access control, event CRUD, approval workflow, conflict detection, calendar rendering, dashboard APIs, analytics, user management, and more.
 
 ```bash
 python3 manage.py test              # all tests
@@ -87,7 +88,7 @@ For production, create a `.env` file in the project root (see `deployment/env.ex
 |---|---|---|
 | `SECRET_KEY` | Django secret key | insecure dev default |
 | `DEBUG` | Debug mode | `True` |
-| `ALLOWED_HOSTS` | Comma-separated hostnames | `*` |
+| `ALLOWED_HOSTS` | Comma-separated hostnames | `localhost,127.0.0.1` |
 | `CSRF_TRUSTED_ORIGINS` | CSRF trusted origins | none |
 | `DB_PATH` | SQLite database path | `db.sqlite3` in project root |
 
@@ -99,7 +100,7 @@ For production, create a `.env` file in the project root (see `deployment/env.ex
 
 ## Deployment
 
-Production runs on a Windows VM with Waitress. See [`deployment/DEPLOYMENT.md`](deployment/DEPLOYMENT.md) for the full guide and [`deployment/PROD_SMOKE_TEST.md`](deployment/PROD_SMOKE_TEST.md) for post-deploy verification.
+Production runs on a Windows VM with Waitress. See [`deployment/DEPLOYMENT.md`](deployment/DEPLOYMENT.md) for the full guide, [`deployment/PRE_DEPLOY.md`](deployment/PRE_DEPLOY.md) for pre-deploy checks, and [`deployment/POST_DEPLOY.md`](deployment/POST_DEPLOY.md) for post-deploy verification.
 
 ## Git Workflow
 
@@ -143,4 +144,5 @@ python3 manage.py preflight_migrate   # test migrations against prod data
 - Merge to `main` -- no `dev` or integration branches
 - Keep PRs small: under ~400 lines, reviewable in 15 minutes
 - Description says WHY, not just what
+- If features changed, update README/CLAUDE.md/TODOS.md in the same PR
 - Delete the branch after merging

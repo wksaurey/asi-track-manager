@@ -33,12 +33,12 @@
 
 - [ ] Add negative/error tests to production smoke test
   - **Why:** Current smoke test only checks happy paths. Missing: form validation errors, 404 on bad event IDs, unauthenticated API access. These surface unhandled 500s
-  - **Context:** Add 2-3 quick tests to `deployment/PROD_SMOKE_TEST.md`
+  - **Context:** Add 2-3 quick tests to `deployment/POST_DEPLOY.md`
   - **Depends on:** None
 
 - [ ] Add Analytics page test to smoke test
   - **Why:** Test 9 checks the analytics API but not the `/cal/analytics/` page itself
-  - **Context:** Quick addition to `deployment/PROD_SMOKE_TEST.md`
+  - **Context:** Quick addition to `deployment/POST_DEPLOY.md`
   - **Depends on:** None
 
 ## Code Cleanup
@@ -54,6 +54,13 @@
 - [ ] Clean up `analytics_api` redundant querysets
   - **Why:** Multiple querysets that could be consolidated
   - **Depends on:** None
+
+## Open Questions
+
+- [ ] How should CLAUDE.md work in a multi-developer repo?
+  - **Why:** CLAUDE.md is checked into the repo, which means it enforces one person's AI workflow preferences on all contributors. If Hollis (or a future dev) uses Claude Code with different conventions, the shared CLAUDE.md could create friction
+  - **Context:** Should CLAUDE.md contain only project facts (architecture, models, APIs) and leave workflow/style preferences to each dev's `~/.claude/` config? How do other multi-dev teams handle this?
+  - **Depends on:** Discussion with Hollis
 
 ## V2 Priorities
 

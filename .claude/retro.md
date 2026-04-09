@@ -77,3 +77,6 @@ Tests like `assertNotContains(resp, 'conflict-badge')` fail when the class name 
 
 ## 2026-04-03 — Stale open segments from previous days block new events [lesson]
 Segments left open (end=None) from days ago appear "active" and block impromptu event creation. Added auto-close at 23:59:59 of the segment's start day when creating new impromptu events on the same track.
+
+## 2026-04-08 — Nullable fields need null guards in every code path [lesson]
+Migration 0021 made `start_time`/`end_time` nullable for impromptu events, but `formatdayview` sorts by `ev.start_time` in 6 places. Two impromptu events on the same track crashed with `TypeError: '<' not supported between NoneType`. The retro entry from 2026-04-03 already warned: "Every code path accessing start_time/end_time needs null guards." Test suite didn't catch it because no test put 2+ impromptu events on the same track. Added regression tests.

@@ -19,7 +19,7 @@ python3 manage.py setup_testdb              # fresh DB, 7 days of events
 python3 manage.py setup_testdb --days 30    # wider date range
 python3 manage.py setup_testdb --keep-db    # add events without reset
 
-# Testing (436+ tests)
+# Testing
 python3 manage.py test              # all tests
 python3 manage.py test cal          # cal app only
 python3 manage.py test users        # users app only
@@ -45,35 +45,17 @@ Django MTV with two apps (`cal`, `users`). SQLite DB, Bootstrap 4, native Window
 - Event form uses separate date/time fields (event_date, start_time_only, end_time_only); server-side combine in form.clean()
 - Stale open segments from previous days are auto-closed at 23:59:59 of their start day
 
-**URL structure:** `/cal/calendar/`, `/cal/event/new/`, `/cal/event/edit/<id>/`, `/cal/event/approve/<id>/`, `/cal/event/unapprove/<id>/`, `/cal/event/delete/<id>/`, `/cal/events/pending/`, `/cal/events/mass-approve/`, `/cal/assets/`, `/cal/assets/new/`, `/cal/assets/<id>/`, `/cal/dashboard/`, `/cal/analytics/`, `/users/login/`, `/users/register/`, `/users/management/`, `/users/profile/`
-
-**Dashboard APIs:** `/cal/api/dashboard-events/`, `/cal/api/event/create/`, `/cal/api/event/<id>/stamp/`, `/cal/api/event/<id>/approve/`, `/cal/api/event/<id>/channel/`, `/cal/api/track/<id>/channel/`, `/cal/api/analytics/`
+**Routes:** See `cal/urls.py` and `users/urls.py` for the full URL structure and API endpoints.
 
 **Deployment:** Waitress with `--threads 4` (single process, SQLite constraint). See `deployment/DEPLOYMENT.md`.
 
 ## Key Patterns
 
-- **Confirmation modals:** All destructive actions use `confirmDelete(form, msg)` or `showConfirmModal(msg, callback)` — no browser `confirm()`. Defined in `base.html`.
-- **Pending filter:** Client-side CSS toggle (`.cal-hide-pending` class), no page reload. State synced to URL via `history.replaceState`.
-- **Asset picker:** Custom JS pill-based picker in event form. Single track group, multi-select subtracks, multi-select vehicles/operators. Supports `?track=<id>` pre-selection from URL.
-- **`json_script`:** Asset data passed to templates via Django's `json_script` tag (not `mark_safe`).
-- **`?next=` redirects:** All event actions (create, edit, approve, unapprove, delete) respect `?next=` parameter for return-to-previous-view. Validated with `url_has_allowed_host_and_scheme`.
-- **Dashboard:** Tracks-only view (timeline merged into calendar day view). Events are clickable → edit view. Subtrack headers match parent track style. Actual time stamping (Start/End) on dashboard only. Radio channel dropdowns use `data-empty` attribute for green highlight when non-default. `_serialize_event` helper centralizes event serialization; multi-subtrack events promoted to parent track level. Segment edit popup has "Done" button alongside "Now", Enter key saves, and inline error display (no toasts). Stamp API and segment edit API reject future times. Impromptu event creation via "+" button (opens segment immediately, with active event blocking confirmation).
-- **Mass approve:** `/cal/events/mass-approve/` — bulk approve pending events with conflict detection. Events with conflicts are skipped (not approved-then-skipped). Conflict annotations with links to conflicting events.
-- **Profile edit:** `/users/profile/` — users can edit their own profile (name, email).
-- **Mobile responsive:** 768px/480px breakpoints, hamburger nav with backdrop, collapsible Gantt track labels (toggle button, persisted to localStorage), legend wrapping, stacked asset cards, pending event button stacking, user management column hiding, compact dashboard headers.
-- **Calendar day view:** Default view. Six event states with distinct visual treatments:
-  - **Scheduled** — solid bar in track color (upcoming approved, no segments)
-  - **Active** — ghost bar (opacity 0.4) + solid segment with pulsing right-edge glow
-  - **Paused** — ghost bar + solid segments with diagonal-striped gaps between them; trailing pause gap pulses and grows live via JS from last segment end to current time (opacity 0.45)
-  - **Completed** — faded (opacity 0.55, desaturated) ghost bar + solid segment
-  - **No-show** — dashed amber border, subtle amber tint fill, dark amber text (past, never stamped)
-  - **Pending** — 12% track-color tinted fill with solid track-color border, bold colored text
-  Events with segments use a separate `.gantt-block-text` overlay (z-index 5) so text stays readable above segments regardless of opacity stacking contexts. Text shadow on all Gantt blocks and overlays for readability on faded/semi-transparent backgrounds. "Now" red line. Sticky collapsible "Key" legend at bottom-left (state persisted to localStorage). Rich hover tooltips on all event blocks (scheduled bar, segments, pause gaps) showing title, status badge, creator, scheduled time, tracks/vehicles, actual segments with durations, pause time, and description. Connector lines link disconnected scheduled bars and segments (solid for early starts, dashed for late starts). Scheduled boundary markers (white edge lines) appear when segments visually cover those edges; segment start markers (white left-edge line) on actual/active segments. Full-track events render in a dedicated "All" parent lane above subtracks (not as an overlay spanning subtracks). `_assign_rows` uses visual extent (scheduled + actual segments) to prevent overlapping events; subtrack rows expand height when events need stacking.
-- **Track color palette:** 16 Tailwind colors, all WCAG AA compliant (≥4.5:1 contrast ratio with white text at 12px). Warm/green/cyan hues use -700 shades; cool hues use -600. Auto-assigned on track creation; manually overridable via asset form.
-- **Duration shortcuts:** Event form has quick-select buttons (30m, 1h, 1.5h, 2h, 3h, 4h) + custom duration display.
-- **Event page segments:** Admin-editable segment table with time-only Flatpickr pickers, duration display, IMPROMPTU/STOPPED badges.
-- **Konami easter egg:** Hidden feature triggered by Konami code input.
+Detailed UI patterns are in path-scoped `.claude/rules/` files (loaded automatically when working on relevant files):
+
+- **`gantt-day-view.md`** — six event states, segment rendering, connectors, tooltips, color palette
+- **`dashboard.md`** — stamping, radio channels, serialization, impromptu events
+- **`ui-patterns.md`** — modals, asset picker, pending filter, mobile responsive, duration shortcuts
 
 ## Seed Data
 

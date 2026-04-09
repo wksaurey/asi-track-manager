@@ -193,8 +193,8 @@ def event(request, event_id=None):
     - If ``event_id`` is provided, loads an existing event for editing.
       Regular users may only edit events they created; admins can edit any.
     - On POST with valid data, saves the event.  New events record the
-      creator (request.user) and are auto-approved only when the creator
-      is staff.
+      creator (request.user) and default to unapproved regardless of
+      role — all events must go through the approval workflow.
     - ``form.save_m2m()`` is called separately because we use
       ``commit=False`` to set fields before the initial save.
     """

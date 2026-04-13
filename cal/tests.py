@@ -4399,6 +4399,25 @@ class MultiSubtrackPromotionDashboardAPITest(TestCase):
         self.assertIn(ev.pk, sub_alpha_ids,
                       'Single-subtrack event must stay in its own subtrack events list')
 
+    def test_promoted_impromptu_event_does_not_crash_sort(self):
+        """
+        Regression: an impromptu event (start_time=None) booked on 2+ subtracks
+        gets promoted to the parent track. The API sort on start_time must not
+        crash with TypeError when comparing None values.
+        """
+        from cal.models import ActualTimeSegment
+        ev = Event.objects.create(
+            title='Impromptu Promo', description='',
+            start_time=None, end_time=None, is_approved=True,
+        )
+        ev.assets.add(self.sub_a, self.sub_b)
+        # Impromptu events need a segment today to appear in the API query
+        ActualTimeSegment.objects.create(event=ev, start=timezone.now())
+        data = self._get_today()
+        parent_events = data['tracks']['API Promo Parent']['events']
+        self.assertEqual(len(parent_events), 1)
+        self.assertEqual(parent_events[0]['id'], ev.pk)
+
 
 # ── 3. Future time validation ─────────────────────────────────────────────────
 

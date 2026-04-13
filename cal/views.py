@@ -531,7 +531,7 @@ def dashboard_events_api(request):
                     if ev.pk in multi_sub_pks and ev.pk not in existing_pks:
                         track_data['events'].append(_serialize_event(ev))
                         existing_pks.add(ev.pk)
-            track_data['events'].sort(key=lambda e: e['start_time'])
+            track_data['events'].sort(key=lambda e: e['start_time'] or '')
 
             track_data['subtracks'] = {
                 sub.name: {

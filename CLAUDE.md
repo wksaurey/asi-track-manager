@@ -79,4 +79,4 @@ Use `/browse` for all web browsing. Never use `mcp__claude-in-chrome__*` tools.
 
 ## Out of Scope
 
-Vehicle maintenance, notification/calendar syncing, Jira integration, recurring reservations. See `TODOS.md` for v2 priorities.
+Vehicle maintenance, notification/calendar syncing, Jira integration, recurring reservations. See `TODOS.md` for approved and unapproved todos.

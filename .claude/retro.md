@@ -80,3 +80,21 @@ Segments left open (end=None) from days ago appear "active" and block impromptu 
 
 ## 2026-04-08 — Nullable fields need null guards in every code path [lesson]
 Migration 0021 made `start_time`/`end_time` nullable for impromptu events, but `formatdayview` sorts by `ev.start_time` in 6 places. Two impromptu events on the same track crashed with `TypeError: '<' not supported between NoneType`. The retro entry from 2026-04-03 already warned: "Every code path accessing start_time/end_time needs null guards." Test suite didn't catch it because no test put 2+ impromptu events on the same track. Added regression tests.
+
+## 2026-04-14 — Rebase-only merge method over squash [decision]
+**Context:** Branch protections discussion. Claude extension recommended squash-only to keep main clean.
+**Decision:** Rebase-only. Squash and merge commits both disabled.
+**Rationale:** /commit skill produces atomic, well-messaged commits. Squash throws all that away into one commit per PR. Rebase preserves individual commits AND keeps linear history (required by branch protection).
+**Caveats:** If someone makes messy commits on a feature branch, they'll all land on main. Mitigated by PR review and the team's commit discipline.
+
+## 2026-04-14 — GitHub is source of truth for branch protections [decision]
+**Context:** Debated whether to document branch protection rules in README or project docs.
+**Decision:** Let GitHub Settings > Rules be the documentation for what rules are active. Project docs (README) document the workflow — how devs should work. TODOS.md tracks what to enable next.
+**Rationale:** Duplicating rules in project docs creates maintenance drift. Anyone with repo access can see the rules in GitHub. The README already covers the workflow implications.
+**Caveats:** If a new dev can't access repo settings, they'll hit the protections naturally (push to main rejected → told to use a PR).
+
+## 2026-04-14 — Defer regex-based branch protections for small teams [decision]
+**Context:** Considered commit metadata regex (conventional prefixes) and branch name regex restrictions.
+**Decision:** Skip both until team grows past 2-3 devs.
+**Rationale:** Two people already follow the conventions. Bad regex blocks legitimate merges and is painful to debug. /commit skill enforces format on Claude's end. Enable when onboarding devs who haven't internalized conventions.
+**Caveats:** Draft regexes saved in TODOS.md for when the time comes.

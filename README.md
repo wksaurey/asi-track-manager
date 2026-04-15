@@ -129,7 +129,7 @@ git add cal/views.py cal/models.py
 git commit -m "feat: add email notifications for pending approvals"
 ```
 
-Commit messages use `<type>: <description>` format. Keep the subject under 72 characters. Focus on *why*, not *what*.
+Commit messages use `<type>: <description>` format. Append `!` before the colon for breaking changes (e.g., `feat!: remove deprecated endpoint`). Keep the subject under 72 characters. Focus on *why*, not *what*.
 
 ### Before Opening a PR
 
@@ -146,3 +146,25 @@ python3 manage.py preflight_migrate   # test migrations against prod data
 - Description says WHY, not just what
 - If features changed, update README/CLAUDE.md/TODOS.md in the same PR
 - Delete the branch after merging
+
+### Branch Protections
+
+Two rulesets target `main` -- they stack (GitHub enforces the union):
+
+**Org ruleset: "main-branch-protection"** (managed by asirobots, read-only at repo level):
+- Restrict deletions
+- Require PR before merging (1 approval, Code Owners review, conversation resolution)
+- Block force pushes
+- Copilot auto-review
+- Allowed merge methods: Squash, Rebase, Merge
+
+**Repo ruleset: "main"** (editable, repo-level):
+- Restrict deletions
+- Require linear history
+- Require PR before merging (1 approval, dismiss stale approvals, require last-push approval, conversation resolution)
+- Block force pushes
+- Allowed merge methods: **Rebase only** (preserves atomic commit history; linear history rule blocks merge commits)
+
+**Net effect:** linear history, PR required with 1 approval, stale dismissal, last-push approval, conversation resolution, Code Owners review (inactive until CODEOWNERS file added), Copilot auto-review, rebase-only merges (repo ruleset restricts the org-level allowance).
+
+Skip for now: signed commits, code scanning, CODEOWNERS, merge queue.
